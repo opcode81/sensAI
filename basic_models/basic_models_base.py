@@ -334,9 +334,10 @@ class VectorClassificationModelEvaluationData:
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator):
     def __init__(self, data: InputOutputData, labels=None, testFraction=None,
-                 testData: InputOutputData = None, randomSeed=42):
+                 testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
         self.labels = labels
+        self.computeProbabilities = computeProbabilities
 
     def evalModel(self, model: VectorClassificationModel) -> VectorClassificationModelEvaluationData:
         predictions, predictions_proba, groundTruth = self.computeTestDataOutputs(model)
@@ -351,9 +352,11 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
         predictions = model.predict(self.testData.inputs)
-        predictions_proba = model.predict_proba(self.testData.inputs)
+        predictionProbabilities = None
+        if self.computeProbabilities:
+            predictionProbabilities = model.predict_proba(self.testData.inputs)
         groundTruth = self.testData.outputs
-        return predictions, predictions_proba, groundTruth
+        return predictions, predictionProbabilities, groundTruth
 
 
 class ChainedVectorRegressionPredictor(PredictorModel):
