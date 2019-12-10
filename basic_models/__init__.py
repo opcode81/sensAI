@@ -5,6 +5,9 @@ from .basic_models_base import VectorModel, VectorRegressionModel, VectorClassif
 from .normalisation import NormalisationMode
 from . import eval_stats
 from . import sklearn
-from . import tensorflow
 from . import torch
 from . import naive_bayes
+from . import util
+
+# The following submodules are not imported by default to avoid necessarily requiring their dependencies:
+# tensorflow
