@@ -1,4 +1,9 @@
+<<<<<<< HEAD
+from abc import ABC, abstractmethod
+import logging
 from typing import List, Sequence
+=======
+>>>>>>> 95c455521d34d596a9bc5dc7dbb93f50ffe09c87
 import copy
 import logging
 from abc import ABC, abstractmethod
@@ -135,9 +140,13 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
+<<<<<<< HEAD
     def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
             inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
             trainingOutputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
+=======
+    def __init__(self, modelConstructor, inputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
+>>>>>>> 95c455521d34d596a9bc5dc7dbb93f50ffe09c87
         """
         Abstract base model with additional prediction of class probabilities
         :param modelConstructor: the sklearn model constructor

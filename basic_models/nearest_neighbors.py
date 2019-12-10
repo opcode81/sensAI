@@ -6,19 +6,17 @@ from typing import Callable, List, Union
 import numpy as np
 import pandas as pd
 
-from basic_models.distance_metric import DistanceMetric
-from basic_models import VectorClassificationModel, VectorRegressionModel
+from .distance_metric import DistanceMetric
+from .basic_models_base import VectorClassificationModel, VectorRegressionModel
 
 log = logging.getLogger(__name__)
 
 
 class Neighbor:
-    def __init__(self, identifier, value: float, distance, numerical_target: float = None, categorical_target=None):
+    def __init__(self, identifier, value: float, distance):
         self.identifier = identifier
         self.distance = distance
         self.value = value
-        self.numericalTarget = numerical_target
-        self.categoricalTarget = categorical_target
 
 
 class NeighborProvider(ABC):
@@ -77,13 +75,10 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def _predict_proba(self, X: pd.DataFrame):
         outputDf = pd.DataFrame({label: np.nan for label in self._labels}, index=X.index)
         for nt in X.itertuples():
-            neighbors = self.get_neighbors(nt)
+            neighbors = self.findNeighbors(nt)
             probabilities = self._predict_proba_from_neighbors(neighbors)
             outputDf.loc[nt.Index] = probabilities
         return outputDf
-
-    def __len__(self):
-        return len(self.df)
 
     def _predict_proba_from_neighbors(self, neighbors: List['Neighbor']):
         neighborLabels = []
@@ -97,27 +92,14 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def _getLabel(self, neighbor: 'Neighbor'):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
 
-    def _predict_from_neighbors(self, neighbors: List['Neighbor']):
+    def _predict_single_input(self, namedTuple):
+        neighbors = self.findNeighbors(namedTuple)
         c = Counter([self._getLabel(neigh) for neigh in neighbors])
         mostCommonLabel, count = c.most_common(1)[0]
         return mostCommonLabel
 
-    def _predict_single_input(self, namedTuple):
-        neighbors = self.get_neighbors(namedTuple)
-        return self._predict_from_neighbors(neighbors)
-
-    def get_neighbors(self, namedTuple):
+    def findNeighbors(self, namedTuple):
         return self.knn_finder.findNeighbors(namedTuple.Index, namedTuple, self.n_neighbors)
-
-    def append_neighbor(self, neighbors: List['Neighbor'], neighbor: 'Neighbor'):
-        if len(neighbors) < self.n_neighbors:
-            neighbors.append(neighbor)
-            neighbors.sort(key=lambda neigh: neigh.distance)
-        elif neighbor.distance < neighbors[-1].distance:
-            neighbors[-1] = neighbor
-            neighbors.sort(key=lambda neigh: neigh.distance)
-        else:
-            pass
 
     def get_params(self):
         return {"n_neighbors": self.n_neighbors, "metric": self.metric.__name__, "dataset_size": len(self)}

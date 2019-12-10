@@ -194,7 +194,11 @@ class VectorRegressionModel(VectorModel, ABC):
 
 class VectorClassificationModel(VectorModel, ABC):
 
+<<<<<<< HEAD
     def __init__(self, inputTransformers=(), outputTransformers=(), trainingOutputTransformers=()):
+=======
+    def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = ()):
+>>>>>>> 95c455521d34d596a9bc5dc7dbb93f50ffe09c87
         """
         Abstract base with prediction for class probabilities
         """
