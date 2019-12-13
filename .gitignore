@@ -2,4 +2,5 @@
 *.pyc.*
 *.bak
 *.old
-*.org
+*.orig
+

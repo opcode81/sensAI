@@ -32,7 +32,7 @@ class NaiveBayesVectorClassificationModel(VectorClassificationModel):
                 value = X.iloc[idxRow, idxFeature]
                 self.conditionals[cls][idxFeature][value] += increment
 
-    def _predict_proba(self, X: pd.DataFrame):
+    def _predictClassProbabilities(self, X: pd.DataFrame):
         pass
 
     def _probability(self, counts, value):

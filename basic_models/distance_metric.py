@@ -1,12 +1,11 @@
 import logging
 import os
 from abc import abstractmethod
-from typing import Sequence, Tuple, Callable, List, Union
+from typing import Sequence, Tuple, List, Union
 
 import numpy as np
 import pandas as pd
 
-from transformations.embeddings.WordEmbeddings import FastTextEmbedding
 from .util import cache
 
 log = logging.getLogger(__name__)
@@ -21,6 +20,10 @@ class DistanceMetric:
     @abstractmethod
     def distance(self, idA, valueA, idB, valueB):
         pass
+
+    @abstractmethod
+    def __str__(self):
+        super().__str__()
 
 
 class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
@@ -100,6 +103,24 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
         valueA, valueB = data
         return self.metric.distance(idA, valueA, idB, valueB)
 
+    def fillCache(self, dfIndexedById: pd.DataFrame):
+        """
+        Fill cache for all identifiers in the provided dataframe
+
+        Args:
+            dfIndexedById: Dataframe that is indexed by identifiers of the members
+        """
+        for position, idA in enumerate(dfIndexedById.index):
+            if position % 10 == 0:
+                log.info(f"Processed {round(100 * position / len(dfIndexedById), 2)}%")
+            for idB in dfIndexedById.index[position + 1:]:
+                valueA, valueB = dfIndexedById.loc[idA], dfIndexedById.loc[idB]
+                self.distance(idA, valueA, idB, valueB)
+        self._cache.saveIfUpdated()
+
+    def __str__(self):
+        return str(self.metric)
+
 
 class LinearCombinationDistanceMetric(DistanceMetric):
     def __init__(self, metrics: Sequence[Tuple[float, DistanceMetric]]):
@@ -108,20 +129,12 @@ class LinearCombinationDistanceMetric(DistanceMetric):
     def distance(self, idA, valueA, idB, valueB):
         value = 0
         for weight, metric in self.metrics:
-            value += metric.distance(idA, valueA, idB, valueB) * weight
+            if weight != 0:
+                value += metric.distance(idA, valueA, idB, valueB) * weight
         return value
 
-
-class WordSetEarthMoverDistanceMetric(DistanceMetric):
-    def __init__(self, embeddingFactory: Callable[[], FastTextEmbedding]):
-        self.embeddingFactory = embeddingFactory
-        self.embedding = None
-
-    def distance(self, idA, valueA, idB, valueB):
-        if self.embedding is None:
-            log.info("Instantiating embedding from factory")
-            self.embedding = self.embeddingFactory()
-        return self.embedding.earthMoverDistance(valueA.combined_keywords, valueB.combined_keywords)
+    def __str__(self):
+        return f"Linear combination of {[(weight, str(metric)) for weight, metric in self.metrics]}"
 
 
 class IdentityDistanceMetric(DistanceMetric):
@@ -136,3 +149,6 @@ class IdentityDistanceMetric(DistanceMetric):
             if getattr(valueA, key) != getattr(valueB, key):
                 return 1
         return 0
+
+    def __str__(self):
+        return f"IdentityDistanceMetric based on keys: {self.keys}"

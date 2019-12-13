@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from collections import Counter
+import collections
 from typing import Callable, List, Union
 
 import numpy as np
@@ -8,6 +8,7 @@ import pandas as pd
 
 from .distance_metric import DistanceMetric
 from .basic_models_base import VectorClassificationModel, VectorRegressionModel
+from .util.tracking import stringRepr
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ class AllNeighborsProvider(NeighborProvider):
             if nt.Index != id:
                 yield nt.Index, nt
 
+    def __str__(self):
+        return "AllNeighborsProvider"
+
 
 class KNearestNeighboursFinder:
     def __init__(self, df: pd.DataFrame, distanceMetric: DistanceMetric, neighborProvider: NeighborProvider):
@@ -44,6 +48,7 @@ class KNearestNeighboursFinder:
 
     def findNeighbors(self, id: Union[str, int], value, n_neighbors=20) -> List[Neighbor]:
         result = []
+        log.info(f"Finding neighbors for {id}")
         for neighborId, neighborValue in self.neighborProvider.iterPotentialNeighbors(id, value):
             distance = self.distanceMetric.distance(id, value, neighborId, neighborValue)
             result.append(Neighbor(neighborId, neighborValue, distance))
@@ -55,70 +60,86 @@ class KNearestNeighboursFinder:
 
 
 class KNearestNeighboursClassificationModel(VectorClassificationModel):
-    def __init__(self, n_neighbors: int, distance_metric: DistanceMetric,
-            neighbor_provider_factory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider, **kwargs):
+    def __init__(self, numNeighbors: int, distanceMetric: DistanceMetric,
+            neighborProviderFactory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
+            distanceBasedWeighting=False, distanceEpsilon=1e-3, **kwargs):
+        """
+        :param numNeighbors: the number of nearest neighbors to consider
+        :param distanceMetric: the distance metric to use
+        :param neighborProviderFactory: a factory with which a neighbor provider can be constructed using data
+        :param distanceBasedWeighting: whether to weight neighbors according to their distance (inverse); if False, use democratic vote
+        :param distanceEpsilon: a distance that is added to all distances for distance-based weighting (in order to avoid 0 distances);
+        :param kwargs: parameters to pass on to super-classes
+        """
         super().__init__(**kwargs)
-        self.neighbor_provider_factory = neighbor_provider_factory
-        self.n_neighbors = n_neighbors
-        self.distance_metric = distance_metric
+        self.distanceEpsilon = distanceEpsilon
+        self.distanceBasedWeighting = distanceBasedWeighting
+        self.neighborProviderFactory = neighborProviderFactory
+        self.n_neighbors = numNeighbors
+        self.distance_metric = distanceMetric
         self.df = None
         self.y = None
-        self.knn_finder = None
+        self.knnFinder = None
 
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
-        neighbor_provider = self.neighbor_provider_factory(self.df)
-        self.knn_finder = KNearestNeighboursFinder(self.df, self.distance_metric, neighbor_provider)
+        neighbor_provider = self.neighborProviderFactory(self.df)
+        self.knnFinder = KNearestNeighboursFinder(self.df, self.distance_metric, neighbor_provider)
 
-    def _predict_proba(self, X: pd.DataFrame):
+    def _predictClassProbabilities(self, X: pd.DataFrame):
         outputDf = pd.DataFrame({label: np.nan for label in self._labels}, index=X.index)
         for nt in X.itertuples():
             neighbors = self.findNeighbors(nt)
-            probabilities = self._predict_proba_from_neighbors(neighbors)
+            probabilities = self._predictClassProbabilityVectorFromNeighbors(neighbors)
             outputDf.loc[nt.Index] = probabilities
         return outputDf
 
-    def _predict_proba_from_neighbors(self, neighbors: List['Neighbor']):
-        neighborLabels = []
-        probabilities = []
+    def _predictClassProbabilityVectorFromNeighbors(self, neighbors: List['Neighbor']):
+        weights = collections.defaultdict(lambda: 0)
+        total = 0
         for neigh in neighbors:
-            neighborLabels.append(self._getLabel(neigh))
-        for label in self._labels:
-            probabilities.append(neighborLabels.count(label) / len(neighborLabels))
-        return probabilities
+            if self.distanceBasedWeighting:
+                weight = 1.0 / (neigh.distance + self.distanceEpsilon)
+            else:
+                weight = 1
+            weights[self._getLabel(neigh)] += weight
+            total += weight
+        return [weights[label] / total for label in self._labels]
 
     def _getLabel(self, neighbor: 'Neighbor'):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
 
-    def _predict_single_input(self, namedTuple):
-        neighbors = self.findNeighbors(namedTuple)
-        c = Counter([self._getLabel(neigh) for neigh in neighbors])
-        mostCommonLabel, count = c.most_common(1)[0]
-        return mostCommonLabel
-
     def findNeighbors(self, namedTuple):
-        return self.knn_finder.findNeighbors(namedTuple.Index, namedTuple, self.n_neighbors)
-
-    def get_params(self):
-        return {"n_neighbors": self.n_neighbors, "metric": self.metric.__name__, "dataset_size": len(self)}
+        return self.knnFinder.findNeighbors(namedTuple.Index, namedTuple, self.n_neighbors)
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        predictedValues = []
-        for i, nt in enumerate(x.itertuples()):
-            log.info(f"Computing prediction for #{i+1}/{len(x)}: {nt}")
-            predictedValues.append(self._predict_single_input(nt))
-        return pd.DataFrame({"category_range": predictedValues}, index=x.index)
+        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
+
+    def __str__(self):
+        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProviderFactory"])
+
 
 
 class KNearestNeighboursRegressionModel(VectorRegressionModel):
-    def __init__(self, numNeighbors: int, distance_metric: DistanceMetric,
-            neighbor_provider_factory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider, **kwargs):
+    def __init__(self, numNeighbors: int, distanceMetric: DistanceMetric,
+            neighborProviderFactory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
+            distanceBasedWeighting=False, distanceEpsilon=1e-3, **kwargs):
+        """
+        :param numNeighbors: the number of nearest neighbors to consider
+        :param distanceMetric: the distance metric to use
+        :param neighborProviderFactory: a factory with which a neighbor provider can be constructed using data
+        :param distanceBasedWeighting: whether to weight neighbors according to their distance (inverse); if False, use democratic vote
+        :param distanceEpsilon: a distance that is added to all distances for distance-based weighting (in order to avoid 0 distances);
+        :param kwargs: parameters to pass on to super-classes
+        """
         super().__init__(**kwargs)
-        self.neighbor_provider_factory = neighbor_provider_factory
+        self.distanceEpsilon = distanceEpsilon
+        self.distanceBasedWeighting = distanceBasedWeighting
+        self.neighbor_provider_factory = neighborProviderFactory
         self.numNeighbors = numNeighbors
-        self.distance_metric = distance_metric
+        self.distanceMetric = distanceMetric
         self.df = None
         self.y = None
         self.knnFinder = None
@@ -128,20 +149,25 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
         neighbor_provider = self.neighbor_provider_factory(self.df)
-        self.knnFinder = KNearestNeighboursFinder(self.df, self.distance_metric, neighbor_provider)
+        self.knnFinder = KNearestNeighboursFinder(self.df, self.distanceMetric, neighbor_provider)
 
-    def _getTarget(self, neighbor: 'Neighbor'):
+    def _getTarget(self, neighbor: Neighbor):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
 
     def _predictSingleInput(self, namedTuple):
         neighbors = self.knnFinder.findNeighbors(namedTuple.Index, namedTuple, self.numNeighbors)
         neighborTargets = np.array([self._getTarget(n) for n in neighbors])
-        neighborWeights = np.array([(1.0/(1e-5+n.distance)) for n in neighbors])
-        return np.sum(neighborTargets * neighborWeights) / np.sum(neighborWeights)
+        if self.distanceBasedWeighting:
+            neighborWeights = np.array([1.0 / (n.distance + self.distanceEpsilon) for n in neighbors])
+            return np.sum(neighborTargets * neighborWeights) / np.sum(neighborWeights)
+        else:
+            return np.mean(neighborTargets)
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         predictedValues = []
         for i, nt in enumerate(x.itertuples()):
-            log.info(f"Computing prediction for #{i+1}/{len(x)}: {nt}")
             predictedValues.append(self._predictSingleInput(nt))
         return pd.DataFrame({self._predictedVariableNames[0]: predictedValues}, index=x.index)
+
+    def __str__(self):
+        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProviderFactory"])

@@ -85,13 +85,31 @@ class EvalStats(ABC):
 
 
 class ClassificationEvalStats(EvalStats):
-    def __init__(self, y_predicted_proba: Union[list, pd.Series, pd.DataFrame] = None,
-                 y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
-                 y_true: Union[list, pd.Series, pd.DataFrame] = None,
-                 labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
-        self.labels = labels
-        self.y_predicted_proba = y_predicted_proba
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
+            y_true: Union[list, pd.Series, pd.DataFrame] = None,
+            y_predictedClassProbabilities: pd.DataFrame = None,
+            labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
+        """
+        :param y_predicted: the predicted class labels
+        :param y_true: the true class labels
+        :param y_predictedClassProbabilities: a data frame whose columns are the class labels and whose values are probabilities
+        :param labels: the list of class labels
+        """
         super().__init__(y_predicted=y_predicted, y_true=y_true)
+        self.labels = labels
+        self.y_predicted_proba = y_predictedClassProbabilities
+        self._probabilitiesAvailable = y_predictedClassProbabilities is not None
+
+        if self._probabilitiesAvailable:
+            self.y_predicted_proba_true_class = self._computeProbabilitiesOfTrueClass()
+
+    def _computeProbabilitiesOfTrueClass(self):
+        result = []
+        for i in range(len(self.y_true)):
+            trueClass = self.y_true[i]
+            probTrueClass = self.y_predicted_proba[trueClass].iloc[i]
+            result.append(probTrueClass)
+        return np.array(result)
 
     def getConfusionMatrix(self):
         return confusion_matrix(y_true=self.y_true, y_pred=self.y_predicted)
@@ -108,11 +126,18 @@ class ClassificationEvalStats(EvalStats):
     def getAveragedF1(self):
         return f1_score(y_true=self.y_true, y_pred=self.y_predicted, average='weighted')
 
+    def getGeoMeanTrueClassProbability(self):
+        if not self._probabilitiesAvailable:
+            return None
+        lp = np.log(self.y_predicted_proba_true_class)
+        return np.exp(lp.sum() / len(lp))
+
     def getAll(self):
         """Gets a dictionary with all metrics"""
-        return dict(ACC=self.getAccuracy())
-            #PRE=self.getAveragedPrecision(), REC=self.getAveragedRecall(),
-            #F1=self.getAveragedF1(), CONF=self.getConfusionMatrix())
+        d = dict(ACC=self.getAccuracy())
+        if self._probabilitiesAvailable:
+            d["GeoMeanTrueClassProb"] = self.getGeoMeanTrueClassProbability()
+        return d
 
 
 class RegressionEvalStats(EvalStats):

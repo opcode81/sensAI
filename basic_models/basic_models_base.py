@@ -2,14 +2,14 @@ import copy
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Sequence
+from typing import Tuple, Dict, Sequence, List, Any
 
 import numpy as np
 import pandas as pd
 import scipy.stats
 
 from .eval_stats import RegressionEvalStats, EvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
-    ClassificationEvalStatsCollection
+    ClassificationEvalStatsCollection, EvalStatsCollection
 
 log = logging.getLogger(__name__)
 
@@ -53,13 +53,16 @@ class PredictorModel(ABC):
     """
     Base class for models that map vectors to predictions
     """
-
     @abstractmethod
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         pass
 
     @abstractmethod
     def getPredictedVariableNames(self):
+        pass
+
+    @abstractmethod
+    def isRegressionModel(self) -> bool:
         pass
 
 
@@ -80,6 +83,26 @@ class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
         pass
 
 
+class DataFrameTransformerChain:
+    def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
+        self.dataFrameTransformers = dataFrameTransformers
+
+    def apply(self, df: pd.DataFrame, fit=False) -> pd.DataFrame:
+        """
+        Applies the chain of transformers to the given DataFrame, optionally fitting each transformer before applying it.
+        Each transformer in the chain receives the transformed output of its predecessor.
+
+        :param df: the data frame
+        :param fit: whether to fit the transformers before applying them
+        :return: the transformed data frame
+        """
+        for transformer in self.dataFrameTransformers:
+            if fit:
+                transformer.fit(df)
+            df = transformer.apply(df)
+        return df
+
+
 class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
@@ -92,15 +115,19 @@ class VectorModel(PredictorModel, ABC):
         :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
         :param trainingOutputTransformers: list of DataFrameTransformers for the transformation of training outputs prior to training
         """
-        self._inputTransformers = inputTransformers
-        self._outputTransformers = outputTransformers
-        self._trainingOutputTransformers = trainingOutputTransformers
+        self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
+        self._outputTransformerChain = DataFrameTransformerChain(outputTransformers)
+        self._trainingOutputTransformerChain = DataFrameTransformerChain(trainingOutputTransformers)
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = None
 
+    @abstractmethod
+    def isRegressionModel(self) -> bool:
+        pass
+
     def _checkAndTransformInputs(self, x: pd.DataFrame):
-        x = self._applyInputTransformers(x)
+        x = self._inputTransformerChain.apply(x)
         if self.getPredictedVariableNames() is None:
             raise Exception(f"Cannot obtain predictions from non-trained model {self.__class__}")
         if list(x.columns) != self._modelInputVariableNames:
@@ -117,23 +144,12 @@ class VectorModel(PredictorModel, ABC):
         x = self._checkAndTransformInputs(x)
         y = self._predict(x)
         y.index = x.index
-        y = self._applyTransformers(y, self._outputTransformers)
+        y = self._outputTransformerChain.apply(y)
         return y
 
     @abstractmethod
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         pass
-
-    @staticmethod
-    def _applyTransformers(df, transformers: Sequence[DataFrameTransformer], fit=False) -> pd.DataFrame:
-        for transformer in transformers:
-            if fit:
-                transformer.fit(df)
-            df = transformer.apply(df)
-        return df
-
-    def _applyInputTransformers(self, X: pd.DataFrame, fit=False) -> pd.DataFrame:
-        return self._applyTransformers(X, self._inputTransformers, fit=fit)
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         """
@@ -143,8 +159,8 @@ class VectorModel(PredictorModel, ABC):
         :param Y: a data frame containing output data
         """
         self._predictedVariableNames = list(Y.columns)
-        X = self._applyInputTransformers(X, fit=True)
-        Y = self._applyTransformers(Y, self._trainingOutputTransformers, fit=True)
+        X = self._inputTransformerChain.apply(X, fit=True)
+        Y = self._trainingOutputTransformerChain.apply(Y, fit=True)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training {self.__class__.__name__} with inputs={self._modelInputVariableNames}, outputs={list(Y.columns)}")
@@ -153,16 +169,6 @@ class VectorModel(PredictorModel, ABC):
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
-
-    def _stringRepr(self, memberNames):
-        def toString(x):
-            if type(x) == dict:
-                return "{" + ", ".join(f"{k}={str(v)}" for k, v in x.items()) + "}"
-            else:
-                return str(x)
-
-        membersDict = {m: toString(getattr(self, m)) for m in memberNames}
-        return f"{self.__class__.__name__}[{', '.join([f'{k}={v}' for k, v in membersDict.items()])}]"
 
     def getPredictedVariableNames(self):
         return self._predictedVariableNames
@@ -179,7 +185,7 @@ class VectorModel(PredictorModel, ABC):
         return self._modelOutputVariableNames
 
     def getInputTransformer(self, cls):
-        for it in self._inputTransformers:
+        for it in self._inputTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):
                 return it
         return None
@@ -190,6 +196,9 @@ class VectorRegressionModel(VectorModel, ABC):
             trainingOutputTransformers: Sequence[DataFrameTransformer] = ()):
         super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
             trainingOutputTransformers=trainingOutputTransformers)
+
+    def isRegressionModel(self) -> bool:
+        return True
 
 
 class VectorClassificationModel(VectorModel, ABC):
@@ -202,6 +211,9 @@ class VectorClassificationModel(VectorModel, ABC):
         super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
             trainingOutputTransformers=trainingOutputTransformers)
 
+    def isRegressionModel(self) -> bool:
+        return False
+
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         """
         Fits the model using the given data
@@ -209,23 +221,53 @@ class VectorClassificationModel(VectorModel, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
-        self._labels = [str(label) for label in Y.iloc[:, 0].unique()]
+        if len(Y.columns) != 1:
+            raise ValueError("Classification requires exactly one output column with class labels")
+        self._labels = sorted([label for label in Y.iloc[:, 0].unique()])
         self._fitClassifier(X, Y)
+
+    def getClassLabels(self) -> List[Any]:
+        return self._labels
 
     @abstractmethod
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         pass
 
-    def predict_proba(self, x: pd.DataFrame) -> pd.DataFrame:
+    def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
+        """
+        Converts from a result returned by predictClassProbabilities to a result as return by predict
+
+        :param df: the output data frame from predictClassProbabilities
+        :return: an output data frame as it would be returned by predict
+        """
+        dfCols = list(df.columns)
+        if dfCols != self._labels:
+            raise ValueError(f"Expected data frame with columns {self._labels}, got {dfCols}")
+        yArray = df.values
+        maxIndices = np.argmax(yArray, axis=1)
+        result = [self._labels[i] for i in maxIndices]
+        return pd.DataFrame(result, columns=self.getModelOutputVariableNames())
+
+    def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
+        """
+        :param x: the input data
+        :return: a data frame where the list of columns is the list of class labels and the values are probabilities
+        """
         x = self._checkAndTransformInputs(x)
-        return self._predict_proba(x)
+        return self._predictClassProbabilities(x)
 
     @abstractmethod
-    def _predict_proba(self, X: pd.DataFrame):
+    def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
         pass
 
 
-class VectorRegressionModelEvaluationData:
+class VectorModelEvaluationData(ABC):
+    @abstractmethod
+    def getEvalStats(self) -> EvalStats:
+        pass
+
+
+class VectorRegressionModelEvaluationData(VectorModelEvaluationData):
     def __init__(self, statsDict: Dict[str, EvalStats]):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
@@ -297,6 +339,10 @@ class VectorModelEvaluator(ABC):
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
         log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
+    @abstractmethod
+    def evalModel(self, model: PredictorModel) -> VectorModelEvaluationData:
+        pass
+
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
     def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
@@ -307,6 +353,8 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         :param model: the model to evaluate
         :return: a dictionary mapping from the predicted variable name to an object holding evaluation stats
         """
+        if not model.isRegressionModel():
+            raise ValueError("Expected regression model, got classification model instead")
         statsDict = {}
         predictions, groundTruth = self.computeTestDataOutputs(model)
         for predictedVarName in model.getPredictedVariableNames():
@@ -326,24 +374,25 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         return predictions, groundTruth
 
 
-class VectorClassificationModelEvaluationData:
+class VectorClassificationModelEvaluationData(VectorModelEvaluationData):
     def __init__(self, evalStats: ClassificationEvalStats):
         self.evalStats = evalStats
 
-    def getEvalStats(self):
+    def getEvalStats(self) -> ClassificationEvalStats:
         return self.evalStats
 
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, labels=None, testFraction=None,
+    def __init__(self, data: InputOutputData, testFraction=None,
                  testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
-        self.labels = labels
         self.computeProbabilities = computeProbabilities
 
     def evalModel(self, model: VectorClassificationModel) -> VectorClassificationModelEvaluationData:
+        if model.isRegressionModel():
+            raise ValueError("Expected classification model, got regression model instead.")
         predictions, predictions_proba, groundTruth = self.computeTestDataOutputs(model)
-        evalStats = ClassificationEvalStats(y_predicted_proba=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=self.labels)
+        evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         return VectorClassificationModelEvaluationData(evalStats)
 
     def computeTestDataOutputs(self, model: VectorClassificationModel) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -353,12 +402,14 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
-        predictions = model.predict(self.testData.inputs)
-        predictionProbabilities = None
         if self.computeProbabilities:
-            predictionProbabilities = model.predict_proba(self.testData.inputs)
+            classProbabilities = model.predictClassProbabilities(self.testData.inputs)
+            predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
+        else:
+            classProbabilities = None
+            predictions = model.predict(self.testData.inputs)
         groundTruth = self.testData.outputs
-        return predictions, predictionProbabilities, groundTruth
+        return predictions, classProbabilities, groundTruth
 
 
 class ChainedVectorRegressionPredictor(PredictorModel):
@@ -383,8 +434,22 @@ class ChainedVectorRegressionPredictor(PredictorModel):
         return self.predictor.getPredictedVariableNames()
 
 
+class VectorModelCrossValidationData(ABC):
+    @abstractmethod
+    def getEvalStatsCollection(self) -> EvalStatsCollection:
+        pass
+
+
 class VectorModelCrossValidator(ABC):
-    def __init__(self, data: InputOutputData, folds: int, randomSeed=42):
+    def __init__(self, data: InputOutputData, folds: int, randomSeed=42, returnTrainedModels=False):
+        """
+        :param data: the data set
+        :param folds: the number of folds
+        :param randomSeed: the random seed to use
+        :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
+            (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
+        """
+        self.returnTrainedModels = returnTrainedModels
         numDataPoints = len(data)
         permutedIndices = np.random.RandomState(randomSeed).permutation(numDataPoints)
         numTestPoints = numDataPoints // folds
@@ -401,19 +466,27 @@ class VectorModelCrossValidator(ABC):
         pass
 
     def _evalModel(self, model):
-        trainedModels = []
+        trainedModels = [] if self.returnTrainedModels else None
         evalDataList = []
         testIndicesList = []
+        predictedVarNames = None
         for evaluator in self.modelEvaluators:
-            modelCopy = copy.deepcopy(model)
-            evaluator.fitModel(modelCopy)
-            trainedModels.append(modelCopy)
-            evalDataList.append(evaluator.evalModel(modelCopy))
+            modelToFit: VectorModel = copy.deepcopy(model) if self.returnTrainedModels else model
+            evaluator.fitModel(modelToFit)
+            if predictedVarNames is None:
+                predictedVarNames = modelToFit.getPredictedVariableNames()
+            if self.returnTrainedModels:
+                trainedModels.append(modelToFit)
+            evalDataList.append(evaluator.evalModel(modelToFit))
             testIndicesList.append(evaluator.testData.outputs.index)
-        return trainedModels, evalDataList, testIndicesList
+        return trainedModels, evalDataList, testIndicesList, predictedVarNames
+
+    @abstractmethod
+    def evalModel(self, model) -> VectorModelCrossValidationData:
+        pass
 
 
-class VectorRegressionModelCrossValidationData:
+class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData):
     def __init__(self, trainedModels, evalDataList, predictedVarNames, testIndicesList):
         self.predictedVarNames = predictedVarNames
         self.trainedModels = trainedModels
@@ -431,20 +504,19 @@ class VectorRegressionModelCrossValidationData:
 
 
 class VectorRegressionModelCrossValidator(VectorModelCrossValidator):
-    def __init__(self, data: InputOutputData, folds=5, randomSeed=42):
-        super().__init__(data, folds=folds, randomSeed=randomSeed)
+    def __init__(self, data: InputOutputData, folds=5, randomSeed=42, returnTrainedModels=False):
+        super().__init__(data, folds=folds, randomSeed=randomSeed, returnTrainedModels=returnTrainedModels)
 
     @classmethod
     def _createModelEvaluator(cls, trainingData: InputOutputData, testData: InputOutputData):
         return VectorRegressionModelEvaluator(trainingData, testData=testData)
 
     def evalModel(self, model) -> VectorRegressionModelCrossValidationData:
-        trainedModels, evalDataList, testIndicesList = self._evalModel(model)
-        predictedVarNames = trainedModels[0].getPredictedVariableNames()
+        trainedModels, evalDataList, testIndicesList, predictedVarNames = self._evalModel(model)
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
 
 
-class VectorClassificationModelCrossValidationData:
+class VectorClassificationModelCrossValidationData(VectorModelCrossValidationData):
     def __init__(self, trainedModels, evalDataList: Sequence[VectorClassificationModelEvaluationData]):
         self.trainedModels = trainedModels
         self.evalDataList = evalDataList
@@ -463,5 +535,5 @@ class VectorClassificationModelCrossValidator(VectorModelCrossValidator):
         return VectorClassificationModelEvaluator(trainingData, testData=testData)
 
     def evalModel(self, model) -> VectorClassificationModelCrossValidationData:
-        trainedModels, evalDataList, testIndicesList = self._evalModel(model)
+        trainedModels, evalDataList, testIndicesList, predictedVarNames = self._evalModel(model)
         return VectorClassificationModelCrossValidationData(trainedModels, evalDataList)
