@@ -1,7 +1,7 @@
 from .basic_models_base import VectorModel, VectorRegressionModel, VectorClassificationModel, \
-    VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, \
-    VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData, \
     InputOutputData, DataFrameTransformer, RuleBasedDataFrameTransformer
+from .evaluation import VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, \
+    VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData
 from .normalisation import NormalisationMode
 from . import eval_stats
 from . import sklearn
