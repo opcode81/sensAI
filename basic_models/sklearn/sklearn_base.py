@@ -175,7 +175,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         Y = self.model.predict(inputValues)
         return pd.DataFrame(Y, columns=self._predictedVariableNames)
 
-    def _predict_proba(self, x: pd.DataFrame):
+    def _predictClassProbabilities(self, x: pd.DataFrame):
         inputValues = self._transformInput(x)
         Y = self.model.predict_proba(inputValues)
         return pd.DataFrame(Y, columns=self._labels)

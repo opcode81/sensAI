@@ -1,11 +1,12 @@
 import logging
+from typing import Sequence
 
 import torch
 
-from ..normalisation import NormalisationMode
-from .torch_base import WrappedTorchVectorModule, TorchVectorRegressionModel, NNLossEvaluatorRegression
 from . import torch_modules
-
+from .torch_base import WrappedTorchVectorModule, TorchVectorRegressionModel, TorchVectorClassificationModel
+from .. import DataFrameTransformer
+from ..normalisation import NormalisationMode
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
     log = log.getChild(__qualname__)
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
-            normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None, **nnOptimiserParams):
+            normalisationMode=NormalisationMode.MAX_BY_COLUMN,  inputTransformers: Sequence[DataFrameTransformer] = (),
+            cuda=True, pDropout=None, **nnOptimiserParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
@@ -45,7 +47,28 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
         :param pDropout: the probability with which to apply dropouts after each hidden layer
         :param nnOptimiserParams: parameters to pass on to NNOptimiser
         """
-        if "lossEvaluator" not in nnOptimiserParams:
-            nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
         super().__init__(MultiLayerPerceptron, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
-                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams)
+                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams, inputTransformers=inputTransformers)
+
+
+class TorchMultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
+    """
+    HVS model which uses a torch implementation of a multi-layer perceptron
+    """
+
+    log = log.getChild(__qualname__)
+
+    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
+            normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None,
+            inputTransformers: Sequence[DataFrameTransformer] = (), **nnOptimiserParams):
+        """
+        :param hiddenDims: sequence containing the number of neurons to use in hidden layers
+        :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
+        :param outputActivationFunction: the output activation function (torch.*)
+        :param normalisationMode: the normalisation mode to apply to input and output data
+        :param cuda: whether to use CUDA (GPU acceleration)
+        :param pDropout: the probability with which to apply dropouts after each hidden layer
+        :param nnOptimiserParams: parameters to pass on to NNOptimiser
+        """
+        super().__init__(MultiLayerPerceptron, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
+            dict(pDropout=pDropout), normalisationMode, nnOptimiserParams, inputTransformers=inputTransformers)

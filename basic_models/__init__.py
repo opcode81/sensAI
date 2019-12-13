@@ -8,6 +8,7 @@ from . import sklearn
 from . import torch
 from . import naive_bayes
 from . import util
+from . import hyperopt
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow

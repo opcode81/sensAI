@@ -1,31 +1,33 @@
-from collections import OrderedDict
-from enum import Enum
 import functools
-import logging
 import io
+import logging
 import math
 import time
 from abc import ABC, abstractmethod
-from typing import List, Union
+from collections import OrderedDict
+from enum import Enum
+from typing import List, Union, Sequence
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from torch import cuda as torchcuda
 from torch.autograd import Variable
-import torch.optim as optim
 
 from .. import normalisation
-from ..basic_models_base import VectorRegressionModel
-
+from ..basic_models_base import VectorRegressionModel, VectorClassificationModel, DataFrameTransformer
+from ..util.tracking import stringRepr
 
 log = logging.getLogger(__name__)
 
 
 class TensorScaler:
     def __init__(self, vectorDataScaler: normalisation.VectorDataScaler, cuda: bool):
-        self.scale = torch.from_numpy(vectorDataScaler.scale).float()
+        self.scale = vectorDataScaler.scale
+        if self.scale is not None:
+            self.scale = torch.from_numpy(vectorDataScaler.scale).float()
         self.translate = vectorDataScaler.translate
         if self.translate is not None:
             self.translate = torch.from_numpy(vectorDataScaler.translate).float()
@@ -33,18 +35,21 @@ class TensorScaler:
             self.cuda()
 
     def cuda(self):
-        self.scale = self.scale.cuda()
+        if self.scale is not None:
+            self.scale = self.scale.cuda()
         if self.translate is not None:
             self.translate = self.translate.cuda()
 
     def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
         if self.translate is not None:
             tensor -= self.translate
-        tensor /= self.scale
+        if self.scale is not None:
+            tensor /= self.scale
         return tensor
 
     def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        tensor *= self.scale
+        if self.scale is not None:
+            tensor *= self.scale
         if self.translate is not None:
             tensor += self.translate
         return tensor
@@ -490,6 +495,61 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
 
 
+class NNLossEvaluatorClassification(NNLossEvaluator):
+    """A loss evaluator for (multi-variate) regression"""
+
+    class LossFunction(Enum):
+        CROSSENTROPY = "CrossEntropy"
+
+    def __init__(self, lossFn: LossFunction):
+        if lossFn is None:
+            lossFn = self.LossFunction.CROSSENTROPY
+        try:
+            self.lossFn = self.LossFunction(lossFn)
+        except ValueError:
+            raise Exception(f"Loss function {lossFn} not supported. Available are: {[e.value for e in self.LossFunction]}")
+
+        # transient members: state for validation
+        self.totalLossCE = None
+        self.allTrueOutputs = None
+
+    def __str__(self):
+        return f"{self.__class__.__name__}[{self.lossFn}]"
+
+    def startTraining(self, cuda):
+        self.evaluateCE = nn.CrossEntropyLoss(reduction="sum")
+        if cuda:
+            self.evaluateCE = self.evaluateCE.cuda()
+
+    def getTrainingCriterion(self):
+        if self.lossFn is self.LossFunction.CROSSENTROPY:
+            criterion = nn.CrossEntropyLoss(reduction='sum')
+        else:
+            raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
+        return criterion
+
+    def startValidationCollection(self, outputShape):
+        if len(outputShape) != 0:
+            raise ValueError("Outputs must be scalars, specifically integers, not tensors")
+        self.totalLossCE = 0
+        self.numValidationSamples = 0
+
+    def collectValidationResultBatch(self, output, groundTruth):
+        self.totalLossCE += self.evaluateCE(output, groundTruth).item()
+        self.numValidationSamples += output.shape[0]
+
+    def endValidationCollection(self):
+        ce = self.totalLossCE / self.numValidationSamples
+        metrics = OrderedDict([("CE", ce), ("GeoMeanProbTrueClass", math.exp(-ce))])
+        return metrics
+
+    def getValidationMetricName(self):
+        if self.lossFn is self.LossFunction.CROSSENTROPY:
+            return "CE"
+        else:
+            raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
+
+
 class NNOptimiser:
     log = log.getChild(__qualname__)
 
@@ -620,8 +680,8 @@ class NNOptimiser:
                 else:
                     bestStr = "best {:s} {:5.6f} from epoch {:d}".format(validationMetricName, best_val, best_epoch)
                 trainingLog(
-                    'Epoch {:3d} completed in {:5.2f}s | train loss {:5.4f} | validation {:s} | {:s}'.format(
-                        epoch, (time.time() - epoch_start_time), train_loss,
+                    'Epoch {:3d}/{} completed in {:5.2f}s | train loss {:5.4f} | validation {:s} | {:s}'.format(
+                        epoch, self.epochs, (time.time() - epoch_start_time), train_loss,
                         ", ".join(["%s %5.4f" % e for e in metrics.items()]),
                         bestStr))
                 if isNewBest:
@@ -725,7 +785,15 @@ class NNOptimiser:
 
 
 class VectorDataUtil(DataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN):
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN,
+            differingOutputNormalisationMode=None):
+        """
+        :param inputs: the inputs
+        :param outputs: the outputs
+        :param cuda: whether to apply CUDA
+        :param normalisationMode: the normalisation mode to use for inputs and (unless differingOutputNormalisationMode is specified) outputs
+        :param differingOutputNormalisationMode: the normalisation mode to apply to outputs
+        """
         if inputs.shape[0] != outputs.shape[0]:
             raise ValueError("Output length must be equal to input length")
         self.inputs = inputs
@@ -736,7 +804,7 @@ class VectorDataUtil(DataUtil):
         inputScaler = normalisation.VectorDataScaler(self.inputs, self.normalisationMode)
         self.inputValues = inputScaler.getNormalisedArray(self.inputs)
         self.inputTensorScaler = TensorScaler(inputScaler, cuda)
-        outputScaler = normalisation.VectorDataScaler(self.outputs, self.normalisationMode)
+        outputScaler = normalisation.VectorDataScaler(self.outputs, self.normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
         self.outputValues = outputScaler.getNormalisedArray(self.outputs)
         self.outputTensorScaler = TensorScaler(outputScaler, cuda)
 
@@ -760,7 +828,7 @@ class VectorDataUtil(DataUtil):
     def _inputOutputPairs(self, indices):
         n = len(indices)
         X = torch.zeros((n, self.inputDim()))
-        Y = torch.zeros((n, self.outputDim()))
+        Y = torch.zeros((n, self.outputDim()), dtype=self._torchOutputDtype())
 
         for i, outputIdx in enumerate(indices):
             inputData, outputData = self._inputOutputPair(outputIdx)
@@ -783,7 +851,38 @@ class VectorDataUtil(DataUtil):
         return self.inputs.shape[1]
 
     def outputDim(self):
+        """
+        :return: the dimensionality of the outputs (ground truth values)
+        """
         return self.outputs.shape[1]
+
+    def modelOutputDim(self):
+        """
+        :return: the dimensionality that is to be output by the model to be trained
+        """
+        return self.outputDim()
+
+    def _torchOutputDtype(self):
+        return None  # use default (some float)
+
+
+class ClassificationVectorDataUtil(VectorDataUtil):
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN):
+        if len(outputs.columns) != 1:
+            raise Exception(f"Exactly one output dimension (the class index) is required, got {len(outputs.columns)}")
+        super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode, differingOutputNormalisationMode=normalisation.NormalisationMode.NONE)
+        self.numClasses = numClasses
+
+    def modelOutputDim(self):
+        return self.numClasses
+
+    def _torchOutputDtype(self):
+        return torch.long
+
+    def _inputOutputPairs(self, indices):
+        # classifications requires that the second (1-element) dimension be dropped
+        inputs, outputs = super()._inputOutputPairs(indices)
+        return inputs, outputs.view(outputs.shape[0])
 
 
 class WrappedTorchVectorModule(WrappedTorchModule, ABC):
@@ -799,7 +898,7 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
     def _extractParamsFromData(self, dataUtil: VectorDataUtil):
         super()._extractParamsFromData(dataUtil)
         self.inputDim = dataUtil.inputDim()
-        self.outputDim = dataUtil.outputDim()
+        self.outputDim = dataUtil.modelOutputDim()
 
     def createTorchModule(self):
         return self.createTorchVectorModule(self.inputDim, self.outputDim)
@@ -812,6 +911,8 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 class TorchVectorRegressionModel(VectorRegressionModel):
     def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams, inputTransformers=()):
         super().__init__(inputTransformers=inputTransformers)
+        if "lossEvaluator" not in nnOptimiserParams:
+            nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
         self.normalisationMode = normalisationMode
         self.nnOptimiserParams = nnOptimiserParams
         self.modelClass = modelClass
@@ -832,5 +933,44 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
     def __str__(self):
-        return self._stringRepr(["model", "normalisationMode", "nnOptimiserParams"])
+        return stringRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
+
+
+class TorchVectorClassificationModel(VectorClassificationModel):
+    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams,
+                 inputTransformers: Sequence[DataFrameTransformer] = ()):
+        super().__init__(inputTransformers=inputTransformers)
+        if "lossEvaluator" not in nnOptimiserParams:
+            nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
+        self.normalisationMode = normalisationMode
+        self.nnOptimiserParams = nnOptimiserParams
+        self.modelClass = modelClass
+        self.modelArgs = modelArgs
+        self.modelKwArgs = modelKwArgs
+        self.model = None
+
+    def createTorchVectorModel(self) -> WrappedTorchVectorModule:
+        return self.modelClass(*self.modelArgs, **self.modelKwArgs)
+
+    def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        if len(outputs.columns) != 1:
+            raise ValueError("Expected one output dimension: the class labels")
+        labels: pd.Series = outputs.iloc[:, 0]
+        outputs = pd.DataFrame([self._labels.index(l) for l in labels], columns=outputs.columns, index=outputs.index)
+        self.model = self.createTorchVectorModel()
+        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels), normalisationMode=self.normalisationMode)
+        self.model.fit(dataUtil, **self.nnOptimiserParams)
+
+    def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
+        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
+
+    def _predictClassProbabilities(self, inputs: pd.DataFrame):
+        y = self.model.applyScaled(inputs.values, asNumpy=True)
+        normalisationConstants = y.sum(axis=1)
+        for i in range(y.shape[0]):
+            y[i,:] /= normalisationConstants[i]
+        return pd.DataFrame(y, columns=self._labels)
+
+    def __str__(self):
+        return stringRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
 

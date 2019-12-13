@@ -30,7 +30,7 @@ class VectorDataScaler:
         dim = rawArray.shape[1]
         translate = None
         if normalisationMode == NormalisationMode.NONE:
-            scale = np.ones(dim)
+            scale = None
         elif normalisationMode == NormalisationMode.MAX_ALL:
             scale = np.ones(dim) * np.max(rawArray)
         elif normalisationMode == NormalisationMode.MAX_BY_COLUMN:
@@ -58,11 +58,14 @@ class VectorDataScaler:
         result = self._array(data)
         if self.translate is not None:
             result = result - self.translate
-        result = result / self.scale
+        if self.scale is not None:
+            result = result / self.scale
         return result
 
     def getDenormalisedArray(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
-        result = self._array(data) * self.scale
+        result = self._array(data)
+        if self.scale is not None:
+            result = result * self.scale
         if self.translate is not None:
             result = result + self.translate
         return result
