@@ -3,7 +3,8 @@ from typing import Dict, Sequence, Any, Callable, Generator
 
 import pandas as pd
 
-from .basic_models_base import VectorModel, VectorModelEvaluator, VectorModelCrossValidator
+from .basic_models_base import VectorModel
+from .evaluation import VectorModelEvaluator, VectorModelCrossValidator
 
 
 log = logging.getLogger(__name__)
