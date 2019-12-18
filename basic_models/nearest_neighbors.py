@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 import collections
+import datetime
 from typing import Callable, List, Union
 
 import numpy as np
@@ -36,7 +37,31 @@ class AllNeighborsProvider(NeighborProvider):
                 yield nt.Index, nt
 
     def __str__(self):
-        return "AllNeighborsProvider"
+        return str(self.__class__.__name__)
+
+
+class TimerangeNeighborsProvider(NeighborProvider):
+    def __init__(self, df: pd.DataFrame, timestampsColumn="timestamps", pastTimeRangeDays=120, futureTimeRangeDays=120):
+        if not pd.core.dtypes.common.is_datetime64_any_dtype(df[timestampsColumn]):
+            raise Exception(f"Column {timestampsColumn} does not have a compatible datatype")
+
+        self.df = df
+        self.timestampsColumn = timestampsColumn
+        self.pastTimeRangeDays = pastTimeRangeDays
+        self.futureTimeRangeDays = futureTimeRangeDays
+        self.pastTimeDelta = datetime.timedelta(days=pastTimeRangeDays)
+        self.futureTimeDelta = datetime.timedelta(days=futureTimeRangeDays)
+
+    def iterPotentialNeighbors(self, id, value: collections.namedtuple):
+        inputTime = getattr(value, self.timestampsColumn)
+        for nt in self.df.itertuples():
+            if nt.Index != id:
+                maxTime, minTime = inputTime + self.futureTimeDelta, inputTime - self.pastTimeDelta
+                if minTime <= inputTime <= maxTime:
+                    yield nt.Index, nt
+
+    def __str__(self):
+        return stringRepr(self, ["pastTimeRangeDays", "futureTimeRangeDays"])
 
 
 class KNearestNeighboursFinder:
@@ -48,7 +73,7 @@ class KNearestNeighboursFinder:
 
     def findNeighbors(self, id: Union[str, int], value, n_neighbors=20) -> List[Neighbor]:
         result = []
-        log.info(f"Finding neighbors for {id}")
+        log.debug(f"Finding neighbors for {id}")
         for neighborId, neighborValue in self.neighborProvider.iterPotentialNeighbors(id, value):
             distance = self.distanceMetric.distance(id, value, neighborId, neighborValue)
             result.append(Neighbor(neighborId, neighborValue, distance))
@@ -75,6 +100,7 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         self.distanceEpsilon = distanceEpsilon
         self.distanceBasedWeighting = distanceBasedWeighting
         self.neighborProviderFactory = neighborProviderFactory
+        self.neighborProvider: NeighborProvider = None
         self.n_neighbors = numNeighbors
         self.distance_metric = distanceMetric
         self.df = None
@@ -85,8 +111,8 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
-        neighbor_provider = self.neighborProviderFactory(self.df)
-        self.knnFinder = KNearestNeighboursFinder(self.df, self.distance_metric, neighbor_provider)
+        self.neighborProvider = self.neighborProviderFactory(self.df)
+        self.knnFinder = KNearestNeighboursFinder(self.df, self.distance_metric, self.neighborProvider)
 
     def _predictClassProbabilities(self, X: pd.DataFrame):
         outputDf = pd.DataFrame({label: np.nan for label in self._labels}, index=X.index)
@@ -118,7 +144,7 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
 
     def __str__(self):
-        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProviderFactory"])
+        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProvider"])
 
 
 

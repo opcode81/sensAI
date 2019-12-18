@@ -1,12 +1,13 @@
 import collections
-from math import log
+from math import log, exp
 
+import numpy as np
 import pandas as pd
 
 from .basic_models_base import VectorClassificationModel
 
 
-class NaiveBayesVectorClassificationModel(VectorClassificationModel):
+class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
     """
     Naive Bayes with categorical features
     """
@@ -33,7 +34,17 @@ class NaiveBayesVectorClassificationModel(VectorClassificationModel):
                 self.conditionals[cls][idxFeature][value] += increment
 
     def _predictClassProbabilities(self, X: pd.DataFrame):
-        pass
+        results = []
+        for _, features in X.iterrows():
+            classProbabilities = np.zeros(len(self._labels))
+            for i, cls in enumerate(self._labels):
+                lp = log(self._probability(self.prior, cls))
+                for idxFeature, value in enumerate(features):
+                    lp += log(self._probability(self.conditionals[cls][idxFeature], value))
+                classProbabilities[i] = exp(lp)
+            classProbabilities /= np.sum(classProbabilities)
+            results.append(classProbabilities)
+        return pd.DataFrame(results, columns=self._labels)
 
     def _probability(self, counts, value):
         valueCount = counts.get(value, 0.0)

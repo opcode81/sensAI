@@ -2,7 +2,7 @@ import copy
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Sequence
+from typing import Tuple, Dict, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -157,6 +157,8 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         """
         if self.computeProbabilities:
             classProbabilities = model.predictClassProbabilities(self.testData.inputs)
+            if classProbabilities is None:
+                raise Exception(f"Requested computation of class probabilities for a model which does not support it: {model} returned None")
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:
             classProbabilities = None
@@ -290,3 +292,17 @@ class VectorClassificationModelCrossValidator(VectorModelCrossValidator):
     def evalModel(self, model) -> VectorClassificationModelCrossValidationData:
         trainedModels, evalDataList, testIndicesList, predictedVarNames = self._evalModel(model)
         return VectorClassificationModelCrossValidationData(trainedModels, evalDataList)
+
+
+def computeEvaluationMetricsDict(model, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]) -> Dict[str, float]:
+    if isinstance(evaluatorOrValidator, VectorModelEvaluator):
+        evaluator: VectorModelEvaluator = evaluatorOrValidator
+        evaluator.fitModel(model)
+        data = evaluator.evalModel(model)
+        return data.getEvalStats().getAll()
+    elif isinstance(evaluatorOrValidator, VectorModelCrossValidator):
+        crossValidator: VectorModelCrossValidator = evaluatorOrValidator
+        data = crossValidator.evalModel(model)
+        return data.getEvalStatsCollection().aggStats()
+    else:
+        raise ValueError(f"Unexpected evaluator/validator of type {type(evaluatorOrValidator)}")

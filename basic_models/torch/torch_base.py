@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence
+from typing import List, Union, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -273,26 +273,30 @@ class NNTimeSeriesForecastModel(ABC):
 class _Optimiser(object):
 
     def _makeOptimizer(self):
+        kwargs = {
+            "lr": self.lr,
+            "weight_decay": self.weight_decay
+        }
         if self.method == 'sgd':
-            self.optimizer = optim.SGD(self.params, lr=self.lr)
+            self.optimizer = optim.SGD(self.params, **kwargs)
         elif self.method == 'asgd':
-            self.optimizer = optim.ASGD(self.params, lr=self.lr)
+            self.optimizer = optim.ASGD(self.params, **kwargs)
         elif self.method == 'adagrad':
-            self.optimizer = optim.Adagrad(self.params, lr=self.lr)
+            self.optimizer = optim.Adagrad(self.params, **kwargs)
         elif self.method == 'adadelta':
-            self.optimizer = optim.Adadelta(self.params, lr=self.lr)
+            self.optimizer = optim.Adadelta(self.params, **kwargs)
         elif self.method == 'adam':
-            self.optimizer = optim.Adam(self.params, lr=self.lr)
+            self.optimizer = optim.Adam(self.params, **kwargs)
         elif self.method == 'adamax':
-            self.optimizer = optim.Adamax(self.params, lr=self.lr)
+            self.optimizer = optim.Adamax(self.params, **kwargs)
         elif self.method == 'rmsprop':
-            self.optimizer = optim.RMSprop(self.params, lr=self.lr)
+            self.optimizer = optim.RMSprop(self.params, **kwargs)
         elif self.method == 'rprop':
-            self.optimizer = optim.Rprop(self.params, lr=self.lr)
+            self.optimizer = optim.Rprop(self.params, **kwargs)
         else:
             raise RuntimeError("Invalid optim method: " + self.method)
 
-    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None):
+    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, weight_decay=0.0):
         self.params = list(params)  # careful: params may be a generator
         self.last_ppl = None
         self.lr = lr
@@ -301,7 +305,7 @@ class _Optimiser(object):
         self.lr_decay = lr_decay
         self.start_decay_at = start_decay_at
         self.start_decay = False
-
+        self.weight_decay = weight_decay
         self._makeOptimizer()
 
     def step(self):
@@ -554,7 +558,7 @@ class NNOptimiser:
     log = log.getChild(__qualname__)
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
-            batchSize=64, epochs=1000, trainFraction=0.75, scaledOutputs=False):
+            batchSize=64, epochs=1000, trainFraction=0.75, scaledOutputs=False, weight_decay=0.0):
         """
         :param cuda: whether to use CUDA or not
         :param lossEvaluator: the loss evaluator to use
@@ -581,6 +585,7 @@ class NNOptimiser:
         self.trainFraction = trainFraction
         self.scaledOutputs = scaledOutputs
         self.lossEvaluator = lossEvaluator
+        self.weight_decay = weight_decay
 
         self.trainingLog = None
         self.bestEpoch = None
@@ -642,7 +647,8 @@ class NNOptimiser:
 
         best_val = 1e9
         best_epoch = 0
-        optim = _Optimiser(torchModel.parameters(), self.optimiser, self.optimiserLR, self.optimiserClip)
+        optim = _Optimiser(torchModel.parameters(), self.optimiser, self.optimiserLR, self.optimiserClip,
+                    weight_decay=self.weight_decay)
 
         bestModelBytes = None
         self.lossEvaluator.startTraining(self.cuda)
@@ -713,7 +719,8 @@ class NNOptimiser:
         scaledTruth = outputScaler.denormalise(groundTruth)
         return scaledOutput, scaledTruth
 
-    def _train(self, dataSets, model, criterion, optim, batch_size, cuda, outputScalers):
+    def _train(self, dataSets: Sequence[Tuple[torch.Tensor, torch.Tensor]], model: nn.Module, criterion: nn.modules.loss._Loss,
+            optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: normalisation.VectorDataScaler):
         """Performs one training epoch"""
         model.train()
         total_loss = 0
@@ -731,7 +738,7 @@ class NNOptimiser:
                 n_samples += output.size(0) * outputCount
         return total_loss / n_samples
 
-    def _evaluate(self, dataSet, model, outputScaler):
+    def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: normalisation.VectorDataScaler):
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 
@@ -762,7 +769,7 @@ class NNOptimiser:
             self.log.warning("You have a CUDA device, so you should probably run with cuda=True")
 
     @classmethod
-    def _get_batches(cls, tensors, batch_size, cuda, shuffle):
+    def _get_batches(cls, tensors: Sequence[torch.Tensor], batch_size, cuda, shuffle):
         length = len(tensors[0])
         if shuffle:
             index = torch.randperm(length)
@@ -785,7 +792,7 @@ class NNOptimiser:
 
 
 class VectorDataUtil(DataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN,
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN,
             differingOutputNormalisationMode=None):
         """
         :param inputs: the inputs

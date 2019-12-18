@@ -250,7 +250,21 @@ class VectorClassificationModel(VectorModel, ABC):
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities
         """
         x = self._checkAndTransformInputs(x)
-        return self._predictClassProbabilities(x)
+        result = self._predictClassProbabilities(x)
+
+        # check for correct columns
+        if list(result.columns) != self._labels:
+            raise Exception(f"_predictClassProbabilities returned DataFrame with incorrect columns: expected {self._labels}, got {result.columns}")
+
+        # check for normalisation
+        maxRowsToCheck = 5
+        dfToCheck = result.iloc[:maxRowsToCheck]
+        for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
+            s = valueSeries.sum()
+            if abs(s-1.0) > 0.01:
+                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+
+        return result
 
     @abstractmethod
     def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
