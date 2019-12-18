@@ -80,7 +80,8 @@ class Repo:
 if __name__ == '__main__':
     odm = Repo("odm", "odm", os.path.join("..", "odm", "odmalg", "basic_models"))
     faz = Repo("faz", "faz", os.path.join("..", "faz", "preprocessing", "basic_models"))
-    repos = [odm, faz]
+    dcs = Repo("dcs", "dcs", os.path.join("..", "dcs", "dcs-models", "dcs", "basic_models"))
+    repos = [odm, faz, dcs]
     
     args = sys.argv[1:]
     if len(args) != 2:
