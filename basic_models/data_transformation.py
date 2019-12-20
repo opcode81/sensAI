@@ -1,16 +1,33 @@
 import copy
 import logging
 import re
-from typing import List, Sequence, Union
+from typing import List, Sequence, Union, Dict, Callable, Any
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 from .basic_models_base import DataFrameTransformer, RuleBasedDataFrameTransformer
-
+from .columngen import ColumnGenerator
 
 log = logging.getLogger(__name__)
+
+
+class DFTRenameColumns(RuleBasedDataFrameTransformer):
+    def __init__(self, columnsMap: Dict[str, str]):
+        self.columnsMap = columnsMap
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.rename(columns=self.columnsMap)
+
+
+class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
+    def __init__(self, column: str, condition: Callable[[Any], bool]):
+        self.column = column
+        self.condition = condition
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[df[self.column].apply(self.condition)]
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
@@ -149,4 +166,15 @@ class DFTNormalisation(DataFrameTransformer):
                 if not rule.skip:
                     df[c] = rule.transformer.transform(df[[c]].values)
         self._checkUnhandledColumns(df, matchedRulesByColumn)
+        return df
+
+
+class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
+    def __init__(self, columnGenerators: Sequence[ColumnGenerator]):
+        self.columnGenerators = columnGenerators
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        for cg in self.columnGenerators:
+            series = cg.generateColumn(df)
+            df[series.name] = series
         return df
