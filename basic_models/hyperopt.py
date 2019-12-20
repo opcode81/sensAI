@@ -1,4 +1,5 @@
 import logging
+import typing
 from typing import Dict, Sequence, Any, Callable, Generator, Union
 
 import pandas as pd
@@ -58,7 +59,8 @@ class GridSearch:
         values.update(**params)
         return values
 
-    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]):
+    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator],
+            loggingCallback: Callable[[Dict], typing.Any] = None):
         executor = ProcessPoolExecutor(max_workers=self.numProcesses) if self.numProcesses > 1 else ThreadPoolExecutor(max_workers=1)
         futures = []
         for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
@@ -68,6 +70,8 @@ class GridSearch:
         cols = None
         for i, future in enumerate(futures):
             values = future.result()
+            if loggingCallback is not None:
+                loggingCallback(values)
             if df is None:
                 cols = list(values.keys())
                 df = pd.DataFrame(columns=cols)

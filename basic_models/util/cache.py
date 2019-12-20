@@ -44,7 +44,9 @@ def loadPickle(path):
 
 
 def dumpPickle(obj, picklePath):
-    os.makedirs(os.path.dirname(picklePath), exist_ok=True)
+    dirName = os.path.dirname(picklePath)
+    if dirName != "":
+        os.makedirs(dirName, exist_ok=True)
     with open(picklePath, "wb") as f:
         pickle.dump(obj, f)
 
