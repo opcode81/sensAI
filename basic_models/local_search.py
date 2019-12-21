@@ -275,6 +275,20 @@ class SACostValue(ABC):
         pass
 
 
+class SACostValueNumeric(SACostValue):
+    def __init__(self, scalar):
+        self._value = scalar
+
+    def __str__(self):
+        return str(self.value())
+
+    def value(self):
+        return self._value
+
+    def add(self, other: 'SACostValueNumeric') -> 'SACostValueNumeric':
+        return SACostValueNumeric(self._value + other._value)
+
+
 class SAState(ABC):
     """Represents the state/variable assignment during a simulated annealing process"""
 
@@ -395,7 +409,7 @@ class SAChain:
     log = log.getChild(__qualname__)
 
     def __init__(self, stateFactory: Callable[[random.Random], SAState], schedule: SATemperatureSchedule,
-            opsAndWeights: Sequence[Tuple[Type[SAOperator], float]], randomSeed, collectStats=False):
+            opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator]]], randomSeed, collectStats=False):
         self.schedule = schedule
         self.r = random.Random(randomSeed)
         self.state = stateFactory(self.r)
@@ -471,12 +485,12 @@ class SAChain:
                 stats[f"useless moves of {op}"] = str(counter)
             loggedCostDeltas = self.loggedSeries["costDeltas"]
             if loggedCostDeltas:
-                stats["mean cost delta"] = "%.1f +- %.1f" % (np.mean(loggedCostDeltas), np.std(loggedCostDeltas))
+                stats["mean cost delta"] = "%.3f +- %.3f" % (np.mean(loggedCostDeltas), np.std(loggedCostDeltas))
                 absCostDeltas = np.abs(loggedCostDeltas)
-                stats["mean absolute cost delta"] = "%.1f +- %.1f" % (np.mean(absCostDeltas), np.std(absCostDeltas))
+                stats["mean absolute cost delta"] = "%.3f +- %.3f" % (np.mean(absCostDeltas), np.std(absCostDeltas))
                 positiveCostDeltas = [cd for cd in loggedCostDeltas if cd > 0]
                 if positiveCostDeltas:
-                    stats["positive cost delta"] = "mean=%.1f +- %.1f, max=%.1f" % (np.mean(positiveCostDeltas), np.std(positiveCostDeltas), np.max(positiveCostDeltas))
+                    stats["positive cost delta"] = "mean=%.3f +- %.3f, max=%.3f" % (np.mean(positiveCostDeltas), np.std(positiveCostDeltas), np.max(positiveCostDeltas))
         statsJoin = "\n    " if self.collectStats else "; "
         self.log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
         self.log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
@@ -514,7 +528,7 @@ class SimulatedAnnealing:
     """
     The simulated annealing algorithm for discrete optimisation (cost minimisation)
     """
-    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Type[SAOperator], float]], maxSteps=None, duration=None,
+    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]], maxSteps=None, duration=None,
                  randomSeed=42, collectStats=False):
         """
         :param scheduleFactory: a factory for the creation of the temperature schedule for the annealing process

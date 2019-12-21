@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn import compose
 
-from ..basic_models_base import VectorRegressionModel, VectorClassificationModel, DataFrameTransformer
+from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
+from ..data_transformation import DataFrameTransformer
 
 log = logging.getLogger(__name__)
 

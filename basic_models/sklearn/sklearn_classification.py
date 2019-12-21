@@ -17,7 +17,7 @@ class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassifi
                          random_state=random_state, **modelArgs)
 
 
-class SkLearnRandomForrestVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, min_samples_leaf=8, random_state=42, inputTransformers=(), **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestClassifier, inputTransformers=inputTransformers, random_state=random_state, min_samples_leaf=min_samples_leaf, **modelArgs)
 

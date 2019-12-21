@@ -7,7 +7,6 @@ from typing import Sequence, Tuple, List, Union
 import numpy as np
 import pandas as pd
 
-from transformations.embeddings.Distances import euclideanDistance
 from .util import cache
 from .util.tracking import stringRepr
 
@@ -129,13 +128,17 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
 
 class LinearCombinationDistanceMetric(DistanceMetric):
     def __init__(self, metrics: Sequence[Tuple[float, DistanceMetric]]):
-        self.metrics = metrics
+        """
+        :param metrics: a sequence of tuples (weight, distance metric)
+        """
+        self.metrics = [(w, m) for (w, m) in metrics if w != 0]
+        if len(self.metrics) == 0:
+            raise ValueError(f"List of metrics is empty after removing all 0-weight metrics; passed {metrics}")
 
     def distance(self, idA, valueA, idB, valueB):
         value = 0
         for weight, metric in self.metrics:
-            if weight != 0:
-                value += metric.distance(idA, valueA, idB, valueB) * weight
+            value += metric.distance(idA, valueA, idB, valueB) * weight
         return value
 
     def __str__(self):
@@ -143,6 +146,8 @@ class LinearCombinationDistanceMetric(DistanceMetric):
 
 
 class HellingerDistanceMetric(DistanceMetric):
+    SQRT2 = np.sqrt(2)
+
     def __init__(self, column: str, checkInput=False):
         self.column = column
         self.checkInput = checkInput
@@ -158,7 +163,7 @@ class HellingerDistanceMetric(DistanceMetric):
             raise ValueError(f"The entries in {self.column} have to sum to 1")
 
         if not all((inputValue >= 0)*(inputValue <= 1)):
-            raise ValueError(f"The entries in {self.column} have to sum to be in the range [0, 1")
+            raise ValueError(f"The entries in {self.column} have to be in the range [0, 1]")
 
     def distance(self, idA, valueA, idB, valueB):
         valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
@@ -167,7 +172,7 @@ class HellingerDistanceMetric(DistanceMetric):
             self.checkInputValue(valA)
             self.checkInputValue(valB)
 
-        return euclideanDistance(np.sqrt(valA), np.sqrt(valB)) / np.sqrt(2)
+        return np.linalg.norm(np.sqrt(valA) - np.sqrt(valB)) / self.SQRT2
 
 
 class EuclideanDistanceMetric(DistanceMetric):
@@ -176,7 +181,7 @@ class EuclideanDistanceMetric(DistanceMetric):
 
     def distance(self, idA, valueA, idB, valueB):
         valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
-        return euclideanDistance(valA, valB)
+        return np.linalg.norm(valA - valB)
 
     def __str__(self):
         return stringRepr(self, ["column"])
@@ -196,4 +201,34 @@ class IdentityDistanceMetric(DistanceMetric):
         return 0
 
     def __str__(self):
-        return f"IdentityDistanceMetric based on keys: {self.keys}"
+        return f"{self.__class__.__name__} based on keys: {self.keys}"
+
+
+class RelativeBitwiseEqualityDistanceMetric(DistanceMetric):
+    def __init__(self, column: str, checkInput=False):
+        self.checkInput = checkInput
+        self.column = column
+
+    def checkInputValue(self, inputValue):
+        if not isinstance(inputValue, np.ndarray):
+            raise ValueError(f"Expected to find numpy arrays in {self.column}")
+
+        if not len(inputValue.shape) == 1:
+            raise ValueError(f"The input array should be of shape (n,)")
+
+        if not set(inputValue).issubset({0, 1}):
+            raise ValueError("The input array should only have entries in {0, 1}")
+
+    def distance(self, idA, valueA, idB, valueB):
+        valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
+        if self.checkInput:
+            self.checkInputValue(valA)
+            self.checkInputValue(valB)
+        denom = np.count_nonzero(valA + valB)
+        if denom == 0:
+            return 0
+        else:
+            return 1-np.dot(valA, valB)/denom
+
+    def __str__(self):
+        return f"{self.__class__.__name__} for column {self.column}"

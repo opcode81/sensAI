@@ -1,16 +1,61 @@
 import copy
 import logging
 import re
+from abc import ABC, abstractmethod
 from typing import List, Sequence, Union, Dict, Callable, Any
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
-from .basic_models_base import DataFrameTransformer, RuleBasedDataFrameTransformer
 from .columngen import ColumnGenerator
 
 log = logging.getLogger(__name__)
+
+
+class DataFrameTransformer(ABC):
+    """
+    Base class for data frame transformers, i.e. objects which can transform one data frame into another
+    (possibly applying the transformation to the original data frame - in-place transformation).
+    A data frame transformer may require being fitted using training data.
+    """
+
+    @abstractmethod
+    def fit(self, df: pd.DataFrame):
+        pass
+
+    @abstractmethod
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+
+class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
+    """Base class for transformers whose logic is entirely based on rules and does not need to be fitted to data"""
+
+    def fit(self, df: pd.DataFrame):
+        pass
+
+
+class DataFrameTransformerChain:
+    """Supports the application of a chain of data frame transformers"""
+
+    def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
+        self.dataFrameTransformers = dataFrameTransformers
+
+    def apply(self, df: pd.DataFrame, fit=False) -> pd.DataFrame:
+        """
+        Applies the chain of transformers to the given DataFrame, optionally fitting each transformer before applying it.
+        Each transformer in the chain receives the transformed output of its predecessor.
+
+        :param df: the data frame
+        :param fit: whether to fit the transformers before applying them
+        :return: the transformed data frame
+        """
+        for transformer in self.dataFrameTransformers:
+            if fit:
+                transformer.fit(df)
+            df = transformer.apply(df)
+        return df
 
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):

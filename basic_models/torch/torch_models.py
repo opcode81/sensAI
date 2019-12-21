@@ -5,7 +5,7 @@ import torch
 
 from . import torch_modules
 from .torch_base import WrappedTorchVectorModule, TorchVectorRegressionModel, TorchVectorClassificationModel
-from .. import DataFrameTransformer
+from ..data_transformation import DataFrameTransformer
 from ..normalisation import NormalisationMode
 
 log = logging.getLogger(__name__)

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 
+from .data_transformation import DataFrameTransformer, DataFrameTransformerChain
 
 log = logging.getLogger(__name__)
 
@@ -62,48 +63,10 @@ class PredictorModel(ABC):
         pass
 
 
-class DataFrameTransformer(ABC):
-    @abstractmethod
-    def fit(self, df: pd.DataFrame):
-        pass
-
-    @abstractmethod
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-
-class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
-    """Base class for transformers whose logic is enturely based on rules and does not need to be fitted to the data"""
-
-    def fit(self, df: pd.DataFrame):
-        pass
-
-
-class DataFrameTransformerChain:
-    def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
-        self.dataFrameTransformers = dataFrameTransformers
-
-    def apply(self, df: pd.DataFrame, fit=False) -> pd.DataFrame:
-        """
-        Applies the chain of transformers to the given DataFrame, optionally fitting each transformer before applying it.
-        Each transformer in the chain receives the transformed output of its predecessor.
-
-        :param df: the data frame
-        :param fit: whether to fit the transformers before applying them
-        :return: the transformed data frame
-        """
-        for transformer in self.dataFrameTransformers:
-            if fit:
-                transformer.fit(df)
-            df = transformer.apply(df)
-        return df
-
-
 class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
-
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
             trainingOutputTransformers: Sequence[DataFrameTransformer] = ()):
         """

@@ -17,7 +17,8 @@ from torch import cuda as torchcuda
 from torch.autograd import Variable
 
 from .. import normalisation
-from ..basic_models_base import VectorRegressionModel, VectorClassificationModel, DataFrameTransformer
+from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
+from ..data_transformation import DataFrameTransformer
 from ..util.tracking import stringRepr
 
 log = logging.getLogger(__name__)
