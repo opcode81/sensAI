@@ -112,6 +112,7 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
         cacheFound = False
         if os.path.exists(picklePath):
             try:
+                log.info(f"Loading cache from {picklePath}")
                 persistedVersion, self.cache = loadPickle(picklePath)
                 if persistedVersion == version:
                     cacheFound = True

@@ -12,6 +12,7 @@ from .data_transformation import DataFrameTransformer, RuleBasedDataFrameTransfo
 from . import data_transformation
 from . import columngen
 from . import local_search
+from . import nearest_neighbors
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow

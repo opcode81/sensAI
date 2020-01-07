@@ -1,20 +1,18 @@
-from abc import ABC
-import os
 import logging
-import random
+import os
 import typing
+from abc import ABC
 from abc import abstractmethod
+from concurrent.futures import ProcessPoolExecutor
 from random import Random
 from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List, Optional, Hashable
 
 import pandas as pd
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 from basic_models.local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
 from .basic_models_base import VectorModel
 from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
-
 
 log = logging.getLogger(__name__)
 
@@ -155,6 +153,10 @@ class GridSearch:
         self.numProcesses = numProcesses
         self.csvResultsPath = csvResultsPath
         self.parameterCombinationSkipDecider = parameterCombinationSkipDecider
+        self.numCombinations = 1
+        for options in parameterOptions.values():
+            self.numCombinations *= len(options)
+        log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
         self._executor = None
 
     @classmethod
@@ -174,22 +176,28 @@ class GridSearch:
 
     def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator],
             loggingCallback: Callable[[Dict], typing.Any] = None):
-        executor = ProcessPoolExecutor(max_workers=self.numProcesses) if self.numProcesses > 1 else ThreadPoolExecutor(max_workers=1)
-        futures = []
-        for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
-            futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
-                **paramsDict))
-
         paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath)
-        for i, future in enumerate(futures):
-            # TODO: there might be something wrong with exception handling here
-            values = future.result()
+
+        def collectResult(values):
             if values is None:
-                continue
+                return
             if loggingCallback is not None:
                 loggingCallback(values)
             paramsMetricsCollection.addValues(values)
             log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
+
+        if self.numProcesses == 1:
+            for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
+                collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
+        else:
+            executor = ProcessPoolExecutor(max_workers=self.numProcesses)
+            futures = []
+            for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
+                futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
+                    **paramsDict))
+            for i, future in enumerate(futures):
+                collectResult(future.result())
+
         return paramsMetricsCollection.getDataFrame()
 
 

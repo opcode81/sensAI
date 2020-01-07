@@ -201,7 +201,7 @@ class RegressionEvalStats(EvalStats):
             stats = RegressionEvalStats()
             stats.addAll(self.y_predicted_multidim[i], self.y_true_multidim[i])
             statsList.append(stats)
-        return RegressionEvalStatsCollection(statsList, self)
+        return RegressionEvalStatsCollection(statsList)
 
     def plotErrorDistribution(self, bins=500, figure=True):
         errors = self._getErrors()

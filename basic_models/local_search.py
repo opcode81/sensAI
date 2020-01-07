@@ -496,7 +496,7 @@ class SAChain:
         self.log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
 
     def applyBestState(self):
-        """Restores the best state found in this chain"""
+        """Writes the best state found in this chain to the result object"""
         self.state.applyStateRepresentation(self.bestStateRepr)
 
     def plotSeries(self, seriesName):

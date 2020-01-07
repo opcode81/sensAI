@@ -1,26 +1,26 @@
 import logging
 import math
 import os
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from typing import Sequence, Tuple, List, Union
 
 import numpy as np
 import pandas as pd
 
 from .util import cache
+from .util.cache import DelayedUpdateHook
 from .util.tracking import stringRepr
+from .util.typing import PandasNamedTuple
 
 log = logging.getLogger(__name__)
 
 
-class DistanceMetric:
+class DistanceMetric(ABC):
     """
     Abstract base class for (symmetric) distance metrics
     """
-
-    # Todo or not todo: this forces an unnatural signature on non-caching implementations of DistanceMetric
     @abstractmethod
-    def distance(self, idA, valueA, idB, valueB):
+    def distance(self, namedTupleA: PandasNamedTuple, namedTupleB: PandasNamedTuple) -> float:
         pass
 
     @abstractmethod
@@ -28,16 +28,33 @@ class DistanceMetric:
         super().__str__()
 
 
+class SingleColumnDistanceMetric(DistanceMetric, ABC):
+    def __init__(self, column: str):
+        self.column = column
+
+    @abstractmethod
+    def _distance(self, valueA, valueB) -> float:
+        pass
+
+    def distance(self, namedTupleA: PandasNamedTuple, namedTupleB: PandasNamedTuple):
+        valueA, valueB = getattr(namedTupleA, self.column), getattr(namedTupleB, self.column)
+        return self._distance(valueA, valueB)
+
+
 class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
-    def __init__(self, picklePath):
+    def __init__(self, picklePath, saveOnUpdate=True, deferredSaveDelaySecs=1.0):
+        self.deferredSaveDelaySecs = deferredSaveDelaySecs
+        self.saveOnUpdate = saveOnUpdate
         self.picklePath = picklePath
-        log.info(f"Loading distance dataframe from {picklePath}")
-        self.distanceDf = pd.read_pickle(self.picklePath)
+        if os.path.exists(self.picklePath):
+            self.distanceDf = pd.read_pickle(self.picklePath)
+            log.info(f"Successfully loaded dataframe of shape {self.shape()} from cache. "
+                     f"There are {self.numUnfilledEntries()} unfilled entries")
+        else:
+            log.info(f"No cached distance dataframe found in {picklePath}")
+            self.distanceDf = pd.DataFrame()
         self.cachedIdToPosDict = {identifier: pos for pos, identifier in enumerate(self.distanceDf.index)}
-        assert isinstance(self.distanceDf, pd.DataFrame)
-        log.info(f"Successfully loaded dataframe of shape {self.shape()} from cache. "
-                 f"There are {self.numUnfilledEntries()} unfilled entries")
-        self._updated = False
+        self._updateHook = DelayedUpdateHook(self.save, deferredSaveDelaySecs)
 
     def shape(self):
         nEntries = len(self.distanceDf)
@@ -57,16 +74,13 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
         i1, i2 = key
         log.debug(f"Adding distance value for identifiers {i1}, {i2}")
         self.distanceDf.loc[i1, i2] = self.distanceDf.loc[i2, i1] = value
-        self._updated = True
+        if self.saveOnUpdate:
+            self._updateHook.handleUpdate()
 
     def save(self):
         log.info(f"Saving new distance matrix to {self.picklePath}")
         os.makedirs(os.path.dirname(self.picklePath), exist_ok=True)
         self.distanceDf.to_pickle(self.picklePath)
-
-    def saveIfUpdated(self):
-        if self._updated:
-            self.save()
 
     def get(self, key: Tuple[Union[str, int], Union[str, int]]):
         self._assertTuple(key)
@@ -97,15 +111,15 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
         cache.CachedValueProviderMixin.__init__(self, keyValueCache)
         self.metric = distanceMetric
 
-    def distance(self, idA, valueA, idB, valueB):
+    def distance(self, namedTupleA, namedTupleB):
+        idA, idB = namedTupleA.Index, namedTupleB.Index
         if idB < idA:
-            idA, idB, valueA, valueB = idB, idA, valueB, valueA
-        return self._provideValue((idA, idB), (valueA, valueB))
+            idA, idB, namedTupleA, namedTupleB = idB, idA, namedTupleB, namedTupleA
+        return self._provideValue((idA, idB), (namedTupleA, namedTupleB))
 
-    def _computeValue(self, key: Tuple[Union[str, int], Union[str, int]], data):
-        idA, idB = key
+    def _computeValue(self, key: Tuple[Union[str, int], Union[str, int]], data: Tuple[PandasNamedTuple, PandasNamedTuple]):
         valueA, valueB = data
-        return self.metric.distance(idA, valueA, idB, valueB)
+        return self.metric.distance(valueA, valueB)
 
     def fillCache(self, dfIndexedById: pd.DataFrame):
         """
@@ -114,13 +128,11 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
         Args:
             dfIndexedById: Dataframe that is indexed by identifiers of the members
         """
-        for position, idA in enumerate(dfIndexedById.index):
+        for position, valueA in enumerate(dfIndexedById.itertuples()):
             if position % 10 == 0:
                 log.info(f"Processed {round(100 * position / len(dfIndexedById), 2)}%")
-            for idB in dfIndexedById.index[position + 1:]:
-                valueA, valueB = dfIndexedById.loc[idA], dfIndexedById.loc[idB]
-                self.distance(idA, valueA, idB, valueB)
-        self._cache.saveIfUpdated()
+            for valueB in dfIndexedById[position + 1:].itertuples():
+                self.distance(valueA, valueB)
 
     def __str__(self):
         return str(self.metric)
@@ -135,21 +147,21 @@ class LinearCombinationDistanceMetric(DistanceMetric):
         if len(self.metrics) == 0:
             raise ValueError(f"List of metrics is empty after removing all 0-weight metrics; passed {metrics}")
 
-    def distance(self, idA, valueA, idB, valueB):
+    def distance(self, namedTupleA, namedTupleB):
         value = 0
         for weight, metric in self.metrics:
-            value += metric.distance(idA, valueA, idB, valueB) * weight
+            value += metric.distance(namedTupleA, namedTupleA) * weight
         return value
 
     def __str__(self):
         return f"Linear combination of {[(weight, str(metric)) for weight, metric in self.metrics]}"
 
 
-class HellingerDistanceMetric(DistanceMetric):
+class HellingerDistanceMetric(SingleColumnDistanceMetric):
     SQRT2 = np.sqrt(2)
 
     def __init__(self, column: str, checkInput=False):
-        self.column = column
+        super().__init__(column)
         self.checkInput = checkInput
 
     def __str__(self):
@@ -165,23 +177,20 @@ class HellingerDistanceMetric(DistanceMetric):
         if not all((inputValue >= 0)*(inputValue <= 1)):
             raise ValueError(f"The entries in {self.column} have to be in the range [0, 1]")
 
-    def distance(self, idA, valueA, idB, valueB):
-        valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
-
+    def _distance(self, valueA, valueB):
         if self.checkInput:
-            self.checkInputValue(valA)
-            self.checkInputValue(valB)
+            self.checkInputValue(valueA)
+            self.checkInputValue(valueB)
 
-        return np.linalg.norm(np.sqrt(valA) - np.sqrt(valB)) / self.SQRT2
+        return np.linalg.norm(np.sqrt(valueA) - np.sqrt(valueB)) / self.SQRT2
 
 
-class EuclideanDistanceMetric(DistanceMetric):
+class EuclideanDistanceMetric(SingleColumnDistanceMetric):
     def __init__(self, column: str):
-        self.column = column
+        super().__init__(column)
 
-    def distance(self, idA, valueA, idB, valueB):
-        valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
-        return np.linalg.norm(valA - valB)
+    def _distance(self, valueA, valueB):
+        return np.linalg.norm(valueA - valueB)
 
     def __str__(self):
         return stringRepr(self, ["column"])
@@ -194,9 +203,9 @@ class IdentityDistanceMetric(DistanceMetric):
         assert keys != [], "At least one key has to be provided"
         self.keys = keys
 
-    def distance(self, idA, valueA, idB, valueB):
+    def distance(self, namedTupleA, namedTupleB):
         for key in self.keys:
-            if getattr(valueA, key) != getattr(valueB, key):
+            if getattr(namedTupleA, key) != getattr(namedTupleB, key):
                 return 1
         return 0
 
@@ -204,10 +213,10 @@ class IdentityDistanceMetric(DistanceMetric):
         return f"{self.__class__.__name__} based on keys: {self.keys}"
 
 
-class RelativeBitwiseEqualityDistanceMetric(DistanceMetric):
+class RelativeBitwiseEqualityDistanceMetric(SingleColumnDistanceMetric):
     def __init__(self, column: str, checkInput=False):
+        super().__init__(column)
         self.checkInput = checkInput
-        self.column = column
 
     def checkInputValue(self, inputValue):
         if not isinstance(inputValue, np.ndarray):
@@ -219,16 +228,15 @@ class RelativeBitwiseEqualityDistanceMetric(DistanceMetric):
         if not set(inputValue).issubset({0, 1}):
             raise ValueError("The input array should only have entries in {0, 1}")
 
-    def distance(self, idA, valueA, idB, valueB):
-        valA, valB = getattr(valueA, self.column), getattr(valueB, self.column)
+    def _distance(self, valueA, valueB):
         if self.checkInput:
-            self.checkInputValue(valA)
-            self.checkInputValue(valB)
-        denom = np.count_nonzero(valA + valB)
+            self.checkInputValue(valueA)
+            self.checkInputValue(valueB)
+        denom = np.count_nonzero(valueA + valueB)
         if denom == 0:
             return 0
         else:
-            return 1-np.dot(valA, valB)/denom
+            return 1-np.dot(valueA, valueB)/denom
 
     def __str__(self):
         return f"{self.__class__.__name__} for column {self.column}"
