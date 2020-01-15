@@ -1,12 +1,13 @@
 import atexit
 import enum
+import glob
 import logging
 import os
 import pickle
 import threading
 import time
 from abc import abstractmethod, ABC
-from typing import Optional, Any, List, Callable, TypeVar
+from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
 import sqlite3
 
@@ -34,6 +35,26 @@ class PersistentKeyValueCache(ABC):
 
         :param key: the lookup key
         :return: the cached value or None if no value is found
+        """
+        pass
+
+
+class PersistentList(ABC):
+    @abstractmethod
+    def append(self, item):
+        """
+        Adds an item to the cache
+
+        :param value: the value to store
+        """
+        pass
+
+    @abstractmethod
+    def iterItems(self):
+        """
+        Iterates over the items in the persisted list
+
+        :return: generator of item
         """
         pass
 
@@ -136,6 +157,146 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
         self.cache[key] = value
         if self.saveOnUpdate:
             self._updateHook.handleUpdate()
+
+
+class SlicedPicklePersistentList(PersistentList):
+    """
+    Object handling the creation and access to sliced pickle caches
+        NB: Order of list is not guaranteed when loading from sliced files!
+        TODO: Sort the sliced files (ensuring ...slice2.pickle comes before ...slice13.pickle or ...slice1000.pickle)
+    """
+    def __init__(self, directory, pickleBaseName, numEntriesPerSlice=100000):
+        """
+        :param directory: path to the directory where the sliced caches are to be stored
+        :param pickleBaseName: base name for the pickle, where slices will have the names {pickleBaseName}_sliceX.pickle
+        :param numEntriesPerSlice: how many entries should be stored in each cache
+        """
+        self.directory = directory
+        self.pickleBaseName = pickleBaseName
+        self.numEntriesPerSlice = numEntriesPerSlice
+
+        # Set up the variables for the sliced cache
+        self.sliceId = 0
+        self.indexInSlice = 0
+        self.cacheOfSlice = []
+
+        # Search directory for already present sliced caches
+        self.slicedFiles = self._findSlicedCaches()
+
+        # Helper variable to ensure object is only modified within a with-clause
+        self._currentlyInWithClause = False
+
+    def __enter__(self):
+        self._currentlyInWithClause = True
+        if self.cacheExists():
+            # Reset state to enable the appending of more items to the cache
+            self._setLastCacheState()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._dump()
+        self._currentlyInWithClause = False
+
+    def append(self, item):
+        """
+        Append item to cache
+        :param item: entry in the cache
+        """
+        if not self._currentlyInWithClause:
+            raise Exception("Class needs to be instantiated within a with-clause to ensure correct storage")
+
+        if (self.indexInSlice + 1) % self.numEntriesPerSlice == 0:
+            self._dump()
+
+        self.cacheOfSlice.append(item)
+        self.indexInSlice += 1
+
+    def iterItems(self) -> Iterator[Any]:
+        """
+        Iterate over entries in the sliced cache
+        :return: iterator over all items in the cache
+        """
+        for filePath in self.slicedFiles:
+            log.info(f"Loading sliced pickle list from {filePath}")
+            cachedPickle = self._loadPickle(filePath)
+            for item in cachedPickle:
+                yield item
+
+    def clear(self):
+        """
+        Clears the cache if it exists
+        """
+        if self.cacheExists():
+            for filePath in self.slicedFiles:
+                os.unlink(filePath)
+
+    def cacheExists(self) -> bool:
+        """
+        Does this cache already exist
+        :return: True if cache exists, False if not
+        """
+        return len(self.slicedFiles) > 0
+
+    def _setLastCacheState(self):
+        """
+        Sets the state such as to be able to add items to an existant cache
+        """
+        log.info("Resetting last state of cache...")
+        self.sliceId = len(self.slicedFiles) - 1
+        self.cacheOfSlice = self._loadPickle(self._picklePath(self.sliceId))
+        self.indexInSlice = len(self.cacheOfSlice) - 1
+        if self.indexInSlice >= self.numEntriesPerSlice:
+            self._nextSlice()
+
+    def _dump(self):
+        """
+        Dumps the current cache (if non-empty)
+        """
+        if len(self.cacheOfSlice) > 0:
+            picklePath = self._picklePath(str(self.sliceId))
+            log.info(f"Saving sliced cache to {picklePath}")
+            dumpPickle(self.cacheOfSlice, picklePath)
+            self.slicedFiles.append(picklePath)
+
+            # Update slice number and reset indexing and cache
+            self._nextSlice()
+        else:
+            log.warning("Unexpected behavior: Dump was called when cache of slice is 0!")
+
+    def _nextSlice(self):
+        """
+        Updates sliced cache state for the next slice
+        """
+        self.sliceId += 1
+        self.indexInSlice = 0
+        self.cacheOfSlice = []
+
+    def _findSlicedCaches(self) -> List[str]:
+        """
+        Finds all pickled slices associated with this cache
+        :return: list of sliced pickled files
+        """
+        # glob.glob permits the usage of unix-style pathnames matching. (below we find all ..._slice*.pickle files)
+        return glob.glob(self._picklePath("*"))
+
+    def _loadPickle(self, picklePath: str) -> List[Any]:
+        """
+        Loads pickle if file path exists, and persisted version is correct.
+        :param picklePath: file path
+        :return: list with objects
+        """
+        cachedPickle = []
+        if os.path.exists(picklePath):
+            try:
+                cachedPickle = loadPickle(picklePath)
+            except EOFError:
+                log.warning(f"The cache file in {picklePath} is corrupt")
+        else:
+            raise Exception(f"The file {picklePath} does not exist!")
+        return cachedPickle
+
+    def _picklePath(self, sliceSuffix) -> str:
+        return f"{os.path.join(self.directory, self.pickleBaseName)}_slice{sliceSuffix}.pickle"
 
 
 class SqliteConnectionManager:
@@ -273,7 +434,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
             self._connMutex.release()
 
 
-class SqlitePersistentList:
+class SqlitePersistentList(PersistentList):
     def __init__(self, path):
         self.keyValueCache = SqlitePersistentKeyValueCache(path, keyType=SqlitePersistentKeyValueCache.KeyType.INTEGER)
         self.nextKey = len(self.keyValueCache)
