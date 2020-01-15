@@ -323,7 +323,7 @@ class CachedValueProviderMixin(ABC):
 
 def cached(fn: Callable[[], T], picklePath) -> T:
     if os.path.exists(picklePath):
-        log.info(f"Loading cached result of function '{fn.__name__}'' from {picklePath}")
+        log.info(f"Loading cached result of function '{fn.__name__}' from {picklePath}")
         return loadPickle(picklePath)
     else:
         log.info(f"No cached result found in {picklePath}, calling function '{fn.__name__}' ...")

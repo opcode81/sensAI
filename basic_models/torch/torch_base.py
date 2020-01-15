@@ -917,8 +917,9 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams, inputTransformers=()):
-        super().__init__(inputTransformers=inputTransformers)
+    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams, inputTransformers=(),
+            targetTransformer=None):
+        super().__init__(inputTransformers=inputTransformers, targetTransformer=targetTransformer)
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
         self.normalisationMode = normalisationMode

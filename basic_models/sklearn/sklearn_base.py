@@ -34,7 +34,7 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         """
         :param modelConstructor: the sklearn model constructor
         :param modelInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
-        :param modelInputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
+        :param modelOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
         :param modelArgs: arguments to be passed to the sklearn model constructor
         :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
         :param outputTransformers: list of DataFrameTransformers for the transformation of outputs

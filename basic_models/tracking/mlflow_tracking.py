@@ -1,31 +1,20 @@
-from typing import Union
-
+from typing import Dict, Any
 import mlflow
 
-from basic_models import VectorModel
-from basic_models.tracking.tracking_base import TrackedExperiment, VectorModelEvaluatorTrackingWrapper, \
-    VectorModelCrossValidationTrackingWrapper
+from .tracking_base import TrackedExperiment
 
 
 class MlFlowExperiment(TrackedExperiment):
-    """
-
-    """
-    def __init__(self, experimentName: str, trackingUri: str, evaluator: Union[VectorModelEvaluatorTrackingWrapper,
-                                                                        VectorModelCrossValidationTrackingWrapper]):
+    def __init__(self, experimentName: str, trackingUri: str, additionalLoggingValuesDict=None):
         """
 
         :param experimentName:
         :param trackingUri:
-        :param evaluator:
         """
-        super().__init__(experimentName=experimentName, evaluator=evaluator)
-
         mlflow.set_tracking_uri(trackingUri)
         mlflow.set_experiment(experiment_name=experimentName)
+        super().__init__(additionalLoggingValuesDict=additionalLoggingValuesDict)
 
-    def apply(self, model: VectorModel, **kwargs):
+    def _trackValues(self, valuesDict: Dict[str, Any]):
         with mlflow.start_run():
-            metrics = self.evaluator.evaluate(model)
-            mlflow.log_param('model', str(model))
-            mlflow.log_metrics(metrics)
+            mlflow.log_metrics(valuesDict)

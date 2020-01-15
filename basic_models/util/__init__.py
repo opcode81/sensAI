@@ -18,6 +18,7 @@ def dict2OrderedTuples(d: dict):
     return tuple(keys), tuple(values)
 
 
+#TODO: this is obsolete, right?
 class PicklableFunction:
     def __init__(self, fn, *args, **kwargs):
         self.fn = fn

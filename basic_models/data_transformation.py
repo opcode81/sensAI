@@ -29,6 +29,12 @@ class DataFrameTransformer(ABC):
         pass
 
 
+class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
+    @abstractmethod
+    def inverse(self) -> DataFrameTransformer:
+        pass
+
+
 class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
     """Base class for transformers whose logic is entirely based on rules and does not need to be fitted to data"""
 
@@ -192,7 +198,11 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            specialisedRule.regex = re.compile("|".join(matchingColumns))
+            try:
+                r = "|".join([re.escape(colName) for colName in matchingColumns])
+                specialisedRule.regex = re.compile(r)
+            except Exception as e:
+                raise Exception(f"Could not compile regex '{r}': {e}")
             self._rules.append(specialisedRule)
 
     def _checkUnhandledColumns(self, df, matchedRulesByColumn):
@@ -223,3 +233,41 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
             series = cg.generateColumn(df)
             df[series.name] = series
         return df
+
+
+class DFTCountEntries(RuleBasedDataFrameTransformer):
+    def __init__(self, columnForEntryCount: str, columnNameForResultingCounts: str = "counts"):
+        self.columnNameForResultingCounts = columnNameForResultingCounts
+        self.columnForEntryCount = columnForEntryCount
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        series = df[self.columnForEntryCount].value_counts()
+        return pd.DataFrame({self.columnForEntryCount: series.index, self.columnNameForResultingCounts: series.values})
+
+
+class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
+    def __init__(self, sklearnTransformer, columns=None):
+        self.sklearnTransformer = sklearnTransformer
+        self.columns = columns
+        self._isInverse = False
+
+    def fit(self, df: pd.DataFrame):
+        cols = self.columns
+        if cols is None:
+            cols = df.columns
+        self.sklearnTransformer.fit(df[cols].values)
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        cols = self.columns
+        if cols is None:
+            cols = df.columns
+        if self._isInverse:
+            df[cols] = self.sklearnTransformer.inverse_transform(df[cols].values)
+        else:
+            df[cols] = self.sklearnTransformer.transform(df[cols].values)
+        return df
+
+    def inverse(self) -> DataFrameTransformer:
+        dft = copy.copy(self)
+        dft._isInverse = True
+        return dft
