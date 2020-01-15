@@ -36,7 +36,8 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
     log = log.getChild(__qualname__)
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
-            normalisationMode=NormalisationMode.MAX_BY_COLUMN,  inputTransformers: Sequence[DataFrameTransformer] = (),
+            normalisationMode=NormalisationMode.MAX_BY_COLUMN,
+            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
             targetTransformer = None,
             cuda=True, pDropout=None, **nnOptimiserParams):
         """
@@ -49,7 +50,8 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
         :param nnOptimiserParams: parameters to pass on to NNOptimiser
         """
         super().__init__(MultiLayerPerceptron, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
-                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams, inputTransformers=inputTransformers,
+                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams,
+                inputTransformers=inputTransformers, outputTransformers=outputTransformers,
                 targetTransformer=targetTransformer)
 
 

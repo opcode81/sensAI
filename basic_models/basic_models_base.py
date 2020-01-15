@@ -68,15 +68,16 @@ class VectorModel(PredictorModel, ABC):
     Base class for models that map vectors to vectors
     """
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), targetTransformer: InvertibleDataFrameTransformer = None):
+            targetTransformer: InvertibleDataFrameTransformer = None):
         """
         :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
-        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
-        :param trainingOutputTransformers: list of DataFrameTransformers for the transformation of training outputs prior to training
+        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs (after the model has been applied)
+        :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
+            that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
+            the model, i.e. the transformation is completely transparent when applying the model.
         """
         self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
         self._outputTransformerChain = DataFrameTransformerChain(outputTransformers)
-        self._trainingOutputTransformerChain = DataFrameTransformerChain(trainingOutputTransformers)
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = None
@@ -122,7 +123,6 @@ class VectorModel(PredictorModel, ABC):
         """
         self._predictedVariableNames = list(Y.columns)
         X = self._inputTransformerChain.apply(X, fit=True)
-        Y = self._trainingOutputTransformerChain.apply(Y, fit=True)
         if self._targetTransformer is not None:
             self._targetTransformer.fit(Y)
             Y = self._targetTransformer.apply(Y)
@@ -158,9 +158,8 @@ class VectorModel(PredictorModel, ABC):
 
 class VectorRegressionModel(VectorModel, ABC):
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), targetTransformer=None):
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            trainingOutputTransformers=trainingOutputTransformers, targetTransformer=targetTransformer)
+            targetTransformer: InvertibleDataFrameTransformer = None):
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer)
 
     def isRegressionModel(self) -> bool:
         return True
@@ -168,24 +167,14 @@ class VectorRegressionModel(VectorModel, ABC):
 
 class VectorClassificationModel(VectorModel, ABC):
 
-    def __init__(self, inputTransformers=(), outputTransformers=(), trainingOutputTransformers=()):
-        """
-        Abstract base with prediction for class probabilities
-        """
+    def __init__(self, inputTransformers=(), outputTransformers=()):
         self._labels = None
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            trainingOutputTransformers=trainingOutputTransformers)
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
 
     def isRegressionModel(self) -> bool:
         return False
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
-        """
-        Fits the model using the given data
-
-        :param X: a data frame containing input data
-        :param Y: a data frame containing output data
-        """
         if len(Y.columns) != 1:
             raise ValueError("Classification requires exactly one output column with class labels")
         self._labels = sorted([label for label in Y.iloc[:, 0].unique()])

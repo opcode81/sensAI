@@ -1,4 +1,3 @@
-from typing import List, Sequence
 import copy
 import logging
 from abc import ABC, abstractmethod
@@ -9,7 +8,7 @@ import pandas as pd
 from sklearn import compose
 
 from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
-from ..data_transformation import DataFrameTransformer
+from ..data_transformation import DataFrameTransformer, InvertibleDataFrameTransformer
 
 log = logging.getLogger(__name__)
 
@@ -25,26 +24,26 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
     """
     Base class for models built upon scikit-learn's model implementations
     """
-
     log = log.getChild(__qualname__)
 
-    def __init__(self, modelConstructor, modelInputTransformer=None, modelOutputTransformer=None,
+    def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
             inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
+            targetTransformer: InvertibleDataFrameTransformer = None, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
-        :param modelInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
-        :param modelOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
-        :param modelArgs: arguments to be passed to the sklearn model constructor
+        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
+        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
         :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
         :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
-        :param trainingOutputTransformers: list of DataFrameTransformers for the transformation of training outputs prior to training
+        :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
+            that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
+            the model, i.e. the transformation is completely transparent when applying the model.
+        :param modelArgs: arguments to be passed to the sklearn model constructor
         """
-        # TODO Consider replacing modelInputTransformers with new DataFrameTransformer interface, but it might not we elegantly possible, because sklearn's mechanisms apply to arrays not DataFrames (no column names!)
         super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            trainingOutputTransformers=trainingOutputTransformers)
-        self.modelInputTransformer = modelInputTransformer
-        self.modelOutputTransformer = modelOutputTransformer
+            targetTransformer=targetTransformer)
+        self.modelInputTransformer = sklearnInputTransformer
+        self.modelOutputTransformer = sklearnOutputTransformer
         self.modelConstructor = modelConstructor
         self.modelArgs = modelArgs
 
@@ -79,12 +78,13 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
     Base class for models which use several sklearn models of the same type with a single
     output dimension to create a multi-dimensional model (for the case where there is more than one output dimension)
     """
-
-    def __init__(self, modelConstructor, modelInputTransformer=None, modelOutputTransformer=None,
+    def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
             inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
-        super().__init__(modelConstructor, modelInputTransformer=modelInputTransformer, modelOutputTransformer=modelOutputTransformer,
-            inputTransformers=inputTransformers, outputTransformers=outputTransformers, trainingOutputTransformers=trainingOutputTransformers,
+            targetTransformer: InvertibleDataFrameTransformer = None,
+            **modelArgs):
+        super().__init__(modelConstructor,
+            sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
+            inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
             **modelArgs)
         self.models = {}
 
@@ -112,12 +112,14 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
     """
     Base class for models which use a single sklearn model with multiple output dimensions to create the multi-dimensional model
     """
-
-    def __init__(self, modelConstructor, modelInputTransformer=None, modelOutputTransformer=None,
+    def __init__(self, modelConstructor,
+            sklearnInputTransformer=None, sklearnOutputTransformer=None,
             inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
-        super().__init__(modelConstructor, modelInputTransformer=modelInputTransformer, modelOutputTransformer=modelOutputTransformer,
-            inputTransformers=inputTransformers, outputTransformers=outputTransformers, trainingOutputTransformers=trainingOutputTransformers,
+            targetTransformer: InvertibleDataFrameTransformer = None,
+            **modelArgs):
+        super().__init__(modelConstructor,
+            sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
+            inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
             **modelArgs)
 
     def __str__(self):
@@ -136,17 +138,19 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
+    def __init__(self, modelConstructor,
+            sklearnInputTransformer=None, sklearnOutputTransformer=None,
             inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), **modelArgs):
+            **modelArgs):
         """
-        Abstract base model with additional prediction of class probabilities
         :param modelConstructor: the sklearn model constructor
-        :param inputTransformers: a list of transformers to apply to input DataFrames
+        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
+        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
+        :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
+        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
         :param modelArgs: arguments to be passed to the sklearn model constructor
         """
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            trainingOutputTransformers=trainingOutputTransformers)
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
         self.modelConstructor = modelConstructor
         self.sklearnInputTransformer = sklearnInputTransformer
         self.sklearnOutputTransformer = sklearnOutputTransformer

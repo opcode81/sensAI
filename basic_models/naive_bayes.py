@@ -11,13 +11,13 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
     """
     Naive Bayes with categorical features
     """
-    def __init__(self, inputTransformers=(), pseudoCount=0.1):
+    def __init__(self, inputTransformers=(), outputTransformers=(), pseudoCount=0.1):
         """
-
         :param inputTransformers: the sequence of input transformers
+        :param inputTransformers: the sequence of output transformers
         :param pseudoCount: the count to add to each empirical count in order to avoid overfitting
         """
-        super().__init__(inputTransformers=inputTransformers)
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
         self.prior = None
         self.conditionals = None
         self.pseudoCount = pseudoCount

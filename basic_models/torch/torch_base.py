@@ -917,9 +917,10 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams, inputTransformers=(),
+    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams,
+            inputTransformers=(), outputTransformers=(),
             targetTransformer=None):
-        super().__init__(inputTransformers=inputTransformers, targetTransformer=targetTransformer)
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer)
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
         self.normalisationMode = normalisationMode
@@ -947,8 +948,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 class TorchVectorClassificationModel(VectorClassificationModel):
     def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams,
-                 inputTransformers: Sequence[DataFrameTransformer] = ()):
-        super().__init__(inputTransformers=inputTransformers)
+            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = ()):
+        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
         self.normalisationMode = normalisationMode
