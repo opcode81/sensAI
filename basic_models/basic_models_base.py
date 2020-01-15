@@ -1,12 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any
+from typing import Sequence, List, Any, Optional
 
 import numpy as np
 import pandas as pd
 import scipy.stats
 
-from .data_transformation import DataFrameTransformer, DataFrameTransformerChain
+from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class VectorModel(PredictorModel, ABC):
     Base class for models that map vectors to vectors
     """
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = ()):
+            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), targetTransformer: InvertibleDataFrameTransformer = None):
         """
         :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
         :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
@@ -80,6 +80,7 @@ class VectorModel(PredictorModel, ABC):
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = None
+        self._targetTransformer = targetTransformer
 
     @abstractmethod
     def isRegressionModel(self) -> bool:
@@ -104,6 +105,8 @@ class VectorModel(PredictorModel, ABC):
         y = self._predict(x)
         y.index = x.index
         y = self._outputTransformerChain.apply(y)
+        if self._targetTransformer is not None:
+            y = self._targetTransformer.inverse().apply(y)
         return y
 
     @abstractmethod
@@ -120,6 +123,9 @@ class VectorModel(PredictorModel, ABC):
         self._predictedVariableNames = list(Y.columns)
         X = self._inputTransformerChain.apply(X, fit=True)
         Y = self._trainingOutputTransformerChain.apply(Y, fit=True)
+        if self._targetTransformer is not None:
+            self._targetTransformer.fit(Y)
+            Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training {self.__class__.__name__} with inputs={self._modelInputVariableNames}, outputs={list(Y.columns)}")
@@ -152,9 +158,9 @@ class VectorModel(PredictorModel, ABC):
 
 class VectorRegressionModel(VectorModel, ABC):
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            trainingOutputTransformers: Sequence[DataFrameTransformer] = ()):
+            trainingOutputTransformers: Sequence[DataFrameTransformer] = (), targetTransformer=None):
         super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            trainingOutputTransformers=trainingOutputTransformers)
+            trainingOutputTransformers=trainingOutputTransformers, targetTransformer=targetTransformer)
 
     def isRegressionModel(self) -> bool:
         return True

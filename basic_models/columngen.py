@@ -97,7 +97,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         self.cache = cache
 
     def _generateColumn(self, df: pd.DataFrame) -> Union[pd.Series, list, np.ndarray]:
-        self.log.info(f"Generating columns with {self}")
+        self.log.info(f"Generating column {self.columnName} with {self.__class__.__name__}")
         values = []
         cacheHits = 0
         for namedTuple in df.itertuples():

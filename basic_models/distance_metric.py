@@ -150,7 +150,7 @@ class LinearCombinationDistanceMetric(DistanceMetric):
     def distance(self, namedTupleA, namedTupleB):
         value = 0
         for weight, metric in self.metrics:
-            value += metric.distance(namedTupleA, namedTupleA) * weight
+            value += metric.distance(namedTupleA, namedTupleB) * weight
         return value
 
     def __str__(self):

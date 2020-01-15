@@ -129,7 +129,8 @@ class ClassificationEvalStats(EvalStats):
     def getGeoMeanTrueClassProbability(self):
         if not self._probabilitiesAvailable:
             return None
-        lp = np.log(self.y_predicted_proba_true_class)
+        # the 1e-3 below prevents lp = -inf due to single entries with y_predicted_proba_true_class=0
+        lp = np.log(np.maximum(1e-3, self.y_predicted_proba_true_class))
         return np.exp(lp.sum() / len(lp))
 
     def getAll(self):

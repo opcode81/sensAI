@@ -9,8 +9,9 @@ from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List,
 
 import pandas as pd
 
-from basic_models.local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
+from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
+from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
 from .basic_models_base import VectorModel
 from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
 
@@ -143,7 +144,7 @@ class ParametersMetricsCollection:
         return self.df
 
 
-class GridSearch:
+class GridSearch(TrackedExperimentDataProvider):
     log = log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Dict[str, Sequence[Any]], numProcesses=1,
@@ -158,6 +159,7 @@ class GridSearch:
             self.numCombinations *= len(options)
         log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
         self._executor = None
+        self._trackedExperiment = None
 
     @classmethod
     def _evalParams(cls, modelFactory, evaluatorOrValidator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
@@ -174,8 +176,11 @@ class GridSearch:
             skipDecider.tell(params, values)
         return values
 
-    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator],
-            loggingCallback: Callable[[Dict], typing.Any] = None):
+    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
+        self._trackedExperiment = trackedExperiment
+
+    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]):
+        loggingCallback = self._trackedExperiment.trackValues if self._trackedExperiment is not None else None
         paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath)
 
         def collectResult(values):
@@ -201,7 +206,7 @@ class GridSearch:
         return paramsMetricsCollection.getDataFrame()
 
 
-class SAHyperOpt:
+class SAHyperOpt(TrackedExperimentDataProvider):
     log = log.getChild(__qualname__)
 
     class State(SAState):
@@ -283,10 +288,14 @@ class SAHyperOpt:
         self.p0 = p0
         self.p1 = p1
         self._sa = None
+        self._trackedExperiment = None
+
+    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
+        self._trackedExperiment = trackedExperiment
 
     @classmethod
     def _evalParams(cls, modelFactory, evaluatorOrValidator, parametersMetricsCollection: Optional[ParametersMetricsCollection],
-            parameterCombinationEquivalenceClassValueCache, **params):
+            parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
@@ -298,6 +307,11 @@ class SAHyperOpt:
             model = modelFactory(**params)
             metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
             cls.log.info(f"Got metrics {metrics} for {params}")
+            if trackedExperiment is not None:
+                values = dict(metrics)
+                values["str(model)"] = str(model)
+                values.update(**params)
+                trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addModelParamsMetrics(model, params, metrics)
                 cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
@@ -307,13 +321,13 @@ class SAHyperOpt:
 
     def _computeMetric(self, params):
         metrics = self._evalParams(self.modelFactory, self.evaluatorOrValidator, self.parametersMetricsCollection,
-            self.parameterCombinationEquivalenceClassValueCache, **params)
+            self.parameterCombinationEquivalenceClassValueCache, self._trackedExperiment, **params)
         metricValue = metrics[self.metricToOptimise]
         if not self.minimiseMetric:
             return -metricValue
         return metricValue
 
-    def run(self, maxSteps=None, duration=None, randomSeed=42, collectStats=True, loggingCallback: Callable[[Dict], typing.Any] = None):
+    def run(self, maxSteps=None, duration=None, randomSeed=42, collectStats=True):
         sa = SimulatedAnnealing(lambda: SAProbabilitySchedule(None, SAProbabilityFunctionLinear(p0=self.p0, p1=self.p1)),
             self.opsAndWeights, maxSteps=maxSteps, duration=duration, randomSeed=randomSeed, collectStats=collectStats)
         results = {}

@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 
 from . import distance_metric, nearest_neighbors, util, data_transformation
+from .columngen import ColumnGenerator
 
 log = logging.getLogger(__name__)
 
@@ -59,8 +60,18 @@ class MultiFeatureGenerator(FeatureGenerator):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
 
     def generateFeatures(self, inputDF: pd.DataFrame, ctx=None):
-        dfs = [fg.generateFeatures(inputDF, ctx) for fg in self.featureGenerators]
-        return pd.concat(dfs, axis=1)
+        dfs = []
+        for fg in self.featureGenerators:
+            try:
+                df = fg.generateFeatures(inputDF, ctx)
+            except Exception as e:
+                raise Exception(f"Error generating features using {fg}: {e}")
+            else:
+                dfs.append(df)
+        if len(dfs) == 0:
+            return pd.DataFrame(index=inputDF.index)
+        else:
+            return pd.concat(dfs, axis=1)
 
     def getNormalisationRules(self, withCategoricalOneHotRule=True):
         """
@@ -69,7 +80,7 @@ class MultiFeatureGenerator(FeatureGenerator):
         """
         rules = list(super().getNormalisationRules())
         if withCategoricalOneHotRule:
-            rules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames())))
+            rules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames()), skip=True))
         return rules
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -114,7 +125,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
 
 
 class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
-    def __init__(self, columns: typing.Union[str, typing.Sequence[str]], categoricalFeatureNames: typing.Sequence[str] = (),
+    def __init__(self, columns: typing.Union[str, typing.List[str]], categoricalFeatureNames: typing.Sequence[str] = (),
             normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         if isinstance(columns, str):
@@ -122,6 +133,9 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
         self.columns = columns
 
     def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+        missingCols = set(self.columns) - set(df.columns)
+        if len(missingCols) > 0:
+            raise Exception(f"Columns {missingCols} not present in data frame; available columns: {list(df.columns)}")
         return df[self.columns]
 
 
@@ -158,6 +172,35 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
+
+
+class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
+    """
+    Implements a feature generator via a column generator
+    """
+    log = log.getChild(__qualname__)
+
+    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: typing.Sequence[str] = (),
+            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+        """
+        :param columnGen: the underlying column generator
+        :param takeInputColumnIfPresent: if True, then if a column whose name corresponds to the column to generate exists
+            in the input data, simply copy it to generate the output (without using the column generator); if False, always
+            apply the columnGen to generate the output
+        """
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        self.takeInputColumnIfPresent = takeInputColumnIfPresent
+        self.columnGen = columnGen
+
+    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+        colName = self.columnGen.columnName
+        if self.takeInputColumnIfPresent and colName in df.columns:
+            self.log.debug(f"Taking column '{colName}' from input data frame")
+            series = df[colName]
+        else:
+            self.log.debug(f"Generating column '{colName}' via {self.columnGen}")
+            series = self.columnGen.generateColumn(df)
+        return pd.DataFrame({colName: series})
 
 
 class ChainedFeatureGenerator(FeatureGenerator):
