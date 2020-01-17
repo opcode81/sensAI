@@ -72,6 +72,9 @@ class Repo:
         commitId = call("git rev-parse HEAD").strip()
         os.chdir(self.pathToBasicModels)
         execute("git add .")
+        with open(".syncCommitId", "w") as f:
+            f.write(commitId)
+        execute("git add .syncCommitId")
         execute(f'git commit -m "basic_models {commitId}"')
         os.chdir(homePath)
         print(f"\n\nIf everything was successful, you should now update the remote branch:\ngit push")
