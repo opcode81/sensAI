@@ -256,11 +256,11 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
         if self._trainX is None:
             raise Exception("Feature generator has not been fitted")
         neighborProvider = self.neighborProviderFactory(self._trainX)
-        self._knnFinder = nearest_neighbors.KNearestNeighboursFinder(self._trainX, self.distanceMetric, neighborProvider)
+        self._knnFinder = nearest_neighbors.KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
         return super().generateFeatures(df, ctx)
 
     def _generateFeatureDict(self, namedTuple) -> typing.Dict[str, typing.Any]:
-        neighbors = self._knnFinder.findNeighbors(namedTuple.Index, namedTuple, self.numNeighbors)
+        neighbors = self._knnFinder.findNeighbors(namedTuple, self.numNeighbors)
         result = {}
         for i, neighbor in enumerate(neighbors):
             result[f"n{i}_distance"] = neighbor.distance

@@ -107,9 +107,12 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
     value for the given pair of identifiers is not found within the persistent cache
     """
 
-    def __init__(self, distanceMetric: DistanceMetric, keyValueCache: cache.PersistentKeyValueCache):
-        cache.CachedValueProviderMixin.__init__(self, keyValueCache)
+    def __init__(self, distanceMetric: DistanceMetric, keyValueCache: cache.PersistentKeyValueCache, persistCache=False):
+        cache.CachedValueProviderMixin.__init__(self, keyValueCache, persistCache=persistCache)
         self.metric = distanceMetric
+
+    def __getstate__(self):
+        return cache.CachedValueProviderMixin.__getstate__(self)
 
     def distance(self, namedTupleA, namedTupleB):
         idA, idB = namedTupleA.Index, namedTupleB.Index

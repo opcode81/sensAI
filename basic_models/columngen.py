@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
-from typing import Any, Union
+from typing import Any, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -50,6 +50,9 @@ class IndexCachedColumnGenerator(ColumnGenerator):
     """
     Decorator for a column generator which adds support for cached column generation where cache keys are given by the input data frame's index.
     Entries not found in the cache are computed by the wrapped column generator.
+
+    The main use case for this class is to add caching to existing ColumnGenerator's. For creating a new caching
+    ColumnGenerator the use of ColumnGeneratorCachedByIndex is encouraged.
     """
 
     log = log.getChild(__qualname__)
@@ -88,13 +91,15 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, columnName: str, cache: PersistentKeyValueCache):
+    def __init__(self, columnName: str, cache: Optional[PersistentKeyValueCache], persistCache=False):
         """
         :param columnName: the name of the column being generated
-        :param cache: the cache in which to store key-value pairs
+        :param cache: the cache in which to store key-value pairs. If None, caching will be disabled
+        :param persistCache: whether to persist the cache when pickling
         """
         super().__init__(columnName)
         self.cache = cache
+        self.persistCache = persistCache
 
     def _generateColumn(self, df: pd.DataFrame) -> Union[pd.Series, list, np.ndarray]:
         self.log.info(f"Generating column {self.columnName} with {self.__class__.__name__}")
@@ -102,15 +107,26 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         cacheHits = 0
         for namedTuple in df.itertuples():
             key = namedTuple.Index
-            value = self.cache.get(key)
-            if value is None:
-                value = self._generateValue(namedTuple)
-                self.cache.set(key, value)
+            if self.cache is not None:
+                value = self.cache.get(key)
+                if value is None:
+                    value = self._generateValue(namedTuple)
+                    self.cache.set(key, value)
+                else:
+                    cacheHits += 1
             else:
-                cacheHits += 1
+                value = self._generateValue(namedTuple)
             values.append(value)
-        self.log.info(f"Cached column generation resulted in {cacheHits}/{len(df)} cache hits")
+        if self.cache is not None:
+            self.log.info(f"Cached column generation resulted in {cacheHits}/{len(df)} cache hits")
         return values
+
+    def __getstate__(self):
+        if not self.persistCache:
+            d = self.__dict__.copy()
+            d["cache"] = None
+            return d
+        return self.__dict__
 
     @abstractmethod
     def _generateValue(self, namedTuple) -> Any:

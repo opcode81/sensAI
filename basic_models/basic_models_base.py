@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any, Optional
+from typing import Sequence, List, Any
 
 import numpy as np
 import pandas as pd
@@ -107,7 +107,7 @@ class VectorModel(PredictorModel, ABC):
         y.index = x.index
         y = self._outputTransformerChain.apply(y)
         if self._targetTransformer is not None:
-            y = self._targetTransformer.inverse().apply(y)
+            y = self._targetTransformer.applyInverse(y)
         return y
 
     @abstractmethod

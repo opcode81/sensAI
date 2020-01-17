@@ -43,10 +43,17 @@ class NeighborProvider(ABC):
 class AllNeighborsProvider(NeighborProvider):
     def __init__(self, dfIndexedById: pd.DataFrame):
         super().__init__(dfIndexedById)
-        self.namedTuples = list(self.df.itertuples())
+        self.namedTuples = None
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        d["namedTuples"] = None
+        return d
 
     def iterPotentialNeighbors(self, value):
         identifier = value.Index
+        if self.namedTuples is None:
+            self.namedTuples = list(self.df.itertuples())
         for nt in self.namedTuples:
             if nt.Index != identifier:
                 yield nt
@@ -87,22 +94,9 @@ class AbstractKnnFinder(ABC):
     def findNeighbors(self, namedTuple: PandasNamedTuple, n_neighbors=20) -> List[Neighbor]:
         pass
 
-
-class KNearestNeighboursFinder(AbstractKnnFinder):
-    def __init__(self, df: pd.DataFrame, distanceMetric: DistanceMetric, neighborProvider: NeighborProvider):
-        self.neighborProvider = neighborProvider
-        self.distanceMetric = distanceMetric
-        if any(df.index.duplicated()):
-            raise Exception("Found duplicates in the DataFrame's index")
-
-    def findNeighbors(self, namedTuple: PandasNamedTuple, n_neighbors=20) -> List[Neighbor]:
-        result = []
-        log.debug(f"Finding neighbors for {namedTuple.Index}")
-        for neighborTuple in self.neighborProvider.iterPotentialNeighbors(namedTuple):
-            distance = self.distanceMetric.distance(namedTuple, neighborTuple)
-            result.append(Neighbor(neighborTuple, distance))
-        result.sort(key=lambda n: n.distance)
-        return result[:n_neighbors]
+    @abstractmethod
+    def __str__(self):
+        super().__str__()
 
 
 class CachingKNearestNeighboursFinder(AbstractKnnFinder):
@@ -122,6 +116,9 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
             self.weightedDistanceMetrics = [(cache.getCachedMetric(dm), w) for (w, dm) in distanceMetric.metrics]
         else:
             self.weightedDistanceMetrics = [(cache.getCachedMetric(distanceMetric), 1)]
+
+    def __str__(self):
+        return stringRepr(self, ["neighborProvider", "distanceMetric"])
 
     class DistanceMetricCache:
         """
@@ -183,6 +180,25 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
         return result
 
 
+class KNearestNeighboursFinder(AbstractKnnFinder):
+
+    def __init__(self, distanceMetric: DistanceMetric, neighborProvider: NeighborProvider):
+        self.neighborProvider = neighborProvider
+        self.distanceMetric = distanceMetric
+
+    def __str__(self):
+        return stringRepr(self, ["neighborProvider", "distanceMetric"])
+
+    def findNeighbors(self, namedTuple: PandasNamedTuple, n_neighbors=20) -> List[Neighbor]:
+        result = []
+        log.debug(f"Finding neighbors for {namedTuple.Index}")
+        for neighborTuple in self.neighborProvider.iterPotentialNeighbors(namedTuple):
+            distance = self.distanceMetric.distance(namedTuple, neighborTuple)
+            result.append(Neighbor(neighborTuple, distance))
+        result.sort(key=lambda n: n.distance)
+        return result[:n_neighbors]
+
+
 class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def __init__(self, numNeighbors: int, distanceMetric: DistanceMetric,
             neighborProviderFactory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
@@ -203,9 +219,8 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         self.distanceEpsilon = distanceEpsilon
         self.distanceBasedWeighting = distanceBasedWeighting
         self.neighborProviderFactory = neighborProviderFactory
-        self.neighborProvider: NeighborProvider = None
-        self.n_neighbors = numNeighbors
-        self.distance_metric = distanceMetric
+        self.numNeighbors = numNeighbors
+        self.distanceMetric = distanceMetric
         self.distanceMetricCache = distanceMetricCache
         self.df = None
         self.y = None
@@ -215,11 +230,11 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
-        self.neighborProvider = self.neighborProviderFactory(self.df)
+        neighborProvider = self.neighborProviderFactory(self.df)
         if self.distanceMetricCache is None:
-            self.knnFinder = KNearestNeighboursFinder(self.df, self.distance_metric, self.neighborProvider)
+            self.knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
         else:
-            self.knnFinder = CachingKNearestNeighboursFinder(self.distanceMetricCache, self.distance_metric, self.neighborProvider)
+            self.knnFinder = CachingKNearestNeighboursFinder(self.distanceMetricCache, self.distanceMetric, neighborProvider)
         log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
 
     def _predictClassProbabilities(self, X: pd.DataFrame):
@@ -246,33 +261,38 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
 
     def findNeighbors(self, namedTuple):
-        return self.knnFinder.findNeighbors(namedTuple, self.n_neighbors)
+        return self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
 
     def __str__(self):
-        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProvider"])
+        return stringRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 
 
 class KNearestNeighboursRegressionModel(VectorRegressionModel):
     def __init__(self, numNeighbors: int, distanceMetric: DistanceMetric,
             neighborProviderFactory: Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
-            distanceBasedWeighting=False, distanceEpsilon=1e-3, **kwargs):
+            distanceBasedWeighting=False, distanceEpsilon=1e-3,
+            distanceMetricCache: CachingKNearestNeighboursFinder.DistanceMetricCache = None, **kwargs):
         """
         :param numNeighbors: the number of nearest neighbors to consider
         :param distanceMetric: the distance metric to use
         :param neighborProviderFactory: a factory with which a neighbor provider can be constructed using data
         :param distanceBasedWeighting: whether to weight neighbors according to their distance (inverse); if False, use democratic vote
         :param distanceEpsilon: a distance that is added to all distances for distance-based weighting (in order to avoid 0 distances);
+        :param distanceMetricCache: a cache for distance metrics which shall be used to store speed up repeated computations
+            of the neighbors of the same data point by keeping series of distances cached (particularly for composite distance metrics);
+            see class CachingKNearestNeighboursFinder
         :param kwargs: parameters to pass on to super-classes
         """
         super().__init__(**kwargs)
         self.distanceEpsilon = distanceEpsilon
         self.distanceBasedWeighting = distanceBasedWeighting
-        self.neighbor_provider_factory = neighborProviderFactory
+        self.neighborProviderFactory = neighborProviderFactory
         self.numNeighbors = numNeighbors
         self.distanceMetric = distanceMetric
+        self.distanceMetricCache = distanceMetricCache
         self.df = None
         self.y = None
         self.knnFinder = None
@@ -281,14 +301,18 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
-        neighbor_provider = self.neighbor_provider_factory(self.df)
-        self.knnFinder = KNearestNeighboursFinder(self.df, self.distanceMetric, neighbor_provider)
+        neighborProvider = self.neighborProviderFactory(self.df)
+        if self.distanceMetricCache is None:
+            self.knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
+        else:
+            self.knnFinder = CachingKNearestNeighboursFinder(self.distanceMetricCache, self.distanceMetric, neighborProvider)
+        log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
 
     def _getTarget(self, neighbor: Neighbor):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
 
     def _predictSingleInput(self, namedTuple):
-        neighbors = self.knnFinder.findNeighbors(namedTuple.Index, namedTuple, self.numNeighbors)
+        neighbors = self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
         neighborTargets = np.array([self._getTarget(n) for n in neighbors])
         if self.distanceBasedWeighting:
             neighborWeights = np.array([1.0 / (n.distance + self.distanceEpsilon) for n in neighbors])
@@ -303,4 +327,4 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         return pd.DataFrame({self._predictedVariableNames[0]: predictedValues}, index=x.index)
 
     def __str__(self):
-        return stringRepr(self, ["n_neighbors", "distance_metric", "distanceBasedWeighting", "neighborProviderFactory"])
+        return stringRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])

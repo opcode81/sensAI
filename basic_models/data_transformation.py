@@ -2,7 +2,7 @@ import copy
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import List, Sequence, Union, Dict, Callable, Any
+from typing import List, Sequence, Union, Dict, Callable, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,7 @@ class DataFrameTransformer(ABC):
 
 class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
     @abstractmethod
-    def inverse(self) -> DataFrameTransformer:
+    def applyInverse(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
 
@@ -66,6 +66,9 @@ class DataFrameTransformerChain:
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
     def __init__(self, columnsMap: Dict[str, str]):
+        """
+        :param columnsMap: dictionary mapping old column names to new names
+        """
         self.columnsMap = columnsMap
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -73,6 +76,10 @@ class DFTRenameColumns(RuleBasedDataFrameTransformer):
 
 
 class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
+    """
+    Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
+    for which the function returns True
+    """
     def __init__(self, column: str, condition: Callable[[Any], bool]):
         self.column = column
         self.condition = condition
@@ -82,7 +89,7 @@ class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
-    def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None):
+    def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False):
         """
         One hot encode categorical variables
         :param columns: names of original columns that are to be replaced by a list one-hot encoded columns each
@@ -91,6 +98,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
         """
         self.oneHotEncoders = None
         self.columnNamesToProcess = columns
+        self.inplace = inplace
         if categoriesList is not None:
             if len(columns) != len(categoriesList):
                 raise ValueError(f"Length of categories is not the same as length of columnNamesToProcess")
@@ -103,7 +111,8 @@ class DFTOneHotEncoder(DataFrameTransformer):
             encoder.fit(df[[columnName]])
 
     def apply(self, df: pd.DataFrame):
-        df = df.copy()
+        if not self.inplace:
+            df = df.copy()
         for encoder, columnName in zip(self.oneHotEncoders, self.columnNamesToProcess):
             encodedArray = encoder.transform(df[[columnName]])
             df = df.drop(columns=columnName)
@@ -159,7 +168,7 @@ class DFTNormalisation(DataFrameTransformer):
         def __str__(self):
             return f"{self.__class__.__name__}[{self.regex}]"
 
-    def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=True):
+    def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
         :param rules: the set of rules to apply
         :param defaultTransformerFactory: a factory for the creation of transformer instances (from sklearn.preprocessing, e.g. StandardScaler)
@@ -198,8 +207,8 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
+            r = "|".join([re.escape(colName) for colName in matchingColumns])
             try:
-                r = "|".join([re.escape(colName) for colName in matchingColumns])
                 specialisedRule.regex = re.compile(r)
             except Exception as e:
                 raise Exception(f"Could not compile regex '{r}': {e}")
@@ -225,10 +234,13 @@ class DFTNormalisation(DataFrameTransformer):
 
 
 class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
-    def __init__(self, columnGenerators: Sequence[ColumnGenerator]):
+    def __init__(self, columnGenerators: Sequence[ColumnGenerator], inplace=False):
         self.columnGenerators = columnGenerators
+        self.inplace = inplace
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.inplace:
+            df = df.copy()
         for cg in self.columnGenerators:
             series = cg.generateColumn(df)
             df[series.name] = series
@@ -246,10 +258,18 @@ class DFTCountEntries(RuleBasedDataFrameTransformer):
 
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
-    def __init__(self, sklearnTransformer, columns=None):
+    """
+    Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame
+    """
+    def __init__(self, sklearnTransformer, columns: Optional[List[str]] = None, inplace=False):
+        """
+        :param sklearnTransformer: the transformer instance (from sklearn.preprocessing) to use (which will be fitted & applied)
+        :param columns: the set of column names to which the transformation shall apply; if None, apply it to all columns
+        :param inplace: whether to apply the transformation in-place
+        """
         self.sklearnTransformer = sklearnTransformer
         self.columns = columns
-        self._isInverse = False
+        self.inplace = inplace
 
     def fit(self, df: pd.DataFrame):
         cols = self.columns
@@ -257,17 +277,20 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
             cols = df.columns
         self.sklearnTransformer.fit(df[cols].values)
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame, inverse: bool) -> pd.DataFrame:
+        if not self.inplace:
+            df = df.copy()
         cols = self.columns
         if cols is None:
             cols = df.columns
-        if self._isInverse:
+        if inverse:
             df[cols] = self.sklearnTransformer.inverse_transform(df[cols].values)
         else:
             df[cols] = self.sklearnTransformer.transform(df[cols].values)
         return df
 
-    def inverse(self) -> DataFrameTransformer:
-        dft = copy.copy(self)
-        dft._isInverse = True
-        return dft
+    def apply(self, df):
+        return self._apply(df, False)
+
+    def applyInverse(self, df):
+        return self._apply(df, True)

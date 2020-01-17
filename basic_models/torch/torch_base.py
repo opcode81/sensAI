@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Tuple
+from typing import List, Union, Sequence, Tuple, Callable
 
 import numpy as np
 import pandas as pd
@@ -272,32 +272,47 @@ class NNTimeSeriesForecastModel(ABC):
 
 
 class _Optimiser(object):
-
+    """
+    Wrapper for classes inherited from torch.optim.Optimizer
+    """
     def _makeOptimizer(self):
-        kwargs = {
-            "lr": self.lr,
-            "weight_decay": self.weight_decay
-        }
+        optimiserArgs = dict(self.optimiserArgs)
+        optimiserArgs.update({'lr': self.lr})
         if self.method == 'sgd':
-            self.optimizer = optim.SGD(self.params, **kwargs)
+            self.optimizer = optim.SGD(self.params, **optimiserArgs)
         elif self.method == 'asgd':
-            self.optimizer = optim.ASGD(self.params, **kwargs)
+            self.optimizer = optim.ASGD(self.params, **optimiserArgs)
         elif self.method == 'adagrad':
-            self.optimizer = optim.Adagrad(self.params, **kwargs)
+            self.optimizer = optim.Adagrad(self.params, **optimiserArgs)
         elif self.method == 'adadelta':
-            self.optimizer = optim.Adadelta(self.params, **kwargs)
+            self.optimizer = optim.Adadelta(self.params, **optimiserArgs)
         elif self.method == 'adam':
-            self.optimizer = optim.Adam(self.params, **kwargs)
+            self.optimizer = optim.Adam(self.params, **optimiserArgs)
+        elif self.method == 'adamw':
+            self.optimizer = optim.AdamW(self.params, **optimiserArgs)
         elif self.method == 'adamax':
-            self.optimizer = optim.Adamax(self.params, **kwargs)
+            self.optimizer = optim.Adamax(self.params, **optimiserArgs)
         elif self.method == 'rmsprop':
-            self.optimizer = optim.RMSprop(self.params, **kwargs)
+            self.optimizer = optim.RMSprop(self.params, **optimiserArgs)
         elif self.method == 'rprop':
-            self.optimizer = optim.Rprop(self.params, **kwargs)
+            self.optimizer = optim.Rprop(self.params, **optimiserArgs)
+        elif self.method == 'lbfgs':
+            self.use_shrinkage = False
+            self.optimizer = optim.LBFGS(self.params, **optimiserArgs)
         else:
             raise RuntimeError("Invalid optim method: " + self.method)
 
-    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, weight_decay=0.0):
+    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, **optimiserArgs):
+        """
+
+        :param params: an iterable of torch.Tensor s or dict s. Specifies what Tensors should be optimized.
+        :param method: string identifier for optimiser method to use
+        :param lr: learnig rate
+        :param max_grad_norm: max value for gradient shrinkage
+        :param lr_decay: deacay rate
+        :param start_decay_at: epoch to start learning rate decay
+        :param optimiserArgs: keyword arguments to be used in actual torch optimiser
+        """
         self.params = list(params)  # careful: params may be a generator
         self.last_ppl = None
         self.lr = lr
@@ -306,27 +321,43 @@ class _Optimiser(object):
         self.lr_decay = lr_decay
         self.start_decay_at = start_decay_at
         self.start_decay = False
-        self.weight_decay = weight_decay
+        self.optimiserArgs = optimiserArgs
+        self.use_shrinkage = True
         self._makeOptimizer()
 
-    def step(self):
-        # Compute gradients norm.
-        grad_norm = 0
-        for param in self.params:
-            grad_norm += math.pow(param.grad.data.norm(), 2)
+    def step(self, lossBackward: Callable):
+        """
 
-        grad_norm = math.sqrt(grad_norm)
-        if grad_norm > 0:
-            shrinkage = self.max_grad_norm / grad_norm
+        :param lossBackward: callable, performs backward step and returns loss
+        :return:
+        """
+        if self.use_shrinkage:
+            def closureWithShrinkage():
+                loss = lossBackward()
+
+                # Compute gradients norm.
+                grad_norm = 0
+                for param in self.params:
+                    grad_norm += math.pow(param.grad.data.norm(), 2)
+
+                grad_norm = math.sqrt(grad_norm)
+                if grad_norm > 0:
+                    shrinkage = self.max_grad_norm / grad_norm
+                else:
+                    shrinkage = 1.
+
+                for param in self.params:
+                    if shrinkage < 1:
+                        param.grad.data.mul_(shrinkage)
+
+                return loss
+
+            closure = closureWithShrinkage
         else:
-            shrinkage = 1.
+            closure = lossBackward
 
-        for param in self.params:
-            if shrinkage < 1:
-                param.grad.data.mul_(shrinkage)
-
-        self.optimizer.step()
-        return grad_norm
+        loss = self.optimizer.step(closure)
+        return loss
 
     # decay learning rate if val perf does not improve or we hit the start_decay_at limit
     def updateLearningRate(self, ppl, epoch):
@@ -559,20 +590,28 @@ class NNOptimiser:
     log = log.getChild(__qualname__)
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
-            batchSize=64, epochs=1000, trainFraction=0.75, scaledOutputs=False, weight_decay=0.0):
+             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None, **optimiserArgs):
         """
         :param cuda: whether to use CUDA or not
         :param lossEvaluator: the loss evaluator to use
         :param gpu: index of the gpu to be used, if parameter cuda is True
         :param optimiser: the optimizer to be used; defaults to "adam"
-        :param optimiserClip: the epoch from which on the optimizer lets the learning rate decay
+        :param optimiserClip: max value for gradient clipping
         :param optimiserLR: the optimizer's learning rate decay
-        :param batchSize: the batch size to use; defaults to 100
-        :param epochs:  the number of epochs to train; defaults to 1000
         :param trainFraction: the fraction of the data used for training; defaults to 0.75
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
+        :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
+        if optimiser == 'lbfgs':
+            largeBatchSize = 1e12
+            if batchSize is not None:
+                log.warning(f"LBFGS does not make use of batches, therefore using largeBatchSize {largeBatchSize} to achieve use of a single batch")
+            batchSize = largeBatchSize
+        else:
+            if batchSize is None:
+                batchSize = 64
+
         if lossEvaluator is None:
             raise ValueError("Must provide a loss evaluator")
 
@@ -586,7 +625,9 @@ class NNOptimiser:
         self.trainFraction = trainFraction
         self.scaledOutputs = scaledOutputs
         self.lossEvaluator = lossEvaluator
-        self.weight_decay = weight_decay
+        self.startLRDecayAtEpoch = startLRDecayAtEpoch
+        self.optimiserLRDecay = optimiserLRDecay
+        self.optimiserArgs = optimiserArgs
 
         self.trainingLog = None
         self.bestEpoch = None
@@ -648,8 +689,9 @@ class NNOptimiser:
 
         best_val = 1e9
         best_epoch = 0
-        optim = _Optimiser(torchModel.parameters(), self.optimiser, self.optimiserLR, self.optimiserClip,
-                    weight_decay=self.weight_decay)
+        optim = _Optimiser(torchModel.parameters(), method=self.optimiser, lr=self.optimiserLR,
+            max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
+            **self.optimiserArgs)
 
         bestModelBytes = None
         self.lossEvaluator.startTraining(self.cuda)
@@ -727,16 +769,19 @@ class NNOptimiser:
         total_loss = 0
         n_samples = 0
         outputShape = dataSets[0][1].shape[1:]
-        outputCount = functools.reduce(lambda x, y: x * y, outputShape, 1)
+        numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
         for dataSet, outputScaler in zip(dataSets, outputScalers):
             for X, Y in self._get_batches(dataSet, batch_size, cuda, True):
-                model.zero_grad()
-                output, groundTruth = self._applyModel(model, X, Y, outputScaler)
-                loss = criterion(output, groundTruth)
-                loss.backward()
-                optim.step()
+                def closure():
+                    model.zero_grad()
+                    output, groundTruth = self._applyModel(model, X, Y, outputScaler)
+                    loss = criterion(output, groundTruth)
+                    loss.backward()
+                    return loss
+                loss = optim.step(closure)
                 total_loss += loss.item()
-                n_samples += output.size(0) * outputCount
+                numDataPointsInBatch = Y.size(0)
+                n_samples += numDataPointsInBatch * numOutputsPerDataPoint
         return total_loss / n_samples
 
     def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: normalisation.VectorDataScaler):

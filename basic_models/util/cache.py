@@ -451,10 +451,25 @@ class SqlitePersistentList(PersistentList):
 class CachedValueProviderMixin(ABC):
     """
     Represents a value provider that can provide values associated with (hashable) keys via a cache or, if
-    cached values are not yet present, by computing them
+    cached values are not yet present, by computing them.
     """
-    def __init__(self, cache: PersistentKeyValueCache):
+    def __init__(self, cache: Optional[PersistentKeyValueCache], persistCache=False):
+        """
+
+
+        Args:
+            cache: The cache to use or None. Important: when None, caching will be disabled
+            persistCache: Whether to persist the cache when pickling
+        """
+        self.persistCache = persistCache
         self._cache = cache
+
+    def __getstate__(self):
+        if not self.persistCache:
+            d = self.__dict__.copy()
+            d["_cache"] = None
+            return d
+        return self.__dict__
 
     def _provideValue(self, key, data=None):
         """
@@ -465,6 +480,8 @@ class CachedValueProviderMixin(ABC):
         :param data: optional data required to compute a value
         :return: the retrieved or computed value
         """
+        if self._cache is None:
+            return self._computeValue(key, data)
         value = self._cache.get(key)
         if value is None:
             value = self._computeValue(key, data)
