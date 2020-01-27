@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, log_loss, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 log = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class ClassificationEvalStats(EvalStats):
             result.append(probTrueClass)
         return np.array(result)
 
-    def getConfusionMatrix(self):
+    def getConfusionMatrix(self) -> np.ndarray:
         return confusion_matrix(y_true=self.y_true, y_pred=self.y_predicted)
 
     def getAccuracy(self):
@@ -139,6 +139,43 @@ class ClassificationEvalStats(EvalStats):
         if self._probabilitiesAvailable:
             d["GeoMeanTrueClassProb"] = self.getGeoMeanTrueClassProbability()
         return d
+
+    def plotConfusionMatrix(self, normalize=True):
+        # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
+        confusionMatrix = self.getConfusionMatrix()
+        if normalize:
+            title = 'Normalized confusion matrix'
+            confusionMatrix = confusionMatrix.astype('float') / confusionMatrix.sum(axis=1)[:, np.newaxis]
+        else:
+            title = 'Confusion matrix, without normalization'
+        classes = sorted(set(self.y_predicted).union(self.y_true))
+        fig, ax = plt.subplots()
+        fig.canvas.set_window_title(title)
+        # We want to show all ticks...
+        ax.set(xticks=np.arange(confusionMatrix.shape[1]),
+               yticks=np.arange(confusionMatrix.shape[0]),
+               # ... and label them with the respective list entries
+               xticklabels=classes, yticklabels=classes,
+               title=title,
+               ylabel='True label',
+               xlabel='Predicted label')
+        im = ax.imshow(confusionMatrix, interpolation='nearest', cmap=plt.cm.Blues)
+        ax.figure.colorbar(im, ax=ax)
+
+        # Rotate the tick labels and set their alignment.
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+                 rotation_mode="anchor")
+
+        # Loop over data dimensions and create text annotations.
+        fmt = '.2f' if normalize else 'd'
+        thresh = confusionMatrix.max() / 2.
+        for i in range(confusionMatrix.shape[0]):
+            for j in range(confusionMatrix.shape[1]):
+                ax.text(j, i, format(confusionMatrix[i, j], fmt),
+                        ha="center", va="center",
+                        color="white" if confusionMatrix[i, j] > thresh else "black")
+        fig.tight_layout()
+        return ax
 
 
 class RegressionEvalStats(EvalStats):
@@ -204,21 +241,41 @@ class RegressionEvalStats(EvalStats):
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
-    def plotErrorDistribution(self, bins=500, figure=True):
+    def plotErrorDistribution(self, bins=None, figure=True):
+        """
+        :param bins: if None, seaborns default binning will be used
+        :param figure: whether to plot in a separate figure
+
+        :return: the resulting figure object or None
+        """
         errors = self._getErrors()
         fig = None
+        title = "distribution of errors"
         if figure:
-            fig = plt.figure()
+            fig = plt.figure(title)
         sns.distplot(errors, bins=bins)
+        plt.title(title)
+        plt.xlabel("error")
+        plt.ylabel("probability density")
         return fig
 
     def plotScatterGroundTruthPredictions(self, figure=True, **kwargs):
+        """
+        :param figure: whether to plot in a separate figure
+        :param kwargs: will be passed to plt.scatter()
+
+        :return:  the resulting figure object or None
+        """
         fig = None
+        title = "scatter plot true vs predicted values"
         if figure:
-            fig = plt.figure()
+            fig = plt.figure(title)
+        y_range = [min(self.y_true), max(self.y_true)]
         plt.scatter(self.y_true, self.y_predicted, **kwargs)
+        plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
+        plt.title(title)
         return fig
 
 

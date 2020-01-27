@@ -208,8 +208,20 @@ class ChainedFeatureGenerator(FeatureGenerator):
     Chains feature generators such that they are executed one after another. The output of generator i>=1 is the input of
     generator i+1 in the generator sequence.
     """
-    def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: typing.Sequence[str] = None,
+            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = None):
+        """
+        :param featureGenerators: the list of feature generators to apply in order
+        :param categoricalFeatureNames: the list of categorical feature names being generated; if None, use the ones
+            indicated by the last feature generator in the list
+        :param normalisationRules: normalisation rules to use; if None, use rules of the last feature generator in the list
+        """
+        if len(featureGenerators) == 0:
+            raise ValueError("Empty list of feature generators")
+        if categoricalFeatureNames is None:
+            categoricalFeatureNames = featureGenerators[-1].getCategoricalFeatureNames()
+        if normalisationRules is None:
+            normalisationRules = featureGenerators[-1].getNormalisationRules()
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         self.featureGenerators = featureGenerators
 

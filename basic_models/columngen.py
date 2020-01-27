@@ -105,7 +105,14 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         self.log.info(f"Generating column {self.columnName} with {self.__class__.__name__}")
         values = []
         cacheHits = 0
-        for namedTuple in df.itertuples():
+        columnLength = len(df)
+        percentageToLog = 0
+        for i, namedTuple in enumerate(df.itertuples()):
+            percentageGenerated = int(100*i/columnLength)
+            if percentageGenerated == percentageToLog:
+                self.log.info(f"Processed {percentageToLog}% of {self.columnName}")
+                percentageToLog += 5
+
             key = namedTuple.Index
             if self.cache is not None:
                 value = self.cache.get(key)
@@ -118,7 +125,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
                 value = self._generateValue(namedTuple)
             values.append(value)
         if self.cache is not None:
-            self.log.info(f"Cached column generation resulted in {cacheHits}/{len(df)} cache hits")
+            self.log.info(f"Cached column generation resulted in {cacheHits}/{columnLength} cache hits")
         return values
 
     def __getstate__(self):

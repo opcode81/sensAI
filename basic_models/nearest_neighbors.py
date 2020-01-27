@@ -117,6 +117,8 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
     def __init__(self, cache: 'CachingKNearestNeighboursFinder.DistanceMetricCache', distanceMetric: DistanceMetric,
             neighborProvider: NeighborProvider):
         self.neighborProvider = neighborProvider
+        # This field is purely for logging purposes
+        self.distanceMetric = distanceMetric
         if isinstance(distanceMetric, distance_metric.LinearCombinationDistanceMetric):
             self.weightedDistanceMetrics = [(cache.getCachedMetric(dm), w) for (w, dm) in distanceMetric.metrics]
         else:

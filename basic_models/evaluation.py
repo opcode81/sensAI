@@ -6,6 +6,8 @@ from typing import Tuple, Dict, Sequence, Union
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from .basic_models_base import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel
 from .eval_stats import RegressionEvalStats, EvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
@@ -284,3 +286,56 @@ def computeEvaluationMetricsDict(model, evaluatorOrValidator: Union[VectorModelE
         return data.getEvalStatsCollection().aggStats()
     else:
         raise ValueError(f"Unexpected evaluator/validator of type {type(evaluatorOrValidator)}")
+
+
+def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, testFraction=0.2,
+        plotTargetDistribution=False, computeProbabilities=True, normalizePlots=True, randomSeed=60) -> VectorModelEvaluationData:
+    """
+    Evaluates the given model via a simple evaluation mechanism that uses a single split
+
+    :param model: the model to evaluate
+    :param inputOutputData: data on which to evaluate
+    :param testFraction: the fraction of the data to test on
+    :param plotTargetDistribution: whether to plot the target values distribution in the entire dataset
+    :param computeProbabilities: only relevant if the model is a classifier
+    :param randomSeed:
+
+    :return: the evaluation data
+    """
+
+    if plotTargetDistribution:
+        title = "Distribution of target values in entire dataset"
+        fig = plt.figure(title)
+
+        outputDistributionSeries = inputOutputData.outputs.iloc[:, 0]
+        if not model.isRegressionModel():
+            outputDistributionSeries = outputDistributionSeries.value_counts(normalize=normalizePlots)
+            ax = sns.barplot(outputDistributionSeries.index, outputDistributionSeries.values)
+            ax.set_ylabel("%")
+        else:
+            ax = sns.distplot(outputDistributionSeries)
+            ax.set_ylabel("Probability density")
+        ax.set_title(title)
+        ax.set_xlabel("target value")
+        fig.show()
+
+    if model.isRegressionModel():
+        evaluator = VectorRegressionModelEvaluator(inputOutputData, testFraction=testFraction, randomSeed=randomSeed)
+    else:
+        evaluator = VectorClassificationModelEvaluator(inputOutputData, testFraction=testFraction, computeProbabilities=computeProbabilities, randomSeed=randomSeed)
+
+    evaluator.fitModel(model)
+    evalData = evaluator.evalModel(model)
+    evalStats = evalData.getEvalStats()
+    log.info(f"Finished evaluation for model {model}")
+    log.info(f"Evaluation metrics: {str(evalStats.getAll())}")
+
+    if model.isRegressionModel():
+        res: RegressionEvalStats = evalStats
+        res.plotErrorDistribution()
+        res.plotScatterGroundTruthPredictions()
+    else:
+        res: ClassificationEvalStats = evalStats
+        res.plotConfusionMatrix(normalize=normalizePlots)
+
+    return evalData

@@ -150,16 +150,18 @@ class DFTNormalisation(DataFrameTransformer):
     """
 
     class Rule:
-        def __init__(self, regex: str, skip=False, transformer=None):
+        def __init__(self, regex: str, skip=False, unsupported=False, transformer=None):
             """
             :param regex: a regular expression defining the column the rule applies to
-            :param skip: whether no transformation shall be performed on the matching column(s)
+            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
+            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
             self.regex = re.compile(regex)
             self.skip = skip
+            self.unsupported = unsupported
             self.transformer = transformer
 
         def matches(self, column: str):
@@ -169,7 +171,7 @@ class DFTNormalisation(DataFrameTransformer):
             return [col for col in columns if self.matches(col)]
 
         def __str__(self):
-            return f"{self.__class__.__name__}[{self.regex}]"
+            return f"{self.__class__.__name__}[regex='{self.regex}', unsupported={self.unsupported}, skip={self.skip}, transformer={self.transformer}]"
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
@@ -197,6 +199,8 @@ class DFTNormalisation(DataFrameTransformer):
 
             # fit transformer
             if len(matchingColumns) > 0:
+                if rule.unsupported:
+                    raise Exception(f"Normalisation of columns {matchingColumns} is unsupported according to {rule}")
                 if not rule.skip:
                     if rule.transformer is None:
                         if self._defaultTransformerFactory is None:
