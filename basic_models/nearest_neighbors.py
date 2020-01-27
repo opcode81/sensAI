@@ -1,4 +1,6 @@
 import collections
+import typing
+
 import datetime
 import logging
 from abc import ABC, abstractmethod
@@ -6,6 +8,9 @@ from typing import Callable, List, Iterable
 
 import numpy as np
 import pandas as pd
+
+from dcs.basic_models import distance_metric, util, data_transformation
+from dcs.basic_models.featuregen import FeatureGeneratorFromNamedTuples
 
 from . import distance_metric
 from .basic_models_base import VectorClassificationModel, VectorRegressionModel
@@ -328,3 +333,52 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
 
     def __str__(self):
         return stringRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
+
+
+class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
+    """
+    Generates features based on nearest neighbors. For each neighbor, a set of features is added to the output data frame.
+    Each feature has the name "n{0-based neighbor index}_{feature name}", where the feature names are configurable
+    at construction. The feature name "distance", which indicates the distance of the neighbor to the data point is
+    always present.
+    """
+    def __init__(self, numNeighbors: int,
+            neighborAttributes: typing.List[str],
+            distanceMetric: distance_metric.DistanceMetric,
+            neighborProviderFactory: typing.Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
+            cache: util.cache.PersistentKeyValueCache = None,
+            categoricalFeatureNames: typing.Sequence[str] = (),
+            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+        """
+        :param numNeighbors: the number of neighbors for to generate features
+        :param neighborAttributes: the attributes of the neighbor's named tuple to include as features (in addition to "distance")
+        :param distanceMetric: the distance metric defining which neighbors are near
+        :param neighborProviderFactory: a factory for the creation of neighbor provider
+        :param cache: an optional key-value cache in which feature values are stored by data point identifier (as given by the DataFrame's index)
+        """
+        super().__init__(cache=cache, categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        self.neighborAttributes = neighborAttributes
+        self.distanceMetric = distanceMetric
+        self.neighborProviderFactory = neighborProviderFactory
+        self.numNeighbors = numNeighbors
+        self._knnFinder: KNearestNeighboursFinder = None
+        self._trainX = None
+
+    def generateFeatures(self, df: pd.DataFrame, ctx):
+        if self._trainX is None:
+            raise Exception("Feature generator has not been fitted")
+        neighborProvider = self.neighborProviderFactory(self._trainX)
+        self._knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
+        return super().generateFeatures(df, ctx)
+
+    def _generateFeatureDict(self, namedTuple) -> typing.Dict[str, typing.Any]:
+        neighbors = self._knnFinder.findNeighbors(namedTuple, self.numNeighbors)
+        result = {}
+        for i, neighbor in enumerate(neighbors):
+            result[f"n{i}_distance"] = neighbor.distance
+            for attr in self.neighborAttributes:
+                result[f"n{i}_{attr}"] = getattr(neighbor.value, attr)
+        return result
+
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+        self._trainX = X

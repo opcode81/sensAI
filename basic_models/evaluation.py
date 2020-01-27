@@ -21,13 +21,13 @@ class VectorModelEvaluationData(ABC):
 
 
 class VectorRegressionModelEvaluationData(VectorModelEvaluationData):
-    def __init__(self, statsDict: Dict[str, EvalStats]):
+    def __init__(self, statsDict: Dict[str, RegressionEvalStats]):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
         """
         self.data = statsDict
 
-    def getEvalStats(self, predictedVarName=None):
+    def getEvalStats(self, predictedVarName=None) -> RegressionEvalStats:
         if predictedVarName is None:
             if len(self.data) != 1:
                 raise Exception(f"Must provide name of predicted variable name, as multiple variables were predicted {list(self.data.keys())}")
@@ -165,28 +165,6 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
             predictions = model.predict(self.testData.inputs)
         groundTruth = self.testData.outputs
         return predictions, classProbabilities, groundTruth
-
-
-class ChainedVectorRegressionPredictor(PredictorModel):
-    def __init__(self, predictor: PredictorModel, nChainedPredictions: int):
-        super().__init__()
-        self.nChainedPredictions = nChainedPredictions
-        self.predictor = predictor
-
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        nPredictions = 1
-        predictions = self.predictor.predict(x)
-        inputDim, outputDim = predictions.shape[1], x.shape[1]
-        if inputDim != outputDim:
-            raise Exception(f"Model {self.predictor.__class__} cannot be used for chained execution: "
-                            f"inputDim {inputDim} does not match outputDim {outputDim}")
-        while nPredictions < self.nChainedPredictions:
-            predictions = self.predictor.predict(predictions)
-            nPredictions += 1
-        return predictions
-
-    def getPredictedVariableNames(self):
-        return self.predictor.getPredictedVariableNames()
 
 
 class VectorModelCrossValidationData(ABC):

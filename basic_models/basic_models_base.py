@@ -7,6 +7,7 @@ import pandas as pd
 import scipy.stats
 
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
+from .featuregen import FeatureGenerator, FeatureCollector
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class VectorModel(PredictorModel, ABC):
             that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
             the model, i.e. the transformation is completely transparent when applying the model.
         """
+        self._featureGenerator: "FeatureGenerator" = None
         self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
         self._outputTransformerChain = DataFrameTransformerChain(outputTransformers)
         self._predictedVariableNames = None
@@ -87,12 +89,40 @@ class VectorModel(PredictorModel, ABC):
     def isRegressionModel(self) -> bool:
         pass
 
-    def _checkAndTransformInputs(self, x: pd.DataFrame):
-        x = self._inputTransformerChain.apply(x)
-        if self.getPredictedVariableNames() is None:
-            raise Exception(f"Cannot obtain predictions from non-trained model {self.__class__}")
-        if list(x.columns) != self._modelInputVariableNames:
-            raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(x.columns)}")
+    def setFeatureGenerator(self, featureGenerator: FeatureGenerator):
+        """
+        Sets a feature generator which shall be used to compute the actual inputs of the model from the data frame that is given.
+        Feature computation takes place before input transformation.
+
+        :param featureGenerator: the feature generator to use for input computation
+        """
+        self._featureGenerator = featureGenerator
+
+    def setFeatureCollector(self, featureCollector: FeatureCollector):
+        """
+        Makes the model use the given feature collector's multi-feature generator in order compute the actual inputs of the model from
+        the data frame that is given.
+        Feature computation takes place before input transformation.
+
+        :param featureCollector: the feature collector whose feature generator shall be used for input computation
+        """
+        self._featureGenerator = featureCollector.getMultiFeatureGenerator()
+
+    def isFitted(self):
+        return self.getPredictedVariableNames() is not None
+
+    def _computeInputs(self, x: pd.DataFrame, y=None) -> pd.DataFrame:
+        fit = y is not None
+        if self._featureGenerator is not None:
+            if fit:
+                self._featureGenerator.fit(x, y)
+            x = self._featureGenerator.generateFeatures(x, self)
+        x = self._inputTransformerChain.apply(x, fit=fit)
+        if not fit:
+            if not self.isFitted():
+                raise Exception(f"Model has not been fitted")
+            if list(x.columns) != self._modelInputVariableNames:
+                raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(x.columns)}")
         return x
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -102,7 +132,7 @@ class VectorModel(PredictorModel, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
-        x = self._checkAndTransformInputs(x)
+        x = self._computeInputs(x)
         y = self._predict(x)
         y.index = x.index
         y = self._outputTransformerChain.apply(y)
@@ -122,7 +152,7 @@ class VectorModel(PredictorModel, ABC):
         :param Y: a data frame containing output data
         """
         self._predictedVariableNames = list(Y.columns)
-        X = self._inputTransformerChain.apply(X, fit=True)
+        X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
             self._targetTransformer.fit(Y)
             Y = self._targetTransformer.apply(Y)
@@ -207,7 +237,7 @@ class VectorClassificationModel(VectorModel, ABC):
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities
         """
-        x = self._checkAndTransformInputs(x)
+        x = self._computeInputs(x)
         result = self._predictClassProbabilities(x)
 
         # check for correct columns

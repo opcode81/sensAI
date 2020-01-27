@@ -89,24 +89,27 @@ class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
-    def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False):
+    def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
         :param columns: names of original columns that are to be replaced by a list one-hot encoded columns each
         :param categoriesList: numpy arrays containing the possible values of each of the specified columns.
-        If None, the possible values will be inferred from the columns
+            If None, the possible values will be inferred from the columns
+        :param ignoreUnknown: if True and an unknown category is encountered during transform, the resulting one-hot
+            encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
         """
         self.oneHotEncoders = None
         self.columnNamesToProcess = columns
         self.inplace = inplace
+        self.handleUnknown = "ignore" if ignoreUnknown else "error"
         if categoriesList is not None:
             if len(columns) != len(categoriesList):
                 raise ValueError(f"Length of categories is not the same as length of columnNamesToProcess")
-            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(categories)], sparse=False) for categories in categoriesList]
+            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for categories in categoriesList]
 
     def fit(self, df: pd.DataFrame):
         if self.oneHotEncoders is None:
-            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(df[column].unique())], sparse=False) for column in self.columnNamesToProcess]
+            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(df[column].unique())], sparse=False, handle_unknown=self.handleUnknown) for column in self.columnNamesToProcess]
         for encoder, columnName in zip(self.oneHotEncoders, self.columnNamesToProcess):
             encoder.fit(df[[columnName]])
 

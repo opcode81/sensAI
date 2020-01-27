@@ -1,4 +1,4 @@
-from .basic_models_base import VectorModel, VectorRegressionModel, VectorClassificationModel, InputOutputData
+from .basic_models_base import VectorModel, VectorRegressionModel, VectorClassificationModel, InputOutputData, PredictorModel
 from .evaluation import VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, \
     VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData
 from .normalisation import NormalisationMode
@@ -13,6 +13,7 @@ from . import data_transformation
 from . import columngen
 from . import local_search
 from . import nearest_neighbors
+from . import featuregen
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow
