@@ -1,6 +1,7 @@
 import logging
 from typing import Sequence
 
+import lightgbm
 import sklearn.ensemble
 import sklearn.naive_bayes
 import sklearn.neural_network
@@ -54,3 +55,15 @@ class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassif
             sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
             inputTransformers=inputTransformers, outputTransformers=outputTransformers,
             **modelArgs)
+
+
+class SkLearnLightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, sklearnInputTransformer=None, sklearnOutputTransformer=None,
+                 inputTransformers: Sequence[DataFrameTransformer] = (),
+                 outputTransformers: Sequence[DataFrameTransformer] = (),
+                 random_state=42, num_leaves=300, **modelArgs):
+        super().__init__(lightgbm.sklearn.LGBMClassifier,
+                         sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
+                         inputTransformers=inputTransformers, outputTransformers=outputTransformers,
+                         random_state=random_state, num_leaves=num_leaves, **modelArgs)
+
