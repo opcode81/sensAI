@@ -9,12 +9,10 @@ from typing import Callable, List, Iterable
 import numpy as np
 import pandas as pd
 
-from dcs.basic_models import distance_metric, util, data_transformation
-from dcs.basic_models.featuregen import FeatureGeneratorFromNamedTuples
-
-from . import distance_metric
+from . import distance_metric, util, data_transformation
 from .basic_models_base import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
+from .featuregen import FeatureGeneratorFromNamedTuples
 from .util.tracking import stringRepr
 from .util.typing import PandasNamedTuple
 
@@ -366,12 +364,12 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
         self._knnFinder: KNearestNeighboursFinder = None
         self._trainX = None
 
-    def generateFeatures(self, df: pd.DataFrame, ctx):
+    def _generate(self, df: pd.DataFrame, ctx=None):
         if self._trainX is None:
             raise Exception("Feature generator has not been fitted")
         neighborProvider = self.neighborProviderFactory(self._trainX)
         self._knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
-        return super().generateFeatures(df, ctx)
+        return super()._generate(df, ctx)
 
     def _generateFeatureDict(self, namedTuple) -> typing.Dict[str, typing.Any]:
         neighbors = self._knnFinder.findNeighbors(namedTuple, self.numNeighbors)
@@ -382,5 +380,5 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
                 result[f"n{i}_{attr}"] = getattr(neighbor.value, attr)
         return result
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
         self._trainX = X

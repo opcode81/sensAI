@@ -308,6 +308,7 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
         fig = plt.figure(title)
 
         outputDistributionSeries = inputOutputData.outputs.iloc[:, 0]
+        log.info(f"Description of target column in training set: \n{outputDistributionSeries.describe()}")
         if not model.isRegressionModel():
             outputDistributionSeries = outputDistributionSeries.value_counts(normalize=normalizePlots)
             ax = sns.barplot(outputDistributionSeries.index, outputDistributionSeries.values)
@@ -324,10 +325,11 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
     else:
         evaluator = VectorClassificationModelEvaluator(inputOutputData, testFraction=testFraction, computeProbabilities=computeProbabilities, randomSeed=randomSeed)
 
+    tStart = time.time()
     evaluator.fitModel(model)
     evalData = evaluator.evalModel(model)
     evalStats = evalData.getEvalStats()
-    log.info(f"Finished evaluation for model {model}")
+    log.info(f"Finished evaluation for model {model} in {time.time() - tStart} seconds")
     log.info(f"Evaluation metrics: {str(evalStats.getAll())}")
 
     if model.isRegressionModel():

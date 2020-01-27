@@ -75,7 +75,7 @@ class DFTRenameColumns(RuleBasedDataFrameTransformer):
         return df.rename(columns=self.columnsMap)
 
 
-class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
+class DFTConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
     """
     Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
     for which the function returns True
@@ -86,6 +86,55 @@ class DFTRowFilterOnColumn(RuleBasedDataFrameTransformer):
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[df[self.column].apply(self.condition)]
+
+
+class DFTVectorizedConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
+    def __init__(self, column: str, vectorizedCondition: Callable[[Any], Sequence[bool]]):
+        """
+
+        :param column:
+        :param vectorizedCondition:
+        """
+        self.column = column
+        self.vectorizedCondition = vectorizedCondition
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[self.vectorizedCondition(df[self.column])]
+
+
+class DFTRowFilter(RuleBasedDataFrameTransformer):
+    def __init__(self, condition: Callable[[Any], bool]):
+        """
+        Filters a data frame by applying a boolean function to each row and retaining only the rows
+        for which the function returns True
+        :param condition:
+        """
+        self.condition = condition
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[df.apply(self.condition, axis=1)]
+
+
+class DFTModifyColumn(RuleBasedDataFrameTransformer):
+    def __init__(self, column: str, columnTransform: Callable):
+        """
+        Modifies a column specified by 'column' using 'columnTransform'
+        :param column:
+        :param columnTransform:
+        """
+        self.columnTransform = columnTransform
+        self.column = column
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df[self.column] = df[self.column].apply(self.columnTransform)
+        return df
+
+
+class DFTModifyColumnVectorized(DFTModifyColumn):
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df[self.column] = self.columnTransform(df[self.column].values)
+        return df
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
@@ -156,6 +205,7 @@ class DFTNormalisation(DataFrameTransformer):
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+            If None the default transformer will be used.
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")

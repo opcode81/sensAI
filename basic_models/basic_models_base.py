@@ -115,8 +115,9 @@ class VectorModel(PredictorModel, ABC):
         fit = y is not None
         if self._featureGenerator is not None:
             if fit:
-                self._featureGenerator.fit(x, y)
-            x = self._featureGenerator.generateFeatures(x, self)
+                x = self._featureGenerator.fitGenerate(x, y, self)
+            else:
+                x = self._featureGenerator.generate(x, self)
         x = self._inputTransformerChain.apply(x, fit=fit)
         if not fit:
             if not self.isFitted():

@@ -110,7 +110,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         for i, namedTuple in enumerate(df.itertuples()):
             percentageGenerated = int(100*i/columnLength)
             if percentageGenerated == percentageToLog:
-                self.log.info(f"Processed {percentageToLog}% of {self.columnName}")
+                self.log.debug(f"Processed {percentageToLog}% of {self.columnName}")
                 percentageToLog += 5
 
             key = namedTuple.Index

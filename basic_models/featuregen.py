@@ -1,5 +1,5 @@
 import logging
-import typing
+from typing import Sequence, List, Union, Callable, Any, Dict
 from abc import ABC, abstractmethod
 
 import pandas as pd
@@ -16,74 +16,102 @@ class FeatureGenerator(ABC):
     Base class for feature generators that create a new DataFrame containing feature values
     from an input DataFrame
     """
-    def __init__(self, categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
-        self._normalisationRules = normalisationRules
+    def __init__(self, categoricalFeatureNames: Sequence[str] = (),
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+        """
+        :param categoricalFeatureNames: if provided, will be added to the feature generator's meta-information which can
+         then be used for further transforming categorical features (e.g. one hot encoding).
+         Normalisation of categorical features is not supported in DFTNormalisation and will lead to an error if attempted.
+        :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
+         These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
+         within a data processing pipeline. They do not affect feature generation.
+        """
         self._categoricalFeatureNames = categoricalFeatureNames
+        catFeaturesNormalizationRule = data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames()), unsupported=True)
+        self._normalisationRules = list(normalisationRules) + [catFeaturesNormalizationRule]
 
-    def getNormalisationRules(self) -> typing.Sequence[data_transformation.DFTNormalisation.Rule]:
+    def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
         return self._normalisationRules
 
-    def getCategoricalFeatureNames(self) -> typing.Sequence[str]:
+    def getCategoricalFeatureNames(self) -> Sequence[str]:
         return self._categoricalFeatureNames
 
     @abstractmethod
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+        """
+        Fits the feature generator based on the given data
+
+        :param X: the input/features data frame for the learning problem
+        :param Y: the corresponding output data frame for the learning problem
+            (which will typically contain regression or classification target columns)
+        :param ctx: a context object whose functionality may be required for feature generation;
+            this is typically the model instance that this feature generator is to generate inputs for
+        """
         pass
 
     @abstractmethod
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         """
         Generates features for the data points in the given data frame
 
-        :param df: the data frame for which to generate features
+        :param df: the input data frame for which to generate features
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
-        :return: a data frame containing the generated features, which uses the same index as df
+        :return: a data frame containing the generated features, which uses the same index as X (and Y)
         """
         pass
+
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        """
+        Fits the feature generator and subsequently generates features for the data points in the given data frame
+
+        :param X: the input data frame for the learning problem and for which to generate features
+        :param Y: the corresponding output data frame for the learning problem
+            (which will typically contain regression or classification target columns)
+        :param ctx: a context object whose functionality may be required for feature generation;
+            this is typically the model instance that this feature generator is to generate inputs for
+        :return: a data frame containing the generated features, which uses the same index as X (and Y)
+        """
+        self.fit(X, Y, ctx)
+        return self.generate(X, ctx)
 
 
 class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     """
     A feature generator which does not require fitting
     """
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
         pass
 
 
 class MultiFeatureGenerator(FeatureGenerator):
-    def __init__(self, featureGenerators: typing.Sequence[FeatureGenerator]):
+    def __init__(self, featureGenerators: Sequence[FeatureGenerator]):
         self.featureGenerators = featureGenerators
         categoricalFeatureNames = util.concatSequences([fg.getCategoricalFeatureNames() for fg in featureGenerators])
         normalisationRules = util.concatSequences([fg.getNormalisationRules() for fg in featureGenerators])
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
 
-    def generateFeatures(self, inputDF: pd.DataFrame, ctx=None):
+    def _generateFromMultiple(self, generateFeatures: Callable[[FeatureGenerator], pd.DataFrame], index) -> pd.DataFrame:
         dfs = []
         for fg in self.featureGenerators:
-            try:
-                df = fg.generateFeatures(inputDF, ctx)
-            except Exception as e:
-                raise Exception(f"Error generating features using {fg}: {e}")
-            else:
-                dfs.append(df)
+            df = generateFeatures(fg)
+            dfs.append(df)
         if len(dfs) == 0:
-            return pd.DataFrame(index=inputDF.index)
+            return pd.DataFrame(index=index)
         else:
             return pd.concat(dfs, axis=1)
 
-    def getNormalisationRules(self, withCategoricalOneHotRule=True):
-        """
-        :param withCategoricalOneHotRule: if True, adds a rule stating that all one-hot encoded categorical features are to be skipped/not to be normalised
-        :return: the list of rules
-        """
-        rules = list(super().getNormalisationRules())
-        if withCategoricalOneHotRule:
-            rules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames()), skip=True))
-        return rules
+    def generate(self, inputDF: pd.DataFrame, ctx=None):
+        def generateFeatures(fg: FeatureGenerator):
+            return fg.generate(inputDF, ctx=ctx)
+        return self._generateFromMultiple(generateFeatures, inputDF.index)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        def generateFeatures(fg: FeatureGenerator):
+            return fg.fitGenerate(X, Y, ctx)
+        return self._generateFromMultiple(generateFeatures, X.index)
+
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
         for fg in self.featureGenerators:
             fg.fit(X, Y)
 
@@ -93,12 +121,12 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
     Generates feature values for one data point at a time, creating a dictionary with
     feature values from each named tuple
     """
-    def __init__(self, cache: util.cache.PersistentKeyValueCache = None, categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, cache: util.cache.PersistentKeyValueCache = None, categoricalFeatureNames: Sequence[str] = (),
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         self.cache = cache
 
-    def generateFeatures(self, df: pd.DataFrame, ctx):
+    def generate(self, df: pd.DataFrame, ctx=None):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
             if idx % 100 == 0:
@@ -114,7 +142,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
         return pd.DataFrame(dicts, index=df.index)
 
     @abstractmethod
-    def _generateFeatureDict(self, namedTuple) -> typing.Dict[str, typing.Any]:
+    def _generateFeatureDict(self, namedTuple) -> Dict[str, Any]:
         """
         Creates a dictionary with feature values from a named tuple
 
@@ -125,14 +153,14 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
 
 
 class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
-    def __init__(self, columns: typing.Union[str, typing.List[str]], categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, columns: Union[str, List[str]], categoricalFeatureNames: Sequence[str] = (),
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
 
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         missingCols = set(self.columns) - set(df.columns)
         if len(missingCols) > 0:
             raise Exception(f"Columns {missingCols} not present in data frame; available columns: {list(df.columns)}")
@@ -140,7 +168,7 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
 
 
 class FeatureGeneratorTakeAllColumns(RuleBasedFeatureGenerator):
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         return df
 
 
@@ -153,14 +181,14 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     will be created. It will contain the columns "vec1_<i1>", "vec2_<i2>" with i1, i2 ranging in (0, dim1), (0, dim2).
 
     """
-    def __init__(self, columns: typing.Union[str, typing.Sequence[str]], categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, columns: Union[str, Sequence[str]], categoricalFeatureNames: Sequence[str] = (),
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
 
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         resultDf = pd.DataFrame(index=df.index)
         for col in self.columns:
             log.info(f"Flattening column {col}")
@@ -180,8 +208,8 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     log = log.getChild(__qualname__)
 
-    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: typing.Sequence[str] = (),
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: Sequence[str] = (),
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         """
         :param columnGen: the underlying column generator
         :param takeInputColumnIfPresent: if True, then if a column whose name corresponds to the column to generate exists
@@ -192,7 +220,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
 
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.columnName
         if self.takeInputColumnIfPresent and colName in df.columns:
             self.log.debug(f"Taking column '{colName}' from input data frame")
@@ -208,8 +236,8 @@ class ChainedFeatureGenerator(FeatureGenerator):
     Chains feature generators such that they are executed one after another. The output of generator i>=1 is the input of
     generator i+1 in the generator sequence.
     """
-    def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: typing.Sequence[str] = None,
-            normalisationRules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = None):
+    def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: Sequence[str] = None,
+                 normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None):
         """
         :param featureGenerators: the list of feature generators to apply in order
         :param categoricalFeatureNames: the list of categorical feature names being generated; if None, use the ones
@@ -225,14 +253,18 @@ class ChainedFeatureGenerator(FeatureGenerator):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         self.featureGenerators = featureGenerators
 
-    def generateFeatures(self, df: pd.DataFrame, ctx) -> pd.DataFrame:
+    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         for featureGen in self.featureGenerators:
-            df = featureGen.generateFeatures(df, ctx)
+            df = featureGen.generate(df, ctx)
         return df
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+        self.fitGenerate(X, Y, ctx)
+
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
         for fg in self.featureGenerators:
-            fg.fit(X, Y)
+            X = fg.fitGenerate(X, Y, ctx)
+        return X
 
 
 ################################
@@ -251,7 +283,7 @@ class FeatureGeneratorRegistry:
         self._featureGeneratorFactories = {}
         self._featureGeneratorSingletons = {}
 
-    def registerFactory(self, name, factory: typing.Callable[[], FeatureGenerator]):
+    def registerFactory(self, name, factory: Callable[[], FeatureGenerator]):
         """
         Registers a feature generator factory which can subsequently be referenced by models via their name
         :param name: the name
@@ -283,7 +315,7 @@ class FeatureCollector(object):
     A feature collector which can provide a multi-feature generator from a list of names/generators and registry
     """
 
-    def __init__(self, *featureGeneratorsOrNames: typing.Union[str, FeatureGenerator], registry=None):
+    def __init__(self, *featureGeneratorsOrNames: Union[str, FeatureGenerator], registry=None):
         """
         :param featureGeneratorsOrNames: generator names (known to articleFeatureGeneratorRegistry) or generator instances.
         :param registry: the feature generator registry for the case where names are passed
