@@ -17,18 +17,24 @@ class FeatureGenerator(ABC):
     from an input DataFrame
     """
     def __init__(self, categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (), addCategoricalDefaultRules=True):
         """
         :param categoricalFeatureNames: if provided, will be added to the feature generator's meta-information which can
-         then be used for further transforming categorical features (e.g. one hot encoding).
-         Normalisation of categorical features is not supported in DFTNormalisation and will lead to an error if attempted.
+            be leveraged for further transformations, e.g. one-hot encoding.
         :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
-         These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
-         within a data processing pipeline. (They do not affect feature generation.)
+            These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
+            within a data processing pipeline. They do not affect feature generation.
+        :param addCategoricalDefaultRules:
+            If True, normalisation rules for categorical features (which are unsupported by normalisation) and their corresponding one-hot
+            encoded features (with "_<index>" appended) will be added.
         """
         self._categoricalFeatureNames = categoricalFeatureNames
-        catFeaturesNormalizationRule = data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames()), unsupported=True)
-        self._normalisationRules = list(normalisationRules) + [catFeaturesNormalizationRule]
+        normalisationRules = list(normalisationRules)
+        if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
+            normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)" % "|".join(categoricalFeatureNames), unsupported=True))
+            normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(categoricalFeatureNames), skip=True))
+        log.info(f"Rules {list(map(str, normalisationRules))}")
+        self._normalisationRules = normalisationRules
 
     def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
         return self._normalisationRules
@@ -89,7 +95,8 @@ class MultiFeatureGenerator(FeatureGenerator):
         self.featureGenerators = featureGenerators
         categoricalFeatureNames = util.concatSequences([fg.getCategoricalFeatureNames() for fg in featureGenerators])
         normalisationRules = util.concatSequences([fg.getNormalisationRules() for fg in featureGenerators])
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            addCategoricalDefaultRules=False)
 
     def _generateFromMultiple(self, generateFeatures: Callable[[FeatureGenerator], pd.DataFrame], index) -> pd.DataFrame:
         dfs = []
@@ -339,6 +346,3 @@ class FeatureCollector(object):
             else:
                 raise ValueError(f"Unexpected type {type(f)} in list of features")
         return MultiFeatureGenerator(featureGenerators)
-
-    def collectFeatures(self, X: pd.DataFrame, ctx=None) -> pd.DataFrame:
-        return self.getMultiFeatureGenerator().generateFeatures(X, ctx=ctx)
