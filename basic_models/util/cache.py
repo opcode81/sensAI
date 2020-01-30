@@ -4,6 +4,7 @@ import glob
 import logging
 import os
 import pickle
+import re
 import threading
 import time
 from abc import abstractmethod, ABC
@@ -162,8 +163,6 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
 class SlicedPicklePersistentList(PersistentList):
     """
     Object handling the creation and access to sliced pickle caches
-        NB: Order of list is not guaranteed when loading from sliced files!
-        TODO: Sort the sliced files (ensuring ...slice2.pickle comes before ...slice13.pickle or ...slice1000.pickle)
     """
     def __init__(self, directory, pickleBaseName, numEntriesPerSlice=100000):
         """
@@ -277,7 +276,10 @@ class SlicedPicklePersistentList(PersistentList):
         :return: list of sliced pickled files
         """
         # glob.glob permits the usage of unix-style pathnames matching. (below we find all ..._slice*.pickle files)
-        return glob.glob(self._picklePath("*"))
+        listOfFileNames = glob.glob(self._picklePath("*"))
+        # Sort the slices to ensure it is in the same order as they was produced (regex replaces everything not a number with empty string).
+        listOfFileNames.sort(key=lambda f: int(re.sub('\D', '', f)))
+        return listOfFileNames
 
     def _loadPickle(self, picklePath: str) -> List[Any]:
         """
