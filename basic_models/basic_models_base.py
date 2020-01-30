@@ -69,13 +69,14 @@ class VectorModel(PredictorModel, ABC):
     Base class for models that map vectors to vectors
     """
     def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None):
+            targetTransformer: InvertibleDataFrameTransformer = None, name=None):
         """
         :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
         :param outputTransformers: list of DataFrameTransformers for the transformation of outputs (after the model has been applied)
         :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
             that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
             the model, i.e. the transformation is completely transparent when applying the model.
+        :param name: the name of the model
         """
         self._featureGenerator: "FeatureGenerator" = None
         self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
@@ -84,6 +85,7 @@ class VectorModel(PredictorModel, ABC):
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = None
         self._targetTransformer = targetTransformer
+        self._name = name
 
     @abstractmethod
     def isRegressionModel(self) -> bool:
@@ -185,6 +187,14 @@ class VectorModel(PredictorModel, ABC):
             if isinstance(it, cls):
                 return it
         return None
+
+    def setName(self, name):
+        self._name = name
+
+    def getName(self):
+        if self._name is None:
+            return "unnamed-%x" % id(self)
+        return self._name
 
 
 class VectorRegressionModel(VectorModel, ABC):
