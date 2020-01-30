@@ -60,8 +60,12 @@ class Repo:
         os.chdir(homePath)
         execute("git checkout %s" % self.branch)
         shutil.rmtree("basic_models")
-        shutil.copytree(self.pathToBasicModels, "basic_models")
         lg = self.gitlogSinceSync()
+        shutil.copytree(self.pathToBasicModels, "basic_models")
+        for fn in (self.SYNC_FILE_BASIC_MODELS, self.SYNC_FILE_THIS_REPO):
+            p = os.path.join("basic_models", fn)
+            if os.path.exists(p):
+                os.unlink(p)
         os.system("git add basic_models")
         with open("commitmsg.txt", "w") as f:
             f.write(f"Sync {self.name}\n\n")
