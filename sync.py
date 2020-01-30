@@ -4,10 +4,11 @@ import shutil
 from subprocess import Popen, PIPE
 import re
 import sys
+import platform
 
 
 def call(cmd):
-    p = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE)
+    p = Popen(cmd, shell=False, stdin=PIPE, stdout=PIPE)
     return p.stdout.read().decode("utf-8")
 
 
@@ -20,6 +21,7 @@ def execute(cmd):
 def gitlog(path, arg):
     oldPath = os.getcwd()
     os.chdir(path)
+    print("git log --no-merges --name-only " + arg)
     lg = call("git log --no-merges --name-only " + arg)
     os.chdir(oldPath)
     return lg
@@ -29,6 +31,9 @@ homePath = os.path.abspath(".")
 
 
 class Repo:
+    SYNC_FILE_BASIC_MODELS = ".syncCommitId"
+    SYNC_FILE_THIS_REPO = ".syncCommitId.this"
+    
     def __init__(self, name, branch, pathToBasicModels):
         self.pathToBasicModels = os.path.abspath(pathToBasicModels)
         if not os.path.exists(self.pathToBasicModels):
@@ -36,12 +41,17 @@ class Repo:
         self.name = name
         self.branch = branch
     
-    def gitlog(self):
-        return gitlog(self.pathToBasicModels, ".")
+    def gitlog(self, arg):
+        return gitlog(self.pathToBasicModels, arg)
+    
+    def lastSyncIdThisRepo(self):
+        with open(os.path.join(self.pathToBasicModels, self.SYNC_FILE_THIS_REPO), "r") as f:
+            commitId = f.read().strip()
+        return commitId
     
     def gitlogSinceSync(self):
-        lg = self.gitlog()
-        lg = re.sub(r'basic_models ([0-9a-z]{8,40}).*', r"basic_models \1", lg, flags=re.MULTILINE | re.DOTALL)
+        lg = self.gitlog('HEAD "^%s" .' % self.lastSyncIdThisRepo())
+        lg = re.sub(r'commit [0-9a-z]{8,40}.*?\.syncCommitId\.this', r"", lg, flags=re.MULTILINE | re.DOTALL)
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return lg
@@ -50,7 +60,6 @@ class Repo:
         os.chdir(homePath)
         execute("git checkout %s" % self.branch)
         shutil.rmtree("basic_models")
-        #os.mkdir("basic_models")
         shutil.copytree(self.pathToBasicModels, "basic_models")
         lg = self.gitlogSinceSync()
         os.system("git add basic_models")
@@ -70,13 +79,20 @@ class Repo:
         shutil.rmtree(self.pathToBasicModels)
         shutil.copytree(os.path.join(homePath, "basic_models"), self.pathToBasicModels)
         commitId = call("git rev-parse HEAD").strip()
+        
         os.chdir(self.pathToBasicModels)
         execute("git add .")
-        with open(".syncCommitId", "w") as f:
+        with open(self.SYNC_FILE_BASIC_MODELS, "w") as f:
             f.write(commitId)
-        execute("git add .syncCommitId")
+        execute("git add %s" % self.SYNC_FILE_BASIC_MODELS)
         execute(f'git commit -m "basic_models {commitId}"')
+        commitId = call("git rev-parse HEAD").strip()
+        with open(self.SYNC_FILE_THIS_REPO, "w") as f:
+            f.write(commitId)
+        execute("git add %s" % self.SYNC_FILE_THIS_REPO)
+        execute('git commit -m "Updated sync commit identifier"')
         os.chdir(homePath)
+        
         print(f"\n\nIf everything was successful, you should now update the remote branch:\ngit push")
     
 
