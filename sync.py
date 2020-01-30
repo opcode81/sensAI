@@ -21,7 +21,6 @@ def execute(cmd):
 def gitlog(path, arg):
     oldPath = os.getcwd()
     os.chdir(path)
-    print("git log --no-merges --name-only " + arg)
     lg = call("git log --no-merges --name-only " + arg)
     os.chdir(oldPath)
     return lg
