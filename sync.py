@@ -50,7 +50,7 @@ class Repo:
     
     def gitlogSinceSync(self):
         lg = self.gitlog('HEAD "^%s" .' % self.lastSyncIdThisRepo())
-        lg = re.sub(r'commit [0-9a-z]{8,40}.*?\.syncCommitId\.this', r"", lg, flags=re.MULTILINE | re.DOTALL)
+        lg = re.sub(r'commit [0-9a-z]{8,40}\n.*\n.*\n\s*\n.*\n\s*\n.*\.syncCommitId\.this', r"", lg, flags=re.MULTILINE)  # remove commits with sync commit id update
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return lg

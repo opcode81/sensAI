@@ -33,7 +33,6 @@ class FeatureGenerator(ABC):
         if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
             normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)" % "|".join(categoricalFeatureNames), unsupported=True))
             normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(categoricalFeatureNames), skip=True))
-        log.info(f"Rules {list(map(str, normalisationRules))}")
         self._normalisationRules = normalisationRules
 
     def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
