@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 log = logging.getLogger(__name__)
@@ -273,6 +274,32 @@ class RegressionEvalStats(EvalStats):
         y_range = [min(self.y_true), max(self.y_true)]
         plt.scatter(self.y_true, self.y_predicted, **kwargs)
         plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
+        plt.xlabel("ground truth")
+        plt.ylabel("prediction")
+        plt.title(title)
+        return fig
+
+    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, **kwargs):
+        """
+        :param figure: whether to plot in a separate figure
+        :param cmap: value for corresponding parameter of plt.imshow() or None
+        :param bins: how many bins to use for construncting the heatmap
+        :param kwargs: will be passed to plt.imshow()
+
+        :return:  the resulting figure object or None
+        """
+        fig = None
+        title = "heatmap plot true vs predicted values"
+        if figure:
+            fig = plt.figure(title)
+        y_range = [min(self.y_true), max(self.y_true)]
+        plt.plot(y_range, y_range, 'k-', lw=0.75, label="_not in legend", color="green", zorder=2)
+        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, bins=bins)
+        extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
+        if cmap is None:
+            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
+        plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, **kwargs)
+
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
         plt.title(title)

@@ -121,15 +121,13 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
             sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
             inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
             **modelArgs)
+        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, outputTransformer=self.modelOutputTransformer)
 
     def __str__(self):
         return f"{self.__class__.__name__}[{self.model}]"
 
     def _fitSkLearn(self, inputValues: np.ndarray, outputs: pd.DataFrame):
         log.info("Fitting multi-dimensional model")
-        self.model = createSkLearnModel(self.modelConstructor,
-                self.modelArgs,
-                outputTransformer=self.modelOutputTransformer)
         self.model.fit(inputValues, outputs.values)
 
     def _predictSkLearn(self, inputValues) -> pd.DataFrame:

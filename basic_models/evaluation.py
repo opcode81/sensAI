@@ -336,6 +336,7 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
         res: RegressionEvalStats = evalStats
         res.plotErrorDistribution()
         res.plotScatterGroundTruthPredictions()
+        res.plotHeatmapGroundTruthPredictions()
     else:
         res: ClassificationEvalStats = evalStats
         res.plotConfusionMatrix(normalize=normalizePlots)

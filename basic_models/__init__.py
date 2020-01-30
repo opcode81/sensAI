@@ -14,6 +14,7 @@ from . import columngen
 from . import local_search
 from . import nearest_neighbors
 from . import featuregen
+from .ensemble import AveragingVectorRegressionModel
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow

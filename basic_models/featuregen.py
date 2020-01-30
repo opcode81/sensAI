@@ -24,7 +24,7 @@ class FeatureGenerator(ABC):
          Normalisation of categorical features is not supported in DFTNormalisation and will lead to an error if attempted.
         :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
          These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
-         within a data processing pipeline. They do not affect feature generation.
+         within a data processing pipeline. (They do not affect feature generation.)
         """
         self._categoricalFeatureNames = categoricalFeatureNames
         catFeaturesNormalizationRule = data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(self.getCategoricalFeatureNames()), unsupported=True)

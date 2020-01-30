@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any
+from typing import Sequence, List, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -77,7 +77,7 @@ class VectorModel(PredictorModel, ABC):
             that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
             the model, i.e. the transformation is completely transparent when applying the model.
         """
-        self._featureGenerator: "FeatureGenerator" = None
+        self._featureGenerator: Optional["FeatureGenerator"] = None
         self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
         self._outputTransformerChain = DataFrameTransformerChain(outputTransformers)
         self._predictedVariableNames = None
@@ -89,7 +89,7 @@ class VectorModel(PredictorModel, ABC):
     def isRegressionModel(self) -> bool:
         pass
 
-    def setFeatureGenerator(self, featureGenerator: FeatureGenerator):
+    def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
         """
         Sets a feature generator which shall be used to compute the actual inputs of the model from the data frame that is given.
         Feature computation takes place before input transformation.
@@ -152,14 +152,15 @@ class VectorModel(PredictorModel, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
+        log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
             self._targetTransformer.fit(Y)
             Y = self._targetTransformer.apply(Y)
+        log.info(f"Received outputs={list(Y.columns)}, inputs={self._modelInputVariableNames}")
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
-        log.info(f"Training {self.__class__.__name__} with inputs={self._modelInputVariableNames}, outputs={list(Y.columns)}")
         self._fit(X, Y)
 
     @abstractmethod
