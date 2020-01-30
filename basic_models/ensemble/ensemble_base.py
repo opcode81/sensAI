@@ -14,9 +14,6 @@ class EnsembleVectorModel(VectorModel, ABC):
     def __init__(self, models: Sequence[VectorModel], numProcesses=1):
         self.numProcesses = numProcesses
         self.models = list(models)
-        self.executor = None
-        if numProcesses > 1:
-            self.executor = ProcessPoolExecutor(max_workers=self.numProcesses)
         super().__init__()
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -26,14 +23,14 @@ class EnsembleVectorModel(VectorModel, ABC):
             return
 
         fittedModelFutures = []
+        executor = ProcessPoolExecutor(max_workers=self.numProcesses)
         fitters = [VectorModelWithSeparateFeatureGeneration(model) for model in self.models]
         for fitter in fitters:
             intermediateStep = fitter.fitStart(X, Y)
             frameinfo = getframeinfo(currentframe())
             PickleFailureDebugger.logFailureIfEnabled(intermediateStep,
-                contextInfo=f"Submitting {fitter} in {frameinfo.filename} line: {frameinfo.lineno}")
-            fittedModelFutures.append(self.executor.submit(intermediateStep.execute))
-
+                contextInfo=f"Submitting {fitter} in {frameinfo.filename}:{frameinfo.lineno}")
+            fittedModelFutures.append(executor.submit(intermediateStep.execute))
         for i, fittedModelFuture in enumerate(fittedModelFutures):
             self.models[i] = fitters[i].fitEnd(fittedModelFuture.result())
 
@@ -42,14 +39,14 @@ class EnsembleVectorModel(VectorModel, ABC):
             return [model.predict(X) for model in self.models]
 
         predictionFutures = []
+        executor = ProcessPoolExecutor(max_workers=self.numProcesses)
         predictors = [VectorModelWithSeparateFeatureGeneration(model) for model in self.models]
         for predictor in predictors:
             predictFinaliser = predictor.predictStart(X)
             frameinfo = getframeinfo(currentframe())
             PickleFailureDebugger.logFailureIfEnabled(predictFinaliser,
-                contextInfo=f"Submitting {predictFinaliser} in {frameinfo.filename} line: {frameinfo.lineno}")
-            predictionFutures.append(self.executor.submit(predictFinaliser.execute))
-
+                contextInfo=f"Submitting {predictFinaliser} in {frameinfo.filename}:{frameinfo.lineno}")
+            predictionFutures.append(executor.submit(predictFinaliser.execute))
         return [predictionFuture.result() for predictionFuture in predictionFutures]
 
     def _predict(self, x):
