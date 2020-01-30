@@ -19,7 +19,7 @@ class PickleFailureDebugger:
             pickle.dumps(obj)
         except:
             # determine dictionary of children to investigate (if any)
-            if hasattr(obj, '__dict__'):
+            if hasattr(obj, '__dict__'):  # Because of strange behaviour of getstate, here try-except is used instead of if-else
                 try:  # Because of strange behaviour of getattr(_, '__getstate__'), we here use try-except
                     d = obj.__getstate__()
                     if type(d) != dict:
@@ -72,10 +72,10 @@ class PickleFailureDebugger:
         """
         if cls.enabled:
             failures = cls.debugFailure(obj)
-            prefix = f"Pickleability analysis for {obj}"
+            prefix = f"Picklability analysis for {obj}"
             if contextInfo is not None:
                 prefix += " (context: %s)" % contextInfo
             if len(failures) > 0:
                 log.error(f"{prefix}: pickling would result in failures due to: {failures}")
             else:
-                log.info(f"{prefix}: is pickleable")
+                log.info(f"{prefix}: is picklable")

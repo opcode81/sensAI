@@ -2,7 +2,7 @@ import copy
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import List, Sequence, Union, Dict, Callable, Any, Optional
+from typing import List, Sequence, Union, Dict, Callable, Any, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -86,6 +86,32 @@ class DFTConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[df[self.column].apply(self.condition)]
+
+
+class DFTInSetComparisonRowFilterOnColumn(RuleBasedDataFrameTransformer):
+    """
+    Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
+    for which the function returns True
+    """
+    def __init__(self, column: str, setToKeep: Set):
+        self.setToKeep = setToKeep
+        self.column = column
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[df[self.column].isin(self.setToKeep)]
+
+
+class DFTNotInSetComparisonRowFilterOnColumn(RuleBasedDataFrameTransformer):
+    """
+    Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
+    for which the function returns True
+    """
+    def __init__(self, column: str, setToDrop: Set):
+        self.setToDrop = setToDrop
+        self.column = column
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[~df[self.column].isin(self.setToDrop)]
 
 
 class DFTVectorizedConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
@@ -188,6 +214,26 @@ class DFTColumnFilter(RuleBasedDataFrameTransformer):
             df = df[self.keep]
         if self.drop is not None:
             df = df.drop(columns=self.drop)
+        return df
+
+
+class DFTKeepColumns(DFTColumnFilter):
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[self.keep]
+
+
+class DFTDRowFilterOnIndex(RuleBasedDataFrameTransformer):
+    def __init__(self, keep: Set = None, drop: Set = None):
+        self.drop = drop
+        self.keep = keep
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        if self.keep is not None:
+            df = df.loc[self.keep]
+        if self.drop is not None:
+            df = df.drop(self.drop)
         return df
 
 
@@ -312,6 +358,15 @@ class DFTCountEntries(RuleBasedDataFrameTransformer):
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         series = df[self.columnForEntryCount].value_counts()
         return pd.DataFrame({self.columnForEntryCount: series.index, self.columnNameForResultingCounts: series.values})
+
+
+class DFTAggregationOnColumn(RuleBasedDataFrameTransformer):
+    def __init__(self, columnForAggregation: str, aggregation: Callable):
+        self.columnForAggregation = columnForAggregation
+        self.aggregation = aggregation
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.groupby(self.columnForAggregation).agg(self.aggregation)
 
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
