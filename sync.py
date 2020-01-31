@@ -104,7 +104,7 @@ class Repo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(newSyncCommitIdThisRepo)
         execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
-        execute('git commit -m "Updated sync commit identifiers"')
+        execute('git commit -m "Updated sync commit identifiers (pull)"')
 
         print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
         
@@ -144,7 +144,7 @@ class Repo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(commitId)
         execute("git add %s" % self.SYNC_COMMIT_ID_FILE_THIS_REPO)
-        execute('git commit -m "Updated sync commit identifier"')
+        execute('git commit -m "Updated sync commit identifier (push)"')
 
         os.chdir(libRepoRootPath)
         
