@@ -24,6 +24,7 @@ def gitLog(path, arg):
     os.chdir(oldPath)
     return lg
 
+
 def gitCommit(msg):
     with open("commitmsg.txt", "w") as f:
         f.write(msg)
@@ -32,6 +33,7 @@ def gitCommit(msg):
 
 
 LIB_DIRECTORY = "basic_models"
+LIB_NAME = LIB_DIRECTORY
 
 libRepoRootPath = os.path.abspath(os.path.realpath(__file__))
 libRepoLibPath = os.path.join(libRepoRootPath, LIB_DIRECTORY)
@@ -59,6 +61,18 @@ class Repo:
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return lg
+
+    def gitLogLibRepoSinceLastSync(self):
+        syncIdFile = os.path.join(self.pathToLibInThisRepo, self.SYNC_FILE_BASIC_MODELS_REPO)
+        if not os.path.exists(syncIdFile):
+            return ""
+        with open(syncIdFile, "r") as f:
+            syncId = f.read().strip()
+        lg = gitLog(libRepoLibPath, 'HEAD "^%s" .'  % syncId)
+        lg = re.sub(r"Sync (\w+)\n\n", r"Sync\n\n", lg, flags=re.MULTILINE)
+        indent = "  "
+        lg = indent + lg.replace("\n", "\n" + indent)
+        return "\n\n" + lg
 
     def pull(self):
         os.chdir(libRepoRootPath)
@@ -100,7 +114,7 @@ class Repo:
         with open(self.SYNC_FILE_BASIC_MODELS_REPO, "w") as f:
             f.write(commitId)
         execute("git add %s" % self.SYNC_FILE_BASIC_MODELS_REPO)
-        execute(f'git commit -m "{LIB_DIRECTORY} {commitId}"')
+        gitCommit(f"{LIB_NAME} {commitId}" + self.gitLogLibRepoSinceLastSync())
         commitId = call("git rev-parse HEAD").strip()
 
         # update information on the commit id we just added
