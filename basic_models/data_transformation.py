@@ -260,7 +260,7 @@ class DFTNormalisation(DataFrameTransformer):
                     flatValues = applicableDF.values.flatten()
                     rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
             else:
-                log.debug(f"{rule} matched no columns")
+                log.log(logging.DEBUG-1, f"{rule} matched no columns")
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)

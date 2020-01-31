@@ -57,6 +57,13 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData):
 
 
 class VectorModelEvaluator(ABC):
+    @staticmethod
+    def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
+        if model.isRegressionModel():
+            return VectorRegressionModelEvaluator(data, **kwargs)
+        else:
+            return VectorClassificationModelEvaluator(data, **kwargs)
+
     def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
         """
         Constructs an evaluator with test and training data.
@@ -176,6 +183,13 @@ class VectorModelCrossValidationData(ABC):
 
 
 class VectorModelCrossValidator(ABC):
+    @staticmethod
+    def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) -> "VectorModelCrossValidator":
+        if model.isRegressionModel():
+            return VectorRegressionModelCrossValidator(data, folds=folds, **kwargs)
+        else:
+            return VectorClassificationModelCrossValidator(data, folds=folds, **kwargs)
+
     def __init__(self, data: InputOutputData, folds: int, randomSeed=42, returnTrainedModels=False):
         """
         :param data: the data set
