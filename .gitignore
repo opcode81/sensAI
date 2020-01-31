@@ -1,3 +1,5 @@
+/.idea
+basic_models.iml
 *.pyc
 *.pyc.*
 *.bak
