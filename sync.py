@@ -69,7 +69,7 @@ class Repo:
         with open(syncIdFile, "r") as f:
             syncId = f.read().strip()
         lg = gitLog(libRepoLibPath, 'HEAD "^%s" .'  % syncId)
-        lg = re.sub(r"Sync (\w+)\n\n", r"Sync\n\n", lg, flags=re.MULTILINE)
+        lg = re.sub(r"Sync (\w+)\n\s*\n", r"Sync\n\n", lg, flags=re.MULTILINE)
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return "\n\n" + lg
