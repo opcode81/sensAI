@@ -137,16 +137,15 @@ if __name__ == '__main__':
     args = sys.argv[1:]
     if len(args) != 2:
         print(f"usage: sync.py <{'|'.join([repo.name for repo in repos])}> <push|pull>")
-        sys.exit(0)
-        
-    repo = [r for r in repos if r.name == args[0]]
-    if len(repo) != 1:
-        raise ValueError(f"Unknown repo '{args[0]}'")
-    repo = repo[0]
-    
-    if args[1] == "push":
-        repo.push()
-    elif args[1] == "pull":
-        repo.pull()
     else:
-        raise ValueError(f"Unknown command '{args[1]}'")
+        repo = [r for r in repos if r.name == args[0]]
+        if len(repo) != 1:
+            raise ValueError(f"Unknown repo '{args[0]}'")
+        repo = repo[0]
+
+        if args[1] == "push":
+            repo.push()
+        elif args[1] == "pull":
+            repo.pull()
+        else:
+            raise ValueError(f"Unknown command '{args[1]}'")
