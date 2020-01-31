@@ -35,7 +35,7 @@ def gitCommit(msg):
 LIB_DIRECTORY = "basic_models"
 LIB_NAME = LIB_DIRECTORY
 
-libRepoRootPath = os.path.abspath(os.path.realpath(__file__))
+libRepoRootPath = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 libRepoLibPath = os.path.join(libRepoRootPath, LIB_DIRECTORY)
 
 
