@@ -40,8 +40,8 @@ libRepoLibPath = os.path.join(libRepoRootPath, LIB_DIRECTORY)
 
 
 class Repo:
-    SYNC_FILE_BASIC_MODELS_REPO = ".syncCommitId"
-    SYNC_FILE_THIS_REPO = ".syncCommitId.this"
+    SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId"
+    SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
     
     def __init__(self, name, branch, pathToBasicModels):
         self.pathToLibInThisRepo = os.path.abspath(pathToBasicModels)
@@ -51,7 +51,7 @@ class Repo:
         self.branch = branch
     
     def lastSyncIdThisRepo(self):
-        with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_FILE_THIS_REPO), "r") as f:
+        with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_THIS_REPO), "r") as f:
             commitId = f.read().strip()
         return commitId
     
@@ -63,7 +63,7 @@ class Repo:
         return lg
 
     def gitLogLibRepoSinceLastSync(self):
-        syncIdFile = os.path.join(self.pathToLibInThisRepo, self.SYNC_FILE_BASIC_MODELS_REPO)
+        syncIdFile = os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO)
         if not os.path.exists(syncIdFile):
             return ""
         with open(syncIdFile, "r") as f:
@@ -76,16 +76,36 @@ class Repo:
 
     def pull(self):
         os.chdir(libRepoRootPath)
+
+        # switch to branch in lib repo and remove library tree
         execute("git checkout %s" % self.branch)
         shutil.rmtree(LIB_DIRECTORY)
+
+        # get log with relevant commits in this repo
         lg = self.gitLogThisRepoSinceLastSync()
+
+        # copy tree from this repo to lib repo
         shutil.copytree(self.pathToLibInThisRepo, LIB_DIRECTORY)
-        for fn in (self.SYNC_FILE_BASIC_MODELS_REPO, self.SYNC_FILE_THIS_REPO):
+        for fn in (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO):
             p = os.path.join(LIB_DIRECTORY, fn)
             if os.path.exists(p):
                 os.unlink(p)
+
+        # make commit in lib repo
         os.system("git add %s" % LIB_DIRECTORY)
         gitCommit(f"Sync {self.name}\n\n" + lg)
+        newSyncCommitIdLibRepo = call("git rev-parse HEAD").strip()
+
+        # update commit ids in this repo
+        os.chdir(self.pathToLibInThisRepo)
+        newSyncCommitIdThisRepo = call("git rev-parse HEAD").strip()
+        with open(self.SYNC_COMMIT_ID_FILE_LIB_REPO, "w") as f:
+            f.write(newSyncCommitIdLibRepo)
+        with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
+            f.write(newSyncCommitIdThisRepo)
+        execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
+        execute('git commit -m "Updated sync commit identifiers"')
+
         print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
         
     def push(self):
@@ -114,16 +134,16 @@ class Repo:
 
         # commit new version in this repo
         execute("git add .")
-        with open(self.SYNC_FILE_BASIC_MODELS_REPO, "w") as f:
+        with open(self.SYNC_COMMIT_ID_FILE_LIB_REPO, "w") as f:
             f.write(commitId)
-        execute("git add %s" % self.SYNC_FILE_BASIC_MODELS_REPO)
+        execute("git add %s" % self.SYNC_COMMIT_ID_FILE_LIB_REPO)
         gitCommit(f"{LIB_NAME} {commitId}" + libLogSinceLastSync)
         commitId = call("git rev-parse HEAD").strip()
 
         # update information on the commit id we just added
-        with open(self.SYNC_FILE_THIS_REPO, "w") as f:
+        with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(commitId)
-        execute("git add %s" % self.SYNC_FILE_THIS_REPO)
+        execute("git add %s" % self.SYNC_COMMIT_ID_FILE_THIS_REPO)
         execute('git commit -m "Updated sync commit identifier"')
 
         os.chdir(libRepoRootPath)
