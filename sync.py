@@ -89,6 +89,9 @@ class Repo:
         print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
         
     def push(self):
+        # get change log since last sync
+        libLogSinceLastSync = self.gitLogLibRepoSinceLastSync()
+
         os.chdir(libRepoRootPath)
 
         # check if this repo's branch in the source repo was merged into master
@@ -106,7 +109,7 @@ class Repo:
 
         # get the commit id of the source repo we just copied
         commitId = call("git rev-parse HEAD").strip()
-        
+
         os.chdir(self.pathToLibInThisRepo)
 
         # commit new version in this repo
@@ -114,7 +117,7 @@ class Repo:
         with open(self.SYNC_FILE_BASIC_MODELS_REPO, "w") as f:
             f.write(commitId)
         execute("git add %s" % self.SYNC_FILE_BASIC_MODELS_REPO)
-        gitCommit(f"{LIB_NAME} {commitId}" + self.gitLogLibRepoSinceLastSync())
+        gitCommit(f"{LIB_NAME} {commitId}" + libLogSinceLastSync)
         commitId = call("git rev-parse HEAD").strip()
 
         # update information on the commit id we just added
