@@ -8,6 +8,7 @@ import re
 import threading
 import time
 from abc import abstractmethod, ABC
+from functools import wraps, partial
 from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
 import sqlite3
@@ -512,3 +513,26 @@ def cached(fn: Callable[[], T], picklePath) -> T:
         dumpPickle(result, picklePath)
         return result
 
+
+class PickleCached(object):
+    def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None):
+        """
+
+        :param cacheBasePath:
+        :param filenamePrefix:
+        :param filename:
+        """
+        self.filename = filename
+        self.cacheBasePath = cacheBasePath
+        self.filenamePrefix = filenamePrefix
+
+        if self.filenamePrefix is None:
+            self.filenamePrefix = ""
+        else:
+            self.filenamePrefix += "-"
+
+    def __call__(self, fn, *args, **kwargs):
+        if self.filename is None:
+            self.filename = self.filenamePrefix + fn.__qualname__ + ".cache.pickle"
+        picklePath = os.path.join(self.cacheBasePath,  self.filename)
+        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath)
