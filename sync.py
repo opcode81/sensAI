@@ -20,7 +20,7 @@ def execute(cmd):
 def gitLog(path, arg):
     oldPath = os.getcwd()
     os.chdir(path)
-    lg = call("git log --no-merges --name-only " + arg)
+    lg = call("git log --no-merges " + arg)
     os.chdir(oldPath)
     return lg
 
@@ -56,7 +56,7 @@ class Repo:
         return commitId
     
     def gitLogThisRepoSinceLastSync(self):
-        lg = gitLog(self.pathToLibInThisRepo, 'HEAD "^%s" .' % self.lastSyncIdThisRepo())
+        lg = gitLog(self.pathToLibInThisRepo, '--name-only HEAD "^%s" .' % self.lastSyncIdThisRepo())
         lg = re.sub(r'commit [0-9a-z]{8,40}\n.*\n.*\n\s*\n.*\n\s*\n.*\.syncCommitId\.this', r"", lg, flags=re.MULTILINE)  # remove commits with sync commit id update
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
