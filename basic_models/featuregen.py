@@ -67,10 +67,12 @@ class FeatureGenerator(ABC):
         resultDF = self._generate(df, ctx=ctx)
 
         # ensure that categorical columns have dtype 'category'
-        for colName in self._categoricalFeatureNames:
-            series = resultDF[colName]
-            if series.dtype.name != 'category':
-                resultDF[colName] = series.astype('category')
+        if len(self._categoricalFeatureNames) > 0:
+            resultDF = resultDF.copy()  # resultDF we got might be a view of some other DF, so before we modify it, we must copy it
+            for colName in self._categoricalFeatureNames:
+                series = resultDF[colName].copy()
+                if series.dtype.name != 'category':
+                    resultDF[colName] = series.astype('category', copy=False)
 
         return resultDF
 
