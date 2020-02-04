@@ -251,12 +251,12 @@ class RegressionEvalStats(EvalStats):
         """
         errors = self._getErrors()
         fig = None
-        title = "distribution of errors"
+        title = "Prediction Error Distribution"
         if figure:
             fig = plt.figure(title)
         sns.distplot(errors, bins=bins)
         plt.title(title)
-        plt.xlabel("error")
+        plt.xlabel("error (prediction - ground truth)")
         plt.ylabel("probability density")
         return fig
 
@@ -268,7 +268,7 @@ class RegressionEvalStats(EvalStats):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "scatter plot true vs predicted values"
+        title = "Scatter Plot of Ground Truth vs. Predicted Values"
         if figure:
             fig = plt.figure(title)
         y_range = [min(self.y_true), max(self.y_true)]
@@ -289,7 +289,7 @@ class RegressionEvalStats(EvalStats):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "heatmap plot true vs predicted values"
+        title = "Heat Map of Ground Truth vs. Predicted Values"
         if figure:
             fig = plt.figure(title)
         y_range = [min(self.y_true), max(self.y_true)]
@@ -362,7 +362,7 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    def getGlobalStats(self):
+    def getGlobalStats(self) -> RegressionEvalStats:
         """
         Gets an evaluation statistics object that combines the data from all contained eval stats objects
         """
@@ -371,13 +371,6 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
             self.globalStats = RegressionEvalStats(y_predicted, y_true)
         return self.globalStats
-
-    def plotGroundTruthVsPredictionsPairPlot(self, title=None):
-        gstats = self.getGlobalStats()
-        df = pd.DataFrame({"groundTruth": gstats.y_true, "prediction": gstats.y_predicted})
-        g = sns.pairplot(df)
-        if title is not None:
-            g.fig.suptitle(title)
 
 
 class ClassificationEvalStatsCollection(EvalStatsCollection):
