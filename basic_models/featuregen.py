@@ -19,8 +19,9 @@ class FeatureGenerator(ABC):
     def __init__(self, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (), addCategoricalDefaultRules=True):
         """
-        :param categoricalFeatureNames: if provided, will be added to the feature generator's meta-information which can
-            be leveraged for further transformations, e.g. one-hot encoding.
+        :param categoricalFeatureNames: if provided, will ensure that the respective columns in the generated data frames will
+            have dtype 'category'.
+            Furthermore, presence of meta-information can later be leveraged for further transformations, e.g. one-hot encoding.
         :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
             These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
             within a data processing pipeline. They do not affect feature generation.
@@ -54,7 +55,6 @@ class FeatureGenerator(ABC):
         """
         pass
 
-    @abstractmethod
     def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         """
         Generates features for the data points in the given data frame
@@ -63,6 +63,29 @@ class FeatureGenerator(ABC):
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
         :return: a data frame containing the generated features, which uses the same index as X (and Y)
+        """
+        resultDF = self._generate(df, ctx=ctx)
+
+        # ensure that categorical columns have dtype 'category'
+        for colName in self._categoricalFeatureNames:
+            series = resultDF[colName]
+            if series.dtype.name != 'category':
+                #resultDF[colName] = series.astype('category')
+                pass
+
+        return resultDF
+
+    @abstractmethod
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        """
+        Generates features for the data points in the given data frame.
+
+        :param df: the input data frame for which to generate features
+        :param ctx: a context object whose functionality may be required for feature generation;
+            this is typically the model instance that this feature generator is to generate inputs for
+        :return: a data frame containing the generated features, which uses the same index as X (and Y).
+            The data frame's columns holding categorical columns are not required to have dtype 'category';
+            this will be ensured by the encapsulating call.
         """
         pass
 
@@ -107,7 +130,7 @@ class MultiFeatureGenerator(FeatureGenerator):
         else:
             return pd.concat(dfs, axis=1)
 
-    def generate(self, inputDF: pd.DataFrame, ctx=None):
+    def _generate(self, inputDF: pd.DataFrame, ctx=None):
         def generateFeatures(fg: FeatureGenerator):
             return fg.generate(inputDF, ctx=ctx)
         return self._generateFromMultiple(generateFeatures, inputDF.index)
@@ -132,7 +155,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         self.cache = cache
 
-    def generate(self, df: pd.DataFrame, ctx=None):
+    def _generate(self, df: pd.DataFrame, ctx=None):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
             if idx % 100 == 0:
@@ -166,7 +189,7 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
             columns = [columns]
         self.columns = columns
 
-    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         missingCols = set(self.columns) - set(df.columns)
         if len(missingCols) > 0:
             raise Exception(f"Columns {missingCols} not present in data frame; available columns: {list(df.columns)}")
@@ -174,7 +197,7 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
 
 
 class FeatureGeneratorTakeAllColumns(RuleBasedFeatureGenerator):
-    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         return df
 
 
@@ -194,7 +217,7 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             columns = [columns]
         self.columns = columns
 
-    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         resultDf = pd.DataFrame(index=df.index)
         for col in self.columns:
             log.info(f"Flattening column {col}")
@@ -226,7 +249,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
 
-    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.columnName
         if self.takeInputColumnIfPresent and colName in df.columns:
             self.log.debug(f"Taking column '{colName}' from input data frame")
@@ -259,7 +282,7 @@ class ChainedFeatureGenerator(FeatureGenerator):
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
         self.featureGenerators = featureGenerators
 
-    def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         for featureGen in self.featureGenerators:
             df = featureGen.generate(df, ctx)
         return df
@@ -328,12 +351,12 @@ class FeatureCollector(object):
         """
         self._featureGeneratorsOrNames = featureGeneratorsOrNames
         self._registry = registry
-        self._multiFeatureGenerator = self.createMultiFeatureGenerator()
+        self._multiFeatureGenerator = self._createMultiFeatureGenerator()
 
     def getMultiFeatureGenerator(self) -> MultiFeatureGenerator:
         return self._multiFeatureGenerator
 
-    def createMultiFeatureGenerator(self):
+    def _createMultiFeatureGenerator(self):
         featureGenerators = []
         for f in self._featureGeneratorsOrNames:
             if isinstance(f, FeatureGenerator):

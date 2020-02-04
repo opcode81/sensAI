@@ -42,30 +42,45 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         """
         super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
             targetTransformer=targetTransformer)
-        self.modelInputTransformer = sklearnInputTransformer
-        self.modelOutputTransformer = sklearnOutputTransformer
+        self.sklearnInputTransformer = sklearnInputTransformer
+        self.sklearnOutputTransformer = sklearnOutputTransformer
         self.modelConstructor = modelConstructor
         self.modelArgs = modelArgs
 
-    def _transformInput(self, inputs: pd.DataFrame, fit=False) -> np.ndarray:
-        inputValues = inputs.values
-        if self.modelInputTransformer is not None:
+    def _transformInput(self, inputs: pd.DataFrame, fit=False) -> pd.DataFrame:
+        if self.sklearnInputTransformer is None:
+            return inputs
+        else:
+            inputValues = inputs.values
+            shapeBefore = inputValues.shape
             if fit:
-                inputValues = self.modelInputTransformer.fit_transform(inputValues)
+                inputValues = self.sklearnInputTransformer.fit_transform(inputValues)
             else:
-                inputValues = self.modelInputTransformer.transform(inputValues)
-        return inputValues
+                inputValues = self.sklearnInputTransformer.transform(inputValues)
+            if inputValues.shape != shapeBefore:
+                raise Exception("sklearnInputTransformer changed the shape of the input, which is unsupported. Consider using an a DFTSkLearnTransformer in inputTransformers instead.")
+            return pd.DataFrame(inputValues, index=inputs.index, columns=inputs.columns)
+
+    def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        """
+        Designed to be overridden in order to make input data-specific changes to modelArgs
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        """
+        pass
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        inputValues = self._transformInput(inputs, fit=True)
-        self._fitSkLearn(inputValues, outputs)
+        inputs = self._transformInput(inputs, fit=True)
+        self._updateModelArgs(inputs, outputs)
+        self._fitSkLearn(inputs, outputs)
 
     @abstractmethod
-    def _fitSkLearn(self, inputValues: np.ndarray, outputs: pd.DataFrame):
+    def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         pass
 
     def _predict(self, x: pd.DataFrame):
-        inputValues = self._transformInput(x)
+        inputValues = self._transformInput(x).values
         return self._predictSkLearn(inputValues)
 
     @abstractmethod
@@ -89,16 +104,19 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
         self.models = {}
 
     def __str__(self):
-        modelStr = str(next(iter(self.models.values()))) if len(self.models) > 0 else "None"
+        if len(self.models) > 0:
+            modelStr = str(next(iter(self.models.values())))
+        else:
+            modelStr = f"{self.modelConstructor.__name__}{self.modelArgs}"
         return f"{self.__class__.__name__}[{modelStr}]"
 
-    def _fitSkLearn(self, inputValues: np.ndarray, outputs: pd.DataFrame):
+    def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         for predictedVarName in outputs.columns:
             log.info(f"Fitting model for output variable '{predictedVarName}'")
             model = createSkLearnModel(self.modelConstructor,
                     self.modelArgs,
-                    outputTransformer=copy.deepcopy(self.modelOutputTransformer))
-            model.fit(inputValues, outputs[predictedVarName].values)
+                    outputTransformer=copy.deepcopy(self.sklearnOutputTransformer))
+            model.fit(inputs, outputs[predictedVarName])
             self.models[predictedVarName] = model
 
     def _predictSkLearn(self, inputValues) -> pd.DataFrame:
@@ -121,14 +139,23 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
             sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
             inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
             **modelArgs)
-        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, outputTransformer=self.modelOutputTransformer)
+        self.model = None
 
     def __str__(self):
-        return f"{self.__class__.__name__}[{self.model}]"
+        if self.model is not None:
+            modelStr = str(self.model)
+        else:
+            modelStr = f"{self.modelConstructor.__name__}{self.modelArgs}"
+        return f"{self.__class__.__name__}[{modelStr}]"
 
-    def _fitSkLearn(self, inputValues: np.ndarray, outputs: pd.DataFrame):
-        log.info("Fitting multi-dimensional model")
-        self.model.fit(inputValues, outputs.values)
+    def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        if len(outputs.columns) > 1:
+            log.info(f"Fitting a single multi-dimensional model for all {len(outputs.columns)} output dimensions")
+        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, outputTransformer=self.sklearnOutputTransformer)
+        outputValues = outputs.values
+        if outputValues.shape[1] == 1:  # for 1D output, shape must be (numSamples,) rather than (numSamples, 1)
+            outputValues = np.ravel(outputValues)
+        self.model.fit(inputs, outputValues)
 
     def _predictSkLearn(self, inputValues) -> pd.DataFrame:
         Y = self.model.predict(inputValues)

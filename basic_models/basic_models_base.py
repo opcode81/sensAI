@@ -160,9 +160,9 @@ class VectorModel(PredictorModel, ABC):
         if self._targetTransformer is not None:
             self._targetTransformer.fit(Y)
             Y = self._targetTransformer.apply(Y)
-        log.info(f"Received outputs={list(Y.columns)}, inputs={self._modelInputVariableNames}")
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
+        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]={self._modelInputVariableNames}")
         self._fit(X, Y)
 
     @abstractmethod

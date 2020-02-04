@@ -110,10 +110,12 @@ class ParameterCombinationEquivalenceClassValueCache(ABC):
 
 
 class ParametersMetricsCollection:
-    def __init__(self, csvPath=None):
+    def __init__(self, csvPath=None, sortColumnName=None):
         """
         :param csvPath: path to save the data frame to upon every update
+        :param sortColumnName: the column name by which to sort the data frame that is collected; if None, do not sort
         """
+        self.sortColumnName = sortColumnName
         self.csvPath = csvPath
         self.df = None
         self.cols = None
@@ -122,9 +124,26 @@ class ParametersMetricsCollection:
     def addValues(self, values: Dict[str, Any]):
         if self.df is None:
             self.cols = list(values.keys())
+
+            # check sort column and move it to the front
+            if self.sortColumnName is not None:
+                if self.sortColumnName not in self.cols:
+                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
+                else:
+                    self.cols.remove(self.sortColumnName)
+                    self.cols.insert(0, self.sortColumnName)
+
             self.df = pd.DataFrame(columns=self.cols)
+
+        # append data to data frame
         self.df.loc[self._currentRow] = [values[c] for c in self.cols]
         self._currentRow += 1
+
+        # sort where applicable
+        if self.sortColumnName is not None and self.sortColumnName in self.df.columns:
+            self.df.sort_values(self.sortColumnName, axis=0, inplace=True)
+            self.df.reset_index(drop=True, inplace=True)
+
         self._saveCSV()
 
     def _saveCSV(self):
@@ -147,17 +166,38 @@ class ParametersMetricsCollection:
 class GridSearch(TrackedExperimentDataProvider):
     log = log.getChild(__qualname__)
 
-    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Dict[str, Sequence[Any]], numProcesses=1,
-            csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
+    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
+            numProcesses=1, csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
+        """
+        :param modelFactory: the function to call with keyword arguments reflecting the parameters to try in order to obtain a model instance
+        :param parameterOptions: a dictionary which maps from parameter names to lists of possible values - or a list of such dictionaries,
+            where each dictionary in the list has the same keys
+        :param numProcesses: the number of parallel processes to use for the search (use 1 to run without multi-processing)
+        :param csvResultsPath: the path of a CSV file to which the results shall be written
+        :param parameterCombinationSkipDecider: an instance to which parameters combinations can be passed in order to decide whether the
+            combination shall be skipped (e.g. because it is redundant/equivalent to another combination or inadmissible)
+        """
         self.modelFactory = modelFactory
-        self.parameterOptions = parameterOptions
+        if type(parameterOptions) == list:
+            self.parameterOptionsList = parameterOptions
+            paramNames = set(parameterOptions[0].keys())
+            for d in parameterOptions[1:]:
+                if set(d.keys()) != paramNames:
+                    raise ValueError("Keys must be the same for all parameter options dictionaries")
+        else:
+            self.parameterOptionsList = [parameterOptions]
         self.numProcesses = numProcesses
         self.csvResultsPath = csvResultsPath
         self.parameterCombinationSkipDecider = parameterCombinationSkipDecider
-        self.numCombinations = 1
-        for options in parameterOptions.values():
-            self.numCombinations *= len(options)
+
+        self.numCombinations = 0
+        for parameterOptions in self.parameterOptionsList:
+            n = 1
+            for options in parameterOptions.values():
+                n *= len(options)
+            self.numCombinations += n
         log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
+
         self._executor = None
         self._trackedExperiment = None
 
@@ -179,9 +219,15 @@ class GridSearch(TrackedExperimentDataProvider):
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
-    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]):
+    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator], sortColumnName=None) -> pd.DataFrame:
+        """
+        :param evaluatorOrValidator: the evaluator or cross-validator with which to evaluate models
+        :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
+            Note that the column names that are generated depend on the evaluator/validator being applied.
+        :return: the data frame with all evaluation results
+        """
         loggingCallback = self._trackedExperiment.trackValues if self._trackedExperiment is not None else None
-        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath)
+        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath, sortColumnName=sortColumnName)
 
         def collectResult(values):
             if values is None:
@@ -192,14 +238,16 @@ class GridSearch(TrackedExperimentDataProvider):
             log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
 
         if self.numProcesses == 1:
-            for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
-                collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
+            for parameterOptions in self.parameterOptionsList:
+                for i, paramsDict in enumerate(iterParamCombinations(parameterOptions)):
+                    collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
             futures = []
-            for i, paramsDict in enumerate(iterParamCombinations(self.parameterOptions)):
-                futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
-                    **paramsDict))
+            for parameterOptions in self.parameterOptionsList:
+                for i, paramsDict in enumerate(iterParamCombinations(parameterOptions)):
+                    futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
+                        **paramsDict))
             for i, future in enumerate(futures):
                 collectResult(future.result())
 
