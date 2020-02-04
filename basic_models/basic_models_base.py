@@ -1,3 +1,4 @@
+import functools
 import logging
 from abc import ABC, abstractmethod
 from typing import Sequence, List, Any, Optional, Union, TypeVar
@@ -82,8 +83,14 @@ class VectorModel(PredictorModel, ABC):
         self._name = None
 
     @staticmethod
-    def _flattenList(l: Sequence[Union[T, List[T]]]) -> List[T]:
-        return [i[0] if type(i) == list else i for i in l]
+    def _flattened(l: Sequence[Union[T, List[T]]]) -> List[T]:
+        result = []
+        for x in l:
+            if type(x) == list:
+                result.extend(x)
+            else:
+                result.append(x)
+        return result
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
@@ -92,7 +99,7 @@ class VectorModel(PredictorModel, ABC):
         :param inputTransformers: DataFrameTransformers for the transformation of inputs
         :return: self
         """
-        self._inputTransformerChain = DataFrameTransformerChain(self._flattenList(inputTransformers))
+        self._inputTransformerChain = DataFrameTransformerChain(self._flattened(inputTransformers))
         return self
 
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
@@ -102,7 +109,7 @@ class VectorModel(PredictorModel, ABC):
         :param outputTransformers: DataFrameTransformers for the transformation of outputs (after the model has been applied)
         :return: self
         """
-        self._outputTransformerChain = DataFrameTransformerChain(self._flattenList(outputTransformers))
+        self._outputTransformerChain = DataFrameTransformerChain(self._flattened(outputTransformers))
         return self
 
     def withTargetTransformer(self, targetTransformer: InvertibleDataFrameTransformer) -> __qualname__:
