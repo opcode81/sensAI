@@ -70,8 +70,7 @@ class FeatureGenerator(ABC):
         for colName in self._categoricalFeatureNames:
             series = resultDF[colName]
             if series.dtype.name != 'category':
-                #resultDF[colName] = series.astype('category')
-                pass
+                resultDF[colName] = series.astype('category')
 
         return resultDF
 

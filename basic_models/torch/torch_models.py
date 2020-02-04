@@ -37,8 +37,6 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN,
-            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer = None,
             cuda=True, pDropout=None, **nnOptimiserParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
@@ -50,9 +48,7 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
         :param nnOptimiserParams: parameters to pass on to NNOptimiser
         """
         super().__init__(MultiLayerPerceptron, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
-                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams,
-                inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-                targetTransformer=targetTransformer)
+                dict(pDropout=pDropout), normalisationMode, nnOptimiserParams)
 
 
 class TorchMultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
@@ -64,7 +60,7 @@ class TorchMultiLayerPerceptronVectorClassificationModel(TorchVectorClassificati
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None,
-            inputTransformers: Sequence[DataFrameTransformer] = (), **nnOptimiserParams):
+            **nnOptimiserParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
@@ -75,4 +71,4 @@ class TorchMultiLayerPerceptronVectorClassificationModel(TorchVectorClassificati
         :param nnOptimiserParams: parameters to pass on to NNOptimiser
         """
         super().__init__(MultiLayerPerceptron, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
-            dict(pDropout=pDropout), normalisationMode, nnOptimiserParams, inputTransformers=inputTransformers)
+            dict(pDropout=pDropout), normalisationMode, nnOptimiserParams)

@@ -26,26 +26,32 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
     """
     log = log.getChild(__qualname__)
 
-    def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
-            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None, **modelArgs):
+    def __init__(self, modelConstructor, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
-        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
-        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
-        :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
-        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
-        :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
-            that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
-            the model, i.e. the transformation is completely transparent when applying the model.
         :param modelArgs: arguments to be passed to the sklearn model constructor
         """
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers,
-            targetTransformer=targetTransformer)
-        self.sklearnInputTransformer = sklearnInputTransformer
-        self.sklearnOutputTransformer = sklearnOutputTransformer
+        super().__init__()
+        self.sklearnInputTransformer = None
+        self.sklearnOutputTransformer = None
         self.modelConstructor = modelConstructor
         self.modelArgs = modelArgs
+
+    def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:
+        """
+        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
+        :return: self
+        """
+        self.sklearnInputTransformer = sklearnInputTransformer
+        return self
+
+    def withSkLearnOutputTransformer(self, sklearnOutputTransformer):
+        """
+        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
+        :return: self
+        """
+        self.sklearnOutputTransformer = sklearnOutputTransformer
+        return self
 
     def _transformInput(self, inputs: pd.DataFrame, fit=False) -> pd.DataFrame:
         if self.sklearnInputTransformer is None:
@@ -80,11 +86,11 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         pass
 
     def _predict(self, x: pd.DataFrame):
-        inputValues = self._transformInput(x).values
-        return self._predictSkLearn(inputValues)
+        inputs = self._transformInput(x)
+        return self._predictSkLearn(inputs)
 
     @abstractmethod
-    def _predictSkLearn(self, inputValues: np.ndarray):
+    def _predictSkLearn(self, inputs: pd.DataFrame):
         pass
 
 
@@ -93,14 +99,8 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
     Base class for models which use several sklearn models of the same type with a single
     output dimension to create a multi-dimensional model (for the case where there is more than one output dimension)
     """
-    def __init__(self, modelConstructor, sklearnInputTransformer=None, sklearnOutputTransformer=None,
-            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None,
-            **modelArgs):
-        super().__init__(modelConstructor,
-            sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
-            inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
-            **modelArgs)
+    def __init__(self, modelConstructor, **modelArgs):
+        super().__init__(modelConstructor, **modelArgs)
         self.models = {}
 
     def __str__(self):
@@ -119,10 +119,10 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             model.fit(inputs, outputs[predictedVarName])
             self.models[predictedVarName] = model
 
-    def _predictSkLearn(self, inputValues) -> pd.DataFrame:
+    def _predictSkLearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
         results = {}
         for varName in self.models:
-            results[varName] = self.models[varName].predict(inputValues)
+            results[varName] = self.models[varName].predict(inputs)
         return pd.DataFrame(results)
 
 
@@ -130,15 +130,8 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
     """
     Base class for models which use a single sklearn model with multiple output dimensions to create the multi-dimensional model
     """
-    def __init__(self, modelConstructor,
-            sklearnInputTransformer=None, sklearnOutputTransformer=None,
-            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None,
-            **modelArgs):
-        super().__init__(modelConstructor,
-            sklearnInputTransformer=sklearnInputTransformer, sklearnOutputTransformer=sklearnOutputTransformer,
-            inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer,
-            **modelArgs)
+    def __init__(self, modelConstructor, **modelArgs):
+        super().__init__(modelConstructor, **modelArgs)
         self.model = None
 
     def __str__(self):
@@ -157,37 +150,50 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
             outputValues = np.ravel(outputValues)
         self.model.fit(inputs, outputValues)
 
-    def _predictSkLearn(self, inputValues) -> pd.DataFrame:
-        Y = self.model.predict(inputValues)
+    def _predictSkLearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
+        Y = self.model.predict(inputs)
         return pd.DataFrame(Y, columns=self.getModelOutputVariableNames())
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor,
-            sklearnInputTransformer=None, sklearnOutputTransformer=None,
-            inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            **modelArgs):
+    def __init__(self, modelConstructor, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
-        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
-        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
-        :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
-        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs
         :param modelArgs: arguments to be passed to the sklearn model constructor
         """
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
+        super().__init__()
         self.modelConstructor = modelConstructor
-        self.sklearnInputTransformer = sklearnInputTransformer
-        self.sklearnOutputTransformer = sklearnOutputTransformer
+        self.sklearnInputTransformer = None
+        self.sklearnOutputTransformer = None
         self.modelArgs = modelArgs
-        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, outputTransformer=sklearnOutputTransformer)
+        self.model = None
+
+    def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:
+        """
+        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
+        :return: self
+        """
+        self.sklearnInputTransformer = sklearnInputTransformer
+        return self
+
+    def withSkLearnOutputTransformer(self, sklearnOutputTransformer):
+        """
+        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
+        :return: self
+        """
+        self.sklearnOutputTransformer = sklearnOutputTransformer
+        return self
 
     def __str__(self):
-        return f"{self.__class__.__name__}[{str(self.model)}]"
+        if self.model is None:
+            strModel = f"{self.modelConstructor.__name__}{self.modelArgs}"
+        else:
+            strModel = str(self.model)
+        return f"{self.__class__.__name__}[{strModel}]"
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         inputValues = self._transformInput(inputs, fit=True)
-        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs)
+        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         self.model.fit(inputValues, np.ravel(outputs.values))
 

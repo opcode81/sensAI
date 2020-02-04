@@ -6,7 +6,7 @@ from ..basic_models_base import VectorModel
 class VectorModelWithSeparateFeatureGeneration:
     def __init__(self, vectorModel: VectorModel):
         self.vectorModel = vectorModel
-        self.featureGen = vectorModel._featureGenerator
+        self.featureGen = vectorModel.getFeatureGenerator()
         self.vectorModel.setFeatureGenerator(None)
 
     def __str__(self):

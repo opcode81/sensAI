@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any, Optional
+from typing import Sequence, List, Any, Optional, Union, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,9 @@ from .data_transformation import DataFrameTransformer, DataFrameTransformerChain
 from .featuregen import FeatureGenerator, FeatureCollector
 
 log = logging.getLogger(__name__)
+
+
+T = TypeVar('T')
 
 
 class InputOutputData:
@@ -68,47 +71,88 @@ class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
-    def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None, name=None):
-        """
-        :param inputTransformers: list of DataFrameTransformers for the transformation of inputs
-        :param outputTransformers: list of DataFrameTransformers for the transformation of outputs (after the model has been applied)
-        :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
-            that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
-            the model, i.e. the transformation is completely transparent when applying the model.
-        :param name: the name of the model
-        """
+    def __init__(self):
         self._featureGenerator: Optional["FeatureGenerator"] = None
-        self._inputTransformerChain = DataFrameTransformerChain(inputTransformers)
-        self._outputTransformerChain = DataFrameTransformerChain(outputTransformers)
+        self._inputTransformerChain = DataFrameTransformerChain(())
+        self._outputTransformerChain = DataFrameTransformerChain(())
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = None
-        self._targetTransformer = targetTransformer
-        self._name = name
+        self._targetTransformer = None
+        self._name = None
 
-    @abstractmethod
-    def isRegressionModel(self) -> bool:
-        pass
+    @staticmethod
+    def _flattenList(l: Sequence[Union[T, List[T]]]) -> List[T]:
+        return [i[0] if type(i) == list else i for i in l]
 
-    def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
+    def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
-        Sets a feature generator which shall be used to compute the actual inputs of the model from the data frame that is given.
-        Feature computation takes place before input transformation.
+        Makes the model use the given input transformers.
+
+        :param inputTransformers: DataFrameTransformers for the transformation of inputs
+        :return: self
+        """
+        self._inputTransformerChain = DataFrameTransformerChain(self._flattenList(inputTransformers))
+        return self
+
+    def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
+        """
+        Makes the model use the given output transformers.
+
+        :param outputTransformers: DataFrameTransformers for the transformation of outputs (after the model has been applied)
+        :return: self
+        """
+        self._outputTransformerChain = DataFrameTransformerChain(self._flattenList(outputTransformers))
+        return self
+
+    def withTargetTransformer(self, targetTransformer: InvertibleDataFrameTransformer) -> __qualname__:
+        """
+        Makes the model use the given target transformers.
+
+        :param targetTransformer: a transformer which transforms the targets (training data outputs) prior to learning the model, such
+            that the model learns to predict the transformed outputs. When predicting, the inverse transformer is applied after applying
+            the model, i.e. the transformation is completely transparent when applying the model.
+        :return: self
+        """
+        self._targetTransformer = targetTransformer
+        return self
+
+    def withFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]) -> __qualname__:
+        """
+        Makes the model use the given feature generator, which shall be used to compute the actual inputs of the model from the data
+        frame that is given. Feature computation takes place before input transformation.
 
         :param featureGenerator: the feature generator to use for input computation
+        :return: self
         """
         self._featureGenerator = featureGenerator
+        return self
 
-    def setFeatureCollector(self, featureCollector: FeatureCollector):
+    def withFeatureCollector(self, featureCollector: FeatureCollector) -> __qualname__:
         """
         Makes the model use the given feature collector's multi-feature generator in order compute the actual inputs of the model from
         the data frame that is given.
         Feature computation takes place before input transformation.
 
         :param featureCollector: the feature collector whose feature generator shall be used for input computation
+        :return: self
         """
         self._featureGenerator = featureCollector.getMultiFeatureGenerator()
+        return self
+
+    def withName(self, name: str):
+        """
+        Sets the model's name.
+
+        :param name: the name
+        :return: self
+        """
+        self.setName(name)
+        return self
+
+    @abstractmethod
+    def isRegressionModel(self) -> bool:
+        pass
 
     def isFitted(self):
         return self.getPredictedVariableNames() is not None
@@ -197,11 +241,16 @@ class VectorModel(PredictorModel, ABC):
             return "unnamed-%x" % id(self)
         return self._name
 
+    def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
+        self.withFeatureGenerator(featureGenerator)
+
+    def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
+        return self._featureGenerator
+
 
 class VectorRegressionModel(VectorModel, ABC):
-    def __init__(self, inputTransformers: Sequence[DataFrameTransformer] = (), outputTransformers: Sequence[DataFrameTransformer] = (),
-            targetTransformer: InvertibleDataFrameTransformer = None):
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers, targetTransformer=targetTransformer)
+    def __init__(self):
+        super().__init__()
 
     def isRegressionModel(self) -> bool:
         return True
@@ -209,9 +258,9 @@ class VectorRegressionModel(VectorModel, ABC):
 
 class VectorClassificationModel(VectorModel, ABC):
 
-    def __init__(self, inputTransformers=(), outputTransformers=()):
+    def __init__(self):
         self._labels = None
-        super().__init__(inputTransformers=inputTransformers, outputTransformers=outputTransformers)
+        super().__init__()
 
     def isRegressionModel(self) -> bool:
         return False

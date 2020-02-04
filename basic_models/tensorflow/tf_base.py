@@ -48,8 +48,8 @@ class KerasVectorRegressionModel(VectorRegressionModel, ABC):
     """An abstract simple model which maps vectors to vectors and works on pandas.DataFrames (for inputs and outputs)"""
 
     def __init__(self, normalisationMode: normalisation.NormalisationMode, loss, metrics, optimiser,
-            batchSize=64, epochs=1000, validationFraction=0.2, inputTransformers=()):
-        super().__init__(inputTransformers=inputTransformers)
+            batchSize=64, epochs=1000, validationFraction=0.2):
+        super().__init__()
         self.normalisationMode = normalisationMode
         self.batchSize = batchSize
         self.epochs = epochs
