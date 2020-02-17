@@ -250,7 +250,7 @@ class DFTNormalisation(DataFrameTransformer):
             :param regex: a regular expression defining the column the rule applies to
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
             If None the default transformer will be used.
             """
             if skip and transformer is not None:
@@ -367,6 +367,12 @@ class DFTAggregationOnColumn(RuleBasedDataFrameTransformer):
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.groupby(self.columnForAggregation).agg(self.aggregation)
+
+
+class DFTRoundFloats(RuleBasedDataFrameTransformer):
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame(np.round(df.values), columns=df.columns, index=df.index)
 
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):

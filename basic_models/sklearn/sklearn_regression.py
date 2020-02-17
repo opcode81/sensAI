@@ -57,7 +57,7 @@ class SkLearnLinearSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegress
 class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
     log = log.getChild(__qualname__)
 
-    def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=300, **modelArgs):
+    def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
         """
         :param categoricalFeatureNames: sequence of feature names in the input data that are categorical.
             Columns that have dtype 'category' (as will be the case for categorical columns created via FeatureGenerators)

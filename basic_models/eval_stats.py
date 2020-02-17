@@ -5,6 +5,7 @@ from typing import Union, List
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import sklearn.utils.multiclass
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
@@ -112,8 +113,8 @@ class ClassificationEvalStats(EvalStats):
             result.append(probTrueClass)
         return np.array(result)
 
-    def getConfusionMatrix(self) -> np.ndarray:
-        return confusion_matrix(y_true=self.y_true, y_pred=self.y_predicted)
+    def getConfusionMatrix(self) -> "ConfusionMatrix":
+        return ConfusionMatrix(self.y_true, self.y_predicted)
 
     def getAccuracy(self):
         return accuracy_score(y_true=self.y_true, y_pred=self.y_predicted)
@@ -144,40 +145,7 @@ class ClassificationEvalStats(EvalStats):
     def plotConfusionMatrix(self, normalize=True):
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         confusionMatrix = self.getConfusionMatrix()
-        if normalize:
-            title = 'Normalized confusion matrix'
-            confusionMatrix = confusionMatrix.astype('float') / confusionMatrix.sum(axis=1)[:, np.newaxis]
-        else:
-            title = 'Confusion matrix, without normalization'
-        classes = sorted(set(self.y_predicted).union(self.y_true))
-        fig, ax = plt.subplots()
-        fig.canvas.set_window_title(title)
-        # We want to show all ticks...
-        ax.set(xticks=np.arange(confusionMatrix.shape[1]),
-               yticks=np.arange(confusionMatrix.shape[0]),
-               # ... and label them with the respective list entries
-               xticklabels=classes, yticklabels=classes,
-               title=title,
-               ylabel='True label',
-               xlabel='Predicted label')
-        im = ax.imshow(confusionMatrix, interpolation='nearest', cmap=plt.cm.Blues)
-        ax.figure.colorbar(im, ax=ax)
-
-        # Rotate the tick labels and set their alignment.
-        plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-                 rotation_mode="anchor")
-
-        # Loop over data dimensions and create text annotations.
-        fmt = '.2f' if normalize else 'd'
-        thresh = confusionMatrix.max() / 2.
-        for i in range(confusionMatrix.shape[0]):
-            for j in range(confusionMatrix.shape[1]):
-                ax.text(j, i, format(confusionMatrix[i, j], fmt),
-                        ha="center", va="center",
-                        color="white" if confusionMatrix[i, j] > thresh else "black")
-        fig.tight_layout()
-        return ax
-
+        return confusionMatrix.plot(normalize=normalize)
 
 class RegressionEvalStats(EvalStats):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
@@ -382,3 +350,45 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
 class ClassificationEvalStatsCollection(EvalStatsCollection):
     def __init__(self, evalStatsList: List[ClassificationEvalStats]):
         super().__init__(evalStatsList)
+
+
+class ConfusionMatrix:
+    def __init__(self, y_true, y_predicted):
+        self.labels = sklearn.utils.multiclass.unique_labels(y_true, y_predicted)
+        self.confusionMatrix = confusion_matrix(y_true, y_predicted, labels=self.labels)
+
+    def plot(self, normalize=True):
+        confusionMatrix = self.confusionMatrix
+        if normalize:
+            title = 'Normalized Confusion Matrix'
+            confusionMatrix = confusionMatrix.astype('float') / confusionMatrix.sum()
+        else:
+            title = 'Confusion Matrix (Counts)'
+        confusionMatrix = np.transpose(confusionMatrix)
+        fig, ax = plt.subplots()
+        fig.canvas.set_window_title(title)
+        # We want to show all ticks...
+        ax.set(xticks=np.arange(confusionMatrix.shape[1]),
+            yticks=np.arange(confusionMatrix.shape[0]),
+            # ... and label them with the respective list entries
+            xticklabels=self.labels, yticklabels=self.labels,
+            title=title,
+            xlabel='true class',
+            ylabel='predicted class')
+        im = ax.imshow(confusionMatrix, interpolation='nearest', cmap=plt.cm.Blues)
+        ax.figure.colorbar(im, ax=ax)
+
+        # Rotate the tick labels and set their alignment.
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+            rotation_mode="anchor")
+
+        # Loop over data dimensions and create text annotations.
+        fmt = '.2f' if normalize else 'd'
+        thresh = confusionMatrix.max() / 2.
+        for i in range(confusionMatrix.shape[0]):
+            for j in range(confusionMatrix.shape[1]):
+                ax.text(j, i, format(confusionMatrix[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if confusionMatrix[i, j] > thresh else "black")
+        fig.tight_layout()
+        return ax

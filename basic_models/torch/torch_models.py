@@ -1,11 +1,9 @@
 import logging
-from typing import Sequence
 
 import torch
 
 from . import torch_modules
 from .torch_base import WrappedTorchVectorModule, TorchVectorRegressionModel, TorchVectorClassificationModel
-from ..data_transformation import DataFrameTransformer
 from ..normalisation import NormalisationMode
 
 log = logging.getLogger(__name__)
@@ -35,13 +33,13 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
+    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=None,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN,
             cuda=True, pDropout=None, **nnOptimiserParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
-        :param outputActivationFunction: the output activation function (torch.*)
+        :param outputActivationFunction: the output activation function (torch.* or None)
         :param normalisationMode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param pDropout: the probability with which to apply dropouts after each hidden layer

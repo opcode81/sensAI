@@ -16,9 +16,9 @@ import torch.optim as optim
 from torch import cuda as torchcuda
 from torch.autograd import Variable
 
+from ..util.dtype import toFloatArray
 from .. import normalisation
 from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
-from ..data_transformation import DataFrameTransformer
 from ..util.string import objectRepr
 
 log = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ class WrappedTorchModule(ABC):
             self.setModelBytes(modelBytes)
 
     def apply(self, X: Union[torch.Tensor, np.ndarray], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
-            scaleInput=False) -> Union[torch.Tensor, np.ndarray]:
+            scaleInput=False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
         Applies the model to the given input tensor and returns the result (normalized)
 
@@ -149,6 +149,7 @@ class WrappedTorchModule(ABC):
         model.eval()
 
         if isinstance(X, np.ndarray):
+            X = toFloatArray(X)
             X = torch.from_numpy(X).float()
         if self._isCudaEnabled():
             X = X.cuda()
@@ -763,7 +764,7 @@ class NNOptimiser:
         return scaledOutput, scaledTruth
 
     def _train(self, dataSets: Sequence[Tuple[torch.Tensor, torch.Tensor]], model: nn.Module, criterion: nn.modules.loss._Loss,
-            optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: normalisation.VectorDataScaler):
+            optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: Sequence[TensorScaler]):
         """Performs one training epoch"""
         model.train()
         total_loss = 0
@@ -784,7 +785,7 @@ class NNOptimiser:
                 n_samples += numDataPointsInBatch * numOutputsPerDataPoint
         return total_loss / n_samples
 
-    def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: normalisation.VectorDataScaler):
+    def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: TensorScaler):
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 

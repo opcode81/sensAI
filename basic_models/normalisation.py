@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import sklearn.preprocessing
 
+from .util.dtype import toFloatArray
+
 
 class NormalisationMode(Enum):
     NONE = "none"
@@ -47,12 +49,9 @@ class VectorDataScaler:
         return scale, translate
 
     @staticmethod
-    def _array(data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
-        if type(data) is np.ndarray:
-            values = data
-        elif type(data) is pd.DataFrame:
-            values = data.values
-        return values
+    def _array(data: Union[pd.DataFrame, np.ndarray]):
+        return toFloatArray(data)
+
 
     def getNormalisedArray(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         result = self._array(data)

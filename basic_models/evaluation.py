@@ -40,6 +40,9 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData):
             raise ValueError(f"No evaluation data present for '{predictedVarName}'; known output variables: {list(self.data.keys())}")
         return evalStats
 
+    def getEvalStatsCollection(self):
+        return RegressionEvalStatsCollection(list(self.data.values()))
+
     def getDataFrame(self):
         """
         Returns an DataFrame with all evaluation metrics (one row per output variable)
