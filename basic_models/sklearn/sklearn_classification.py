@@ -36,6 +36,6 @@ class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassif
 
 
 class SkLearnLightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    def __init__(self, random_state=42, num_leaves=300, **modelArgs):
+    def __init__(self, random_state=42, num_leaves=31, **modelArgs):
         super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves, **modelArgs)
 
