@@ -242,16 +242,19 @@ class RegressionEvalStats(EvalStats):
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
-    def plotErrorDistribution(self, bins=None, figure=True):
+    def plotErrorDistribution(self, bins=None, figure=True, titleAdd=None):
         """
         :param bins: if None, seaborns default binning will be used
         :param figure: whether to plot in a separate figure
+        :param titleAdd: a string to add to the title (on a second line)
 
         :return: the resulting figure object or None
         """
         errors = self._getErrors()
         fig = None
         title = "Prediction Error Distribution"
+        if titleAdd is not None:
+            title += "\n" + titleAdd
         if figure:
             fig = plt.figure(title)
         sns.distplot(errors, bins=bins)
@@ -279,17 +282,20 @@ class RegressionEvalStats(EvalStats):
         plt.title(title)
         return fig
 
-    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, **kwargs):
+    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, **kwargs):
         """
         :param figure: whether to plot in a separate figure
         :param cmap: value for corresponding parameter of plt.imshow() or None
         :param bins: how many bins to use for construncting the heatmap
+        :param titleAdd: a string to add to the title (on a second line)
         :param kwargs: will be passed to plt.imshow()
 
         :return:  the resulting figure object or None
         """
         fig = None
         title = "Heat Map of Ground Truth vs. Predicted Values"
+        if titleAdd:
+            title += "\n" + titleAdd
         if figure:
             fig = plt.figure(title)
         y_range = [min(self.y_true), max(self.y_true)]

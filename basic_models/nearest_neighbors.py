@@ -13,7 +13,7 @@ from . import distance_metric, util, data_transformation
 from .basic_models_base import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
 from .featuregen import FeatureGeneratorFromNamedTuples
-from .util.tracking import stringRepr
+from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
 
 log = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ class TimerangeNeighborsProvider(NeighborProvider):
         return neighborsDf.itertuples()
 
     def __str__(self):
-        return stringRepr(self, ["pastTimeRangeDays", "futureTimeRangeDays"])
+        return objectRepr(self, ["pastTimeRangeDays", "futureTimeRangeDays"])
 
 
 class AbstractKnnFinder(ABC):
@@ -123,7 +123,7 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
             self.weightedDistanceMetrics = [(cache.getCachedMetric(distanceMetric), 1)]
 
     def __str__(self):
-        return stringRepr(self, ["neighborProvider", "distanceMetric"])
+        return objectRepr(self, ["neighborProvider", "distanceMetric"])
 
     class DistanceMetricCache:
         """
@@ -192,7 +192,7 @@ class KNearestNeighboursFinder(AbstractKnnFinder):
         self.distanceMetric = distanceMetric
 
     def __str__(self):
-        return stringRepr(self, ["neighborProvider", "distanceMetric"])
+        return objectRepr(self, ["neighborProvider", "distanceMetric"])
 
     def findNeighbors(self, namedTuple: PandasNamedTuple, n_neighbors=20) -> List[Neighbor]:
         result = []
@@ -272,7 +272,7 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
 
     def __str__(self):
-        return stringRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
+        return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 
 
 class KNearestNeighboursRegressionModel(VectorRegressionModel):
@@ -332,7 +332,7 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         return pd.DataFrame({self._predictedVariableNames[0]: predictedValues}, index=x.index)
 
     def __str__(self):
-        return stringRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
+        return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 
 
 class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):

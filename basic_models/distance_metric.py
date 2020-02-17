@@ -9,7 +9,7 @@ import pandas as pd
 
 from .util import cache
 from .util.cache import DelayedUpdateHook
-from .util.tracking import stringRepr
+from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
 
 log = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ class HellingerDistanceMetric(SingleColumnDistanceMetric):
         self.checkInput = checkInput
 
     def __str__(self):
-        return stringRepr(self, ["column"])
+        return objectRepr(self, ["column"])
 
     def checkInputValue(self, inputValue):
         if not isinstance(inputValue, np.ndarray):
@@ -196,7 +196,7 @@ class EuclideanDistanceMetric(SingleColumnDistanceMetric):
         return np.linalg.norm(valueA - valueB)
 
     def __str__(self):
-        return stringRepr(self, ["column"])
+        return objectRepr(self, ["column"])
 
 
 class IdentityDistanceMetric(DistanceMetric):

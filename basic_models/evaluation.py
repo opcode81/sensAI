@@ -102,7 +102,14 @@ class VectorModelEvaluator(ABC):
         log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
     @abstractmethod
-    def evalModel(self, model: PredictorModel) -> VectorModelEvaluationData:
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorModelEvaluationData:
+        """
+        Evaluates the given model
+
+        :param model: the model to evaluate
+        :param onTrainingData: if True, evaluate on this evaluator's training data rather than the held-out test data
+        :return: the evaluation result
+        """
         pass
 
 
@@ -110,15 +117,11 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
     def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
 
-    def evalModel(self, model: PredictorModel) -> VectorRegressionModelEvaluationData:
-        """
-        :param model: the model to evaluate
-        :return: a dictionary mapping from the predicted variable name to an object holding evaluation stats
-        """
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
-            raise ValueError("Expected regression model, got classification model instead")
+            raise ValueError(f"Expected a regression model, got {model}")
         statsDict = {}
-        predictions, groundTruth = self.computeTestDataOutputs(model)
+        predictions, groundTruth = self.computeOutputs(model, self.trainingData if onTrainingData else self.testData)
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
             statsDict[predictedVarName] = evalStats
@@ -131,8 +134,19 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a pair (predictions, groundTruth)
         """
-        predictions = model.predict(self.testData.inputs)
-        groundTruth = self.testData.outputs
+        return self.computeOutputs(model, self.testData)
+
+    @staticmethod
+    def computeOutputs(model, inputOutputData: InputOutputData):
+        """
+        Applies the given model to the given data
+
+        :param model: the model to apply
+        :param inputOutputData: the data set
+        :return: a pair (predictions, groundTruth)
+        """
+        predictions = model.predict(inputOutputData.inputs)
+        groundTruth = inputOutputData.outputs
         return predictions, groundTruth
 
 
@@ -150,10 +164,10 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
         self.computeProbabilities = computeProbabilities
 
-    def evalModel(self, model: VectorClassificationModel) -> VectorClassificationModelEvaluationData:
+    def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
-            raise ValueError("Expected classification model, got regression model instead.")
-        predictions, predictions_proba, groundTruth = self.computeTestDataOutputs(model)
+            raise ValueError(f"Expected a classification model, got {model}")
+        predictions, predictions_proba, groundTruth = self.computeOutputs(model, self.trainingData if onTrainingData else self.testData)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         return VectorClassificationModelEvaluationData(evalStats)
 
@@ -162,6 +176,16 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         Applies the given model to the test data
 
         :param model: the model to apply
+        :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
+        """
+        return self.computeOutputs(model, self.testData)
+
+    def computeOutputs(self, model, inputOutputData: InputOutputData) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Applies the given model to the given data
+
+        :param model: the model to apply
+        :param inputOutputData: the data set
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
         if self.computeProbabilities:

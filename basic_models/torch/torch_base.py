@@ -19,7 +19,7 @@ from torch.autograd import Variable
 from .. import normalisation
 from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
 from ..data_transformation import DataFrameTransformer
-from ..util.tracking import stringRepr
+from ..util.string import objectRepr
 
 log = logging.getLogger(__name__)
 
@@ -986,7 +986,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
     def __str__(self):
-        return stringRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
+        return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
@@ -1024,5 +1024,5 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         return pd.DataFrame(y, columns=self._labels)
 
     def __str__(self):
-        return stringRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
+        return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
 
