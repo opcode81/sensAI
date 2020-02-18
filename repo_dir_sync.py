@@ -33,8 +33,8 @@ def gitCommit(msg):
     os.unlink("commitmsg.txt")
 
 
-LIB_DIRECTORY = "basic_models"
-LIB_NAME = "basic_models"
+LIB_DIRECTORY = os.path.join("src", "sensai")
+LIB_NAME = "sensai"
 
 
 class OtherRepo:
