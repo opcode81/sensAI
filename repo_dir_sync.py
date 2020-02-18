@@ -37,7 +37,7 @@ LIB_DIRECTORY = "basic_models"
 LIB_NAME = "basic_models"
 
 
-class RemoteRepo:
+class OtherRepo:
     SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId.remote"
     SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
     
@@ -74,7 +74,7 @@ class RemoteRepo:
 
     def pull(self, libRepo: "LibRepo"):
         """
-        Pulls in changes from this remote repository into the lib repo
+        Pulls in changes from this repository into the lib repo
         """
         os.chdir(libRepo.rootPath)
 
@@ -111,7 +111,7 @@ class RemoteRepo:
         
     def push(self, libRepo: "LibRepo"):
         """
-        Pushes changes from the lib repo to this remote repo
+        Pushes changes from the lib repo to this repo
         """
 
         # get change log since last sync
@@ -160,13 +160,13 @@ class LibRepo:
     def __init__(self):
         self.rootPath = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
         self.libPath = os.path.join(self.rootPath, LIB_DIRECTORY)
-        self.remoteRepos: List[RemoteRepo] = []
+        self.otherRepos: List[OtherRepo] = []
 
-    def add(self, repo: RemoteRepo):
-        self.remoteRepos.append(repo)
+    def add(self, repo: OtherRepo):
+        self.otherRepos.append(repo)
 
     def runMain(self):
-        repos = self.remoteRepos
+        repos = self.otherRepos
         args = sys.argv[1:]
         if len(args) != 2:
             print(f"usage: sync.py <{'|'.join([repo.name for repo in repos])}> <push|pull>")
