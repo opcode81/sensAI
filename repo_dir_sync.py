@@ -38,7 +38,7 @@ LIB_NAME = "basic_models"
 
 
 class RemoteRepo:
-    SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId"
+    SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId.remote"
     SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
     
     def __init__(self, name, branch, pathToBasicModels):
