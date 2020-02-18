@@ -4,6 +4,7 @@ import shutil
 from subprocess import Popen, PIPE
 import re
 import sys
+from typing import List
 
 
 def call(cmd):
@@ -33,13 +34,10 @@ def gitCommit(msg):
 
 
 LIB_DIRECTORY = "basic_models"
-LIB_NAME = LIB_DIRECTORY
-
-libRepoRootPath = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
-libRepoLibPath = os.path.join(libRepoRootPath, LIB_DIRECTORY)
+LIB_NAME = "basic_models"
 
 
-class Repo:
+class RemoteRepo:
     SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId"
     SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
     
@@ -62,20 +60,23 @@ class Repo:
         lg = indent + lg.replace("\n", "\n" + indent)
         return lg
 
-    def gitLogLibRepoSinceLastSync(self):
+    def gitLogLibRepoSinceLastSync(self, libRepo: "LibRepo"):
         syncIdFile = os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO)
         if not os.path.exists(syncIdFile):
             return ""
         with open(syncIdFile, "r") as f:
             syncId = f.read().strip()
-        lg = gitLog(libRepoLibPath, 'HEAD "^%s" .'  % syncId)
+        lg = gitLog(libRepo.libPath, 'HEAD "^%s" .'  % syncId)
         lg = re.sub(r"Sync (\w+)\n\s*\n", r"Sync\n\n", lg, flags=re.MULTILINE)
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return "\n\n" + lg
 
-    def pull(self):
-        os.chdir(libRepoRootPath)
+    def pull(self, libRepo: "LibRepo"):
+        """
+        Pulls in changes from this remote repository into the lib repo
+        """
+        os.chdir(libRepo.rootPath)
 
         # switch to branch in lib repo and remove library tree
         execute("git checkout %s" % self.branch)
@@ -108,11 +109,15 @@ class Repo:
 
         print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
         
-    def push(self):
-        # get change log since last sync
-        libLogSinceLastSync = self.gitLogLibRepoSinceLastSync()
+    def push(self, libRepo: "LibRepo"):
+        """
+        Pushes changes from the lib repo to this remote repo
+        """
 
-        os.chdir(libRepoRootPath)
+        # get change log since last sync
+        libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
+
+        os.chdir(libRepo.rootPath)
 
         # check if this repo's branch in the source repo was merged into master
         unmergedBranches = call("git branch --no-merged master")
@@ -125,7 +130,7 @@ class Repo:
 
         # remove the target repo tree and update it with the tree from the source repo
         shutil.rmtree(self.pathToLibInThisRepo)
-        shutil.copytree(libRepoLibPath, self.pathToLibInThisRepo)
+        shutil.copytree(libRepo.libPath, self.pathToLibInThisRepo)
 
         # get the commit id of the source repo we just copied
         commitId = call("git rev-parse HEAD").strip()
@@ -146,29 +151,34 @@ class Repo:
         execute("git add %s" % self.SYNC_COMMIT_ID_FILE_THIS_REPO)
         execute('git commit -m "Updated sync commit identifier (push)"')
 
-        os.chdir(libRepoRootPath)
+        os.chdir(libRepo.rootPath)
         
         print(f"\n\nIf everything was successful, you should now update the remote branch:\ngit push")
-    
 
-if __name__ == '__main__':
-    odm = Repo("odm", "odm", os.path.join("..", "odm", "odmalg", "basic_models"))
-    faz = Repo("faz", "faz", os.path.join("..", "faz", "preprocessing", "basic_models"))
-    dcs = Repo("dcs", "dcs", os.path.join("..", "dcs", "dcs-models", "dcs", "basic_models"))
-    repos = [odm, faz, dcs]
-    
-    args = sys.argv[1:]
-    if len(args) != 2:
-        print(f"usage: sync.py <{'|'.join([repo.name for repo in repos])}> <push|pull>")
-    else:
-        repo = [r for r in repos if r.name == args[0]]
-        if len(repo) != 1:
-            raise ValueError(f"Unknown repo '{args[0]}'")
-        repo = repo[0]
 
-        if args[1] == "push":
-            repo.push()
-        elif args[1] == "pull":
-            repo.pull()
+class LibRepo:
+    def __init__(self):
+        self.rootPath = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+        self.libPath = os.path.join(self.rootPath, LIB_DIRECTORY)
+        self.remoteRepos: List[RemoteRepo] = []
+
+    def add(self, repo: RemoteRepo):
+        self.remoteRepos.append(repo)
+
+    def runMain(self):
+        repos = self.remoteRepos
+        args = sys.argv[1:]
+        if len(args) != 2:
+            print(f"usage: sync.py <{'|'.join([repo.name for repo in repos])}> <push|pull>")
         else:
-            raise ValueError(f"Unknown command '{args[1]}'")
+            repo = [r for r in repos if r.name == args[0]]
+            if len(repo) != 1:
+                raise ValueError(f"Unknown repo '{args[0]}'")
+            repo = repo[0]
+
+            if args[1] == "push":
+                repo.push(self)
+            elif args[1] == "pull":
+                repo.pull(self)
+            else:
+                raise ValueError(f"Unknown command '{args[1]}'")
