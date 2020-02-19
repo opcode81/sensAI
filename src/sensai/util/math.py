@@ -1,6 +1,6 @@
 import scipy.stats
 
-from dcs.basic_models.util.string import objectRepr
+from .string import objectRepr
 
 
 class NormalDistribution:
