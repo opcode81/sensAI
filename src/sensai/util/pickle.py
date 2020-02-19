@@ -6,6 +6,9 @@ log = logging.getLogger(__name__)
 
 
 class PickleFailureDebugger:
+    """
+    A collection of methods for testing whether objects can be pickled and logging useful infos in case they cannot
+    """
 
     enabled = False  # global flag controlling the behaviour of debugFailureIfEnabled
 

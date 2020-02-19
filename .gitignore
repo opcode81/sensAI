@@ -1,8 +1,11 @@
 /.idea
-basic_models.iml
+*.iml
 *.pyc
 *.pyc.*
 *.bak
 *.old
 *.orig
+.tox
+docs/_build
 /sync.py
+dist
