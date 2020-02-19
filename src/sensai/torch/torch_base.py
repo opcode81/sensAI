@@ -18,7 +18,7 @@ from torch.autograd import Variable
 
 from ..util.dtype import toFloatArray
 from .. import normalisation
-from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
+from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..util.string import objectRepr
 
 log = logging.getLogger(__name__)

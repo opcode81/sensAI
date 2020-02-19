@@ -1,6 +1,6 @@
 import pandas as pd
 
-from ..basic_models_base import VectorModel
+from ..vector_model import VectorModel
 
 
 class VectorModelWithSeparateFeatureGeneration:

@@ -1,4 +1,4 @@
-from .basic_models_base import VectorModel, VectorRegressionModel, VectorClassificationModel, InputOutputData, PredictorModel
+from .vector_model import VectorModel, VectorRegressionModel, VectorClassificationModel, InputOutputData, PredictorModel
 from .evaluation import VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, \
     VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData
 from .normalisation import NormalisationMode

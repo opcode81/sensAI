@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from .basic_models_base import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel
+from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel
 from .eval_stats import RegressionEvalStats, EvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
     ClassificationEvalStatsCollection, EvalStatsCollection
 

@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 from .ensemble_base import EnsembleRegressionVectorModel
-from ..basic_models_base import VectorRegressionModel
+from ..vector_model import VectorRegressionModel
 
 
 class AveragingVectorRegressionModel(EnsembleRegressionVectorModel):

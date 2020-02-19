@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn import compose
 
-from ..basic_models_base import VectorRegressionModel, VectorClassificationModel
+from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..data_transformation import DataFrameTransformer, InvertibleDataFrameTransformer
 
 log = logging.getLogger(__name__)

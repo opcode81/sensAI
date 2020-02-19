@@ -12,7 +12,7 @@ import pandas as pd
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
 from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
-from .basic_models_base import VectorModel
+from .vector_model import VectorModel
 from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
 
 log = logging.getLogger(__name__)

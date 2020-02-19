@@ -9,7 +9,7 @@ from . import util, data_transformation
 from .columngen import ColumnGenerator
 
 if TYPE_CHECKING:
-    from .basic_models_base import VectorModel
+    from .vector_model import VectorModel
 
 log = logging.getLogger(__name__)
 

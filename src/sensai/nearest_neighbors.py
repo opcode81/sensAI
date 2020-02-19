@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import distance_metric, util, data_transformation
-from .basic_models_base import VectorClassificationModel, VectorRegressionModel
+from .vector_model import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
 from .featuregen import FeatureGeneratorFromNamedTuples
 from .util.string import objectRepr

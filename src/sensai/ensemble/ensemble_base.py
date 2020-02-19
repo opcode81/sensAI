@@ -5,7 +5,7 @@ from inspect import currentframe, getframeinfo
 
 import pandas as pd
 
-from ..basic_models_base import VectorModel
+from ..vector_model import VectorModel
 from ..util.multiprocessing import VectorModelWithSeparateFeatureGeneration
 from ..util.pickle import PickleFailureDebugger
 

@@ -7,7 +7,7 @@ import pandas as pd
 import tensorflow as tf
 
 from .. import normalisation
-from ..basic_models_base import VectorRegressionModel
+from ..vector_model import VectorRegressionModel
 
 log = logging.getLogger(__name__)
 

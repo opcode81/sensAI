@@ -1,4 +1,3 @@
-import functools
 import logging
 from abc import ABC, abstractmethod
 from typing import Sequence, List, Any, Optional, Union, TypeVar
