@@ -1,6 +1,7 @@
 # sensAI
 
-the library for sensible AI by jambit GmbH.
+The library for sensible AI for you and me by jambit GmbH. 
+Read the documentation [here](https://sensai.readthedocs.io/)
 
 ## About sensAI
 
