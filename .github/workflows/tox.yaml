@@ -19,8 +19,8 @@ jobs:
           fetch-depth: ''
       - name: Merge master into current branch
         run: |
-        git fetch origin master:master
-        git merge master
+          git fetch origin master:master
+          git merge master
       - name: Setup Python
         uses: actions/setup-python@v1
         with:
