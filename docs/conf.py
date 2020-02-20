@@ -27,10 +27,21 @@ print(sys.path)
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.napoleon', 'sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx_rtd_theme']
+extensions = ['sphinx.ext.napoleon', 'sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx.ext.linkcode', 'sphinx_rtd_theme']
 
-autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml",
-    "sqlite3"]
+
+# adding links to source files
+# see https://www.sphinx-doc.org/en/master/usage/extensions/linkcode.html#module-sphinx.ext.linkcode
+def linkcode_resolve(domain, info):
+    if domain != 'py':
+        return None
+    if not info['module']:
+        return None
+    filename = info['module'].replace('.', '/')
+    return f"https://github.com/jambit/sensAI/blob/master/src/{filename}.py"
+
+
+autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
