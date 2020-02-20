@@ -29,8 +29,7 @@ print(sys.path)
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.napoleon', 'sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx_rtd_theme']
 
-autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "scikit-learn",
-    "seaborn", "PyQt5", "psutil", "pyyaml", "pysqlite3"]
+autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
