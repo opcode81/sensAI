@@ -3,5 +3,5 @@ def test_dummy():
 
 
 def new_test():
-    print("This works")
+    print("This works again")
     assert True
