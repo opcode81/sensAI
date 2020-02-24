@@ -9,10 +9,10 @@ import sklearn.neural_network
 import sklearn.svm
 import lightgbm
 
-from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel, InvertibleDataFrameTransformer, DataFrameTransformer
+from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
@@ -55,7 +55,7 @@ class SkLearnLinearSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegress
 
 
 class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
         """
@@ -75,7 +75,7 @@ class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRe
             cols = list(inputs.columns)
             colIndices = [cols.index(f) for f in self.categoricalFeatureNames]
             args = {"cat_column": colIndices}
-            self.log.info(f"Updating model parameters with {args}")
+            self._log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
 
 

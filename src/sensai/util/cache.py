@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
 import sqlite3
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -135,12 +135,12 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
         cacheFound = False
         if os.path.exists(picklePath):
             try:
-                log.info(f"Loading cache from {picklePath}")
+                _log.info(f"Loading cache from {picklePath}")
                 persistedVersion, self.cache = loadPickle(picklePath)
                 if persistedVersion == version:
                     cacheFound = True
             except EOFError:
-                log.warning(f"The cache file in {picklePath} is corrupt")
+                _log.warning(f"The cache file in {picklePath} is corrupt")
         if not cacheFound:
             self.cache = {}
         self._updateHook = DelayedUpdateHook(self.save, deferredSaveDelaySecs)
@@ -149,7 +149,7 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
         """
         Saves the cache in the file whose path was provided at construction
         """
-        log.info(f"Saving cache to {self.picklePath}")
+        _log.info(f"Saving cache to {self.picklePath}")
         dumpPickle((self.version, self.cache), self.picklePath)
 
     def get(self, key) -> Optional[Any]:
@@ -217,7 +217,7 @@ class SlicedPicklePersistentList(PersistentList):
         :return: iterator over all items in the cache
         """
         for filePath in self.slicedFiles:
-            log.info(f"Loading sliced pickle list from {filePath}")
+            _log.info(f"Loading sliced pickle list from {filePath}")
             cachedPickle = self._loadPickle(filePath)
             for item in cachedPickle:
                 yield item
@@ -241,7 +241,7 @@ class SlicedPicklePersistentList(PersistentList):
         """
         Sets the state such as to be able to add items to an existant cache
         """
-        log.info("Resetting last state of cache...")
+        _log.info("Resetting last state of cache...")
         self.sliceId = len(self.slicedFiles) - 1
         self.cacheOfSlice = self._loadPickle(self._picklePath(self.sliceId))
         self.indexInSlice = len(self.cacheOfSlice) - 1
@@ -254,14 +254,14 @@ class SlicedPicklePersistentList(PersistentList):
         """
         if len(self.cacheOfSlice) > 0:
             picklePath = self._picklePath(str(self.sliceId))
-            log.info(f"Saving sliced cache to {picklePath}")
+            _log.info(f"Saving sliced cache to {picklePath}")
             dumpPickle(self.cacheOfSlice, picklePath)
             self.slicedFiles.append(picklePath)
 
             # Update slice number and reset indexing and cache
             self._nextSlice()
         else:
-            log.warning("Unexpected behavior: Dump was called when cache of slice is 0!")
+            _log.warning("Unexpected behavior: Dump was called when cache of slice is 0!")
 
     def _nextSlice(self):
         """
@@ -293,7 +293,7 @@ class SlicedPicklePersistentList(PersistentList):
             try:
                 cachedPickle = loadPickle(picklePath)
             except EOFError:
-                log.warning(f"The cache file in {picklePath} is corrupt")
+                _log.warning(f"The cache file in {picklePath} is corrupt")
         else:
             raise Exception(f"The file {picklePath} does not exist!")
         return cachedPickle
@@ -352,7 +352,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
         cursor = self.conn.cursor()
         cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table';")
         if tableName not in [r[0] for r in cursor.fetchall()]:
-            log.info(f"Creating cache table '{self.tableName}' in {path}")
+            _log.info(f"Creating cache table '{self.tableName}' in {path}")
             keyDbType = keyType.value[0]
             if "%d" in keyDbType:
                 keyDbType = keyDbType % maxKeyLength
@@ -373,7 +373,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
     def _commit(self):
         self._connMutex.acquire()
         try:
-            log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the SQLite database {self.path}")
+            _log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the SQLite database {self.path}")
             self.conn.commit()
             self._numEntriesToBeCommitted = 0
         finally:
@@ -504,12 +504,12 @@ class CachedValueProviderMixin(ABC):
 
 def cached(fn: Callable[[], T], picklePath) -> T:
     if os.path.exists(picklePath):
-        log.info(f"Loading cached result of function '{fn.__name__}' from {picklePath}")
+        _log.info(f"Loading cached result of function '{fn.__name__}' from {picklePath}")
         return loadPickle(picklePath)
     else:
-        log.info(f"No cached result found in {picklePath}, calling function '{fn.__name__}' ...")
+        _log.info(f"No cached result found in {picklePath}, calling function '{fn.__name__}' ...")
         result = fn()
-        log.info(f"Saving cached result in {picklePath}")
+        _log.info(f"Saving cached result in {picklePath}")
         dumpPickle(result, picklePath)
         return result
 

@@ -10,7 +10,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 from .columngen import ColumnGenerator
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class DataFrameTransformer(ABC):
@@ -306,7 +306,7 @@ class DFTNormalisation(DataFrameTransformer):
                     flatValues = applicableDF.values.flatten()
                     rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
             else:
-                log.log(logging.DEBUG-1, f"{rule} matched no columns")
+                _log.log(logging.DEBUG - 1, f"{rule} matched no columns")
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)

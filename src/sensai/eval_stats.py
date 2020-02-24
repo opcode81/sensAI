@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class EvalStats(ABC):

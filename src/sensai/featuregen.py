@@ -11,7 +11,7 @@ from .columngen import ColumnGenerator
 if TYPE_CHECKING:
     from .vector_model import VectorModel
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class DuplicateColumnNamesException(Exception):
@@ -172,7 +172,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
             if idx % 100 == 0:
-                log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
+                _log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
             value = None
             if self.cache is not None:
                 value = self.cache.get(nt.Index)
@@ -233,13 +233,13 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         resultDf = pd.DataFrame(index=df.index)
         for col in self.columns:
-            log.info(f"Flattening column {col}")
+            _log.info(f"Flattening column {col}")
             values = np.stack(df[col].values)
             if len(values.shape) != 2:
                 raise ValueError(f"Column {col} was expected to contain one dimensional vectors, something went wrong")
             dimension = values.shape[1]
             new_columns = [f"{col}_{i}" for i in range(dimension)]
-            log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
+            _log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
@@ -248,7 +248,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     Implements a feature generator via a column generator
     """
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):

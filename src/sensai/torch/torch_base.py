@@ -21,7 +21,7 @@ from .. import normalisation
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..util.string import objectRepr
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class TensorScaler:
@@ -57,7 +57,7 @@ class TensorScaler:
 
 
 class WrappedTorchModule(ABC):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, cuda=True):
         self.cuda = cuda
@@ -91,12 +91,12 @@ class WrappedTorchModule(ABC):
             self.model = torch.load(modelFile)
         except:
             if self._isCudaEnabled():
-                self.log.warning("Loading of CUDA model failed, trying without CUDA...")
+                self._log.warning("Loading of CUDA model failed, trying without CUDA...")
                 if type(modelFile) != str:
                     modelFile.seek(0)
                 self.model = torch.load(modelFile, map_location='cpu')
                 self._setCudaEnabled(False)
-                self.log.info("Model successfully loaded to CPU")
+                self._log.info("Model successfully loaded to CPU")
             else:
                 raise
 
@@ -160,7 +160,7 @@ class WrappedTorchModule(ABC):
 
         maxValue = X.max().item()
         if maxValue > 2:
-            log.warning("Received input which is likely to not be correctly normalised: maximum value in input tensor is %f" % maxValue)
+            _log.warning("Received input which is likely to not be correctly normalised: maximum value in input tensor is %f" % maxValue)
 
         if mcDropoutSamples is None:
             y = model(X)
@@ -591,7 +591,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
 
 
 class NNOptimiser:
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
              batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None, **optimiserArgs):
@@ -610,7 +610,7 @@ class NNOptimiser:
         if optimiser == 'lbfgs':
             largeBatchSize = 1e12
             if batchSize is not None:
-                log.warning(f"LBFGS does not make use of batches, therefore using largeBatchSize {largeBatchSize} to achieve use of a single batch")
+                _log.warning(f"LBFGS does not make use of batches, therefore using largeBatchSize {largeBatchSize} to achieve use of a single batch")
             batchSize = largeBatchSize
         else:
             if batchSize is None:
@@ -640,7 +640,7 @@ class NNOptimiser:
         return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}]"
 
     def fit(self, model: WrappedTorchModule, dataUtilOrList: Union[DataUtil, List[DataUtil]]):
-        self.log.info(f"Learning parameters of {model} via {self}")
+        self._log.info(f"Learning parameters of {model} via {self}")
 
         if type(dataUtilOrList) != list:  # DataUtil instance
             dataUtilList = [dataUtilOrList]
@@ -652,7 +652,7 @@ class NNOptimiser:
         self.bestEpoch = None
 
         def trainingLog(s):
-            self.log.info(s)
+            self._log.info(s)
             self.trainingLog.append(s)
 
         self._init_cuda()
@@ -669,7 +669,7 @@ class NNOptimiser:
         validationSets = []
         trainingSets = []
         outputScalers = []
-        log.info("Obtaining input/output training instances")
+        _log.info("Obtaining input/output training instances")
         for idxDataSet, Data in enumerate(dataUtilList):
             outputScalers.append(Data.getOutputTensorScaler())
             trainS, valS, meta = Data.splitInputOutputPairs(self.trainFraction)
@@ -701,8 +701,8 @@ class NNOptimiser:
         self.lossEvaluator.startTraining(self.cuda)
         validationMetricName = self.lossEvaluator.getValidationMetricName()
         try:
-            self.log.info('Begin training')
-            self.log.info('Press Ctrl+C to end training early')
+            self._log.info('Begin training')
+            self._log.info('Press Ctrl+C to end training early')
             for epoch in range(1, self.epochs + 1):
                 epoch_start_time = time.time()
 
@@ -810,13 +810,13 @@ class NNOptimiser:
                 raise Exception("CUDA is enabled but no device found")
             if self.gpu is None:
                 if deviceCount > 1:
-                    log.warning("More than one GPU detected. Default GPU index is set to 0.")
+                    _log.warning("More than one GPU detected. Default GPU index is set to 0.")
                 gpuIndex = 0
             else:
                 gpuIndex = self.gpu
             torchcuda.set_device(gpuIndex)
         elif torchcuda.is_available():
-            self.log.warning("You have a CUDA device, so you should probably run with cuda=True")
+            self._log.warning("You have a CUDA device, so you should probably run with cuda=True")
 
     @classmethod
     def _get_batches(cls, tensors: Sequence[torch.Tensor], batch_size, cuda, shuffle):
