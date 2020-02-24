@@ -407,10 +407,40 @@ class FeatureGeneratorRegistry:
     """
     Represents a registry for named feature generators which can be instantiated via factories.
     Each named feature generator is a singleton, i.e. each factory will be called at most once.
+
+    Feature generators can be registered and retrieved by \n
+    registry.<name> = <featureGeneratorFactory> \n
+    registry.<name> \n
+    or through the corresponding methods
+
+    Example:
+        >>> from sensai.featuregen import FeatureGeneratorRegistry, FeatureGeneratorTakeColumns
+        >>> import pandas as pd
+
+        >>> df = pd.DataFrame({"foo": [1, 2, 3], "bar": [7, 8, 9]})
+        >>> registry = FeatureGeneratorRegistry()
+        >>> registry.testFgen = lambda: FeatureGeneratorTakeColumns("foo")
+        >>> registry.testFgen().generate(df)
+           foo
+        0    1
+        1    2
+        2    3
     """
     def __init__(self):
+        # Important: Don't set public members in init. Since we override setattr this would lead to undesired consequences
         self._featureGeneratorFactories = {}
         self._featureGeneratorSingletons = {}
+
+    def __setattr__(self, name: str, value):
+        if not name.startswith("_"):
+            self.registerFactory(name, value)
+        else:
+            super().__setattr__(name, value)
+
+    def __getattr__(self, item: str):
+        if item.startswith("_"):
+            raise ValueError(f"Access to private variables in {self.__class__.__name__} is forbidden")
+        return self.getFeatureGenerator(item)
 
     def registerFactory(self, name, factory: Callable[[], FeatureGenerator]):
         """
@@ -420,6 +450,7 @@ class FeatureGeneratorRegistry:
         """
         if name in self._featureGeneratorFactories:
             raise ValueError(f"Generator for name '{name}' already registered")
+        super().__setattr__(name, factory)
         self._featureGeneratorFactories[name] = factory
 
     def getFeatureGenerator(self, name):

@@ -203,11 +203,14 @@ class DataUtil(ABC):
         Splits the data set
 
         :param fractionalSizeOfFirstSet: the desired fractional size in
-        :return: a tuple (A, B, meta) where A and B are tuples (in, out) with input and output data, and meta is a dictionary
-            containing meta-data on the split, which may contain the following keys:
-                "infoText": text on the data set/the split performed;
-                "outputIndicesA": output index sequence in the set A (one index for every input/output element of A);
-                "outputIndicesB": output index sequence in the set A;
+
+        :return: a tuple (A, B, meta) where A and B are tuples (in, out) with input and output data,
+            and meta is a dictionary containing meta-data on the split, which may contain the following keys:
+
+            * "infoText": text on the data set/the split performed;
+            * "outputIndicesA": output index sequence in the set A (one index for every input/output element of A);
+            * "outputIndicesB": output index sequence in the set A;
+
         """
         pass
 
