@@ -80,6 +80,7 @@ class VectorModel(PredictorModel, ABC):
         self._modelOutputVariableNames = None
         self._targetTransformer = None
         self._name = None
+        self._isFitted = False
 
     @staticmethod
     def _flattened(l: Sequence[Union[T, List[T]]]) -> List[T]:
@@ -161,7 +162,7 @@ class VectorModel(PredictorModel, ABC):
         pass
 
     def isFitted(self):
-        return self.getPredictedVariableNames() is not None
+        return self._isFitted
 
     def _computeInputs(self, x: pd.DataFrame, y=None) -> pd.DataFrame:
         fit = y is not None
@@ -214,6 +215,7 @@ class VectorModel(PredictorModel, ABC):
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]={self._modelInputVariableNames}")
         self._fit(X, Y)
+        self._isFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):

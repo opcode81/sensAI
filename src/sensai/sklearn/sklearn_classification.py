@@ -39,3 +39,7 @@ class SkLearnLightGBMVectorClassificationModel(AbstractSkLearnVectorClassificati
     def __init__(self, random_state=42, num_leaves=31, **modelArgs):
         super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves, **modelArgs)
 
+
+class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, random_state=42, **modelArgs):
+        super().__init__(sklearn.svm.SVC, random_state=random_state, **modelArgs)
