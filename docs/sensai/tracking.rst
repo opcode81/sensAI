@@ -5,10 +5,8 @@ tracking
    :members:
    :undoc-members:
 
-Submodules
-----------
 
 .. toctree::
    :glob:
 
-   *
+   tracking/*

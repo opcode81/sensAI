@@ -5,10 +5,7 @@ sklearn
    :members:
    :undoc-members:
 
-Submodules
-----------
-
 .. toctree::
    :glob:
 
-   *
+   sklearn/*

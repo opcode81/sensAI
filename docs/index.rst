@@ -1,23 +1,17 @@
 sensAI - sensible AI for you and me
 ===================================
 
-.. automodule:: sensai
-   :members:
-   :undoc-members:
+.. toctree::
+   :caption: Guides and Tutorials
+   :glob:
+
+   *
+
 
 .. toctree::
    :caption: Modules
-   :glob:
 
-   getting-started
-   *
-
-.. toctree::
-   :caption: Packages:
-   :titlesonly:
-   :glob:
-
-   */index
+   sensai/index
 
 
 

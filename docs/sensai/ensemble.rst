@@ -5,11 +5,8 @@ ensemble
    :members:
    :undoc-members:
 
-Submodules
-----------
-
 .. toctree::
    :glob:
    :titlesonly:
 
-   *
+   ensemble/*

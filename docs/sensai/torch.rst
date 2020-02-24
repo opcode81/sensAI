@@ -5,10 +5,7 @@ torch
    :members:
    :undoc-members:
 
-Submodules
-----------
-
 .. toctree::
    :glob:
 
-   *
+   torch/*

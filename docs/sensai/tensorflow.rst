@@ -5,10 +5,7 @@ tensorflow
    :members:
    :undoc-members:
 
-Submodules
-----------
-
 .. toctree::
    :glob:
 
-   *
+   tensorflow/*

@@ -5,10 +5,7 @@ util
    :members:
    :undoc-members:
 
-Submodules
-----------
-
 .. toctree::
    :glob:
 
-   *
+   util/*
