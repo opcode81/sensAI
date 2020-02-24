@@ -5,10 +5,12 @@ from subprocess import Popen, PIPE
 import re
 import sys
 from typing import List
+import platform
 
 
 def call(cmd):
-    p = Popen(cmd, shell=False, stdin=PIPE, stdout=PIPE)
+    shell = platform.system() != "Windows"
+    p = Popen(cmd, shell=shell, stdin=PIPE, stdout=PIPE)
     return p.stdout.read().decode("utf-8")
 
 
