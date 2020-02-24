@@ -13,6 +13,10 @@
 
 import os
 import sys
+import ast
+import logging
+
+log = logging.getLogger("docs")
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -37,11 +41,44 @@ def linkcode_resolve(domain, info):
         return None
     if not info['module']:
         return None
-    filename = info['module'].replace('.', '/')
-    return f"https://github.com/jambit/sensAI/blob/master/src/{filename}.py"
+
+    path = findPathFromModule(info['module'])
+    objectName = info['fullname']
+    if "." in objectName:  # don't add source link to methods within classes (we might want to change that in the future)
+        return None
+    lineno = findLineFromObjectName(path, objectName)
+    return f"https://github.com/jambit/sensAI/blob/master/{path}#L{lineno}"
 
 
-autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3"]
+def findPathFromModule(module: str):
+    """
+    :return: local path to module or to __init__.py of the package from the top level directory
+    """
+    filename = module.replace('.', '/')
+    pathPrefix = f"src/{filename}"
+    if os.path.exists(pathPrefix + ".py"):
+        return pathPrefix + ".py"
+    elif os.path.exists(os.path.join(pathPrefix, "__init__.py")):
+        return os.path.join(pathPrefix, "__init__.py")
+    else:
+        raise Exception(f"{pathPrefix} is neither a module nor a package with init - did you fortet to add an __init__.py?")
+
+
+def findLineFromObjectName(sourceFile, objectName):
+    desiredNodeName = objectName.split(".")[0]
+    with open(sourceFile, 'r') as f:
+        sourceNode = ast.parse(f.read())
+    desiredNode = next((node for node in sourceNode.body if getattr(node, "name", "") == desiredNodeName), None)
+    if desiredNode is None:
+        log.warning(f"Could not find object {desiredNodeName} in {sourceFile}")
+        return 0
+    else:
+        return desiredNode.lineno
+
+
+
+autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3",
+                        "azureml", "mlflow", "MySQLdb"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
