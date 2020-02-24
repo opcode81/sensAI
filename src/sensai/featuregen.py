@@ -473,7 +473,7 @@ class FeatureCollector(object):
 class FeatureGeneratorFromVectorModel(FeatureGenerator):
     def __init__(self, vectorModel: "VectorModel", targetFeatureGenerator: FeatureGenerator, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
-            inputFeatureGenerator: FeatureGenerator = None):
+            inputFeatureGenerator: FeatureGenerator = None, useTargetFeatureGeneratorForTraining=False):
         """
         Provides a feature via predictions of a given model
         :param vectorModel: model used for generate features from predictions
@@ -481,11 +481,19 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         :param categoricalFeatureNames:
         :param normalisationRules:
         :param inputFeatureGenerator: optional feature generator to be applied to input of vectorModel's fit and predict
+        :param useTargetFeatureGeneratorForTraining: if False, this generator will always apply the model
+            to generate features.
+            If True, this generator will use targetFeatureGenerator to generate features, bypassing the
+            model. This is useful for the case where the model which is
+            to receive the generated features shall be trained on the original targets rather than the predictions
+            thereof.
         """
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
 
+        self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.targetFeatureGenerator = targetFeatureGenerator
         self.inputFeatureGenerator = inputFeatureGenerator
+        self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.vectorModel = vectorModel
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
@@ -497,6 +505,11 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         if self.inputFeatureGenerator:
             df = self.inputFeatureGenerator.generate(df)
-        return self.vectorModel.predict(df)
+        if self.useTargetFeatureGeneratorForTraining and not ctx.isFitted():
+            log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
+            return self.targetFeatureGenerator.generate(df)
+        else:
+            log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
+            return self.vectorModel.predict(df)
 
 
