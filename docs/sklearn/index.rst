@@ -1,7 +1,7 @@
-util
-====
+sklearn
+=======
 
-.. automodule:: sensai.util
+.. automodule:: sensai.sklearn
    :members:
    :undoc-members:
 

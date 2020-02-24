@@ -1,7 +1,7 @@
-util
-====
+tensorflow
+==========
 
-.. automodule:: sensai.util
+.. automodule:: sensai.tensorflow
    :members:
    :undoc-members:
 

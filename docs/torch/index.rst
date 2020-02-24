@@ -1,7 +1,7 @@
-util
-====
+torch
+=====
 
-.. automodule:: sensai.util
+.. automodule:: sensai.torch
    :members:
    :undoc-members:
 

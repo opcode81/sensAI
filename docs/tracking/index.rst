@@ -1,7 +1,7 @@
-util
-====
+tracking
+========
 
-.. automodule:: sensai.util
+.. automodule:: sensai.tracking
    :members:
    :undoc-members:
 

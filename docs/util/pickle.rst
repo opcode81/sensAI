@@ -1,5 +1,6 @@
-Utils for pickling
-==================
+pickle
+======
 
 .. automodule:: sensai.util.pickle
    :members:
+   :undoc-members:
