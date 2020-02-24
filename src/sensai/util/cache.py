@@ -397,12 +397,18 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
 
         self._updateHook.handleUpdate()
 
+    def _execute(self, cursor, *query):
+        try:
+            cursor.execute(*query)
+        except sqlite3.DatabaseError as e:
+            raise Exception(f"Error executing query for {self.path}: {e}")
+
     def get(self, key):
         self._connMutex.acquire()
         try:
             cursor = self.conn.cursor()
             key = self._keyDbValue(key)
-            cursor.execute(f"SELECT cache_value FROM {self.tableName} WHERE cache_key=?", (key, ))
+            self._execute(cursor, f"SELECT cache_value FROM {self.tableName} WHERE cache_key=?", (key, ))
             row = cursor.fetchone()
             cursor.close()
             if row is None:

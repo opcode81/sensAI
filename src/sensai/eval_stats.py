@@ -15,8 +15,8 @@ _log = logging.getLogger(__name__)
 
 class EvalStats(ABC):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
-                 y_true: Union[list, pd.Series, pd.DataFrame] = None):
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+                 y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
         self.y_true = []
         self.y_predicted = []
         self.y_true_multidim = None
@@ -87,8 +87,8 @@ class EvalStats(ABC):
 
 
 class ClassificationEvalStats(EvalStats):
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
-            y_true: Union[list, pd.Series, pd.DataFrame] = None,
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
             y_predictedClassProbabilities: pd.DataFrame = None,
             labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
         """
@@ -146,6 +146,7 @@ class ClassificationEvalStats(EvalStats):
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         confusionMatrix = self.getConfusionMatrix()
         return confusionMatrix.plot(normalize=normalize)
+
 
 class RegressionEvalStats(EvalStats):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
