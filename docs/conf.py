@@ -48,7 +48,9 @@ def linkcode_resolve(domain, info):
 
 def getPathAndLinkExtension(module: str):
     """
-    :return: local path to module or to __init__.py of the package from the top level directory
+    :return: tuple of the form (path, linkExtension) where
+        the first entry is the local path to a given module or to __init__.py of the package
+        and the second entry is the corresponding path from the top level directory
     """
     filename = module.replace('.', '/')
     docsDir = os.path.dirname(os.path.realpath(__file__))
@@ -74,7 +76,6 @@ def findLineFromObjectName(sourceFile, objectName):
         return 0
     else:
         return desiredNode.lineno
-
 
 
 autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3",
