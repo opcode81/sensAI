@@ -9,7 +9,7 @@ import MySQLdb
 from .cache import PersistentKeyValueCache
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
@@ -69,7 +69,7 @@ class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
                 time.sleep(self.deferredCommitDelaySecs)
                 timePassedSinceLastUpdate = time.time() - self._lastUpdateTime
                 if timePassedSinceLastUpdate >= self.deferredCommitDelaySecs:
-                    log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the database")
+                    _log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the database")
                     self.conn.commit()
                     self._numEntriesToBeCommitted = 0
                     return

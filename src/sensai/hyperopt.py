@@ -15,7 +15,7 @@ from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperi
 from .vector_model import VectorModel
 from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def iterParamCombinations(hyperParamValues: Dict[str, Sequence[Any]]) -> Generator[Dict[str, Any], None, None]:
@@ -128,7 +128,7 @@ class ParametersMetricsCollection:
             # check sort column and move it to the front
             if self.sortColumnName is not None:
                 if self.sortColumnName not in self.cols:
-                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
+                    _log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
                 else:
                     self.cols.remove(self.sortColumnName)
                     self.cols.insert(0, self.sortColumnName)
@@ -164,7 +164,7 @@ class ParametersMetricsCollection:
 
 
 class GridSearch(TrackedExperimentDataProvider):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
             numProcesses=1, csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
@@ -196,7 +196,7 @@ class GridSearch(TrackedExperimentDataProvider):
             for options in parameterOptions.values():
                 n *= len(options)
             self.numCombinations += n
-        log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
+        _log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
         self._trackedExperiment = None
@@ -235,7 +235,7 @@ class GridSearch(TrackedExperimentDataProvider):
             if loggingCallback is not None:
                 loggingCallback(values)
             paramsMetricsCollection.addValues(values)
-            log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
+            _log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
 
         if self.numProcesses == 1:
             for parameterOptions in self.parameterOptionsList:
@@ -255,7 +255,7 @@ class GridSearch(TrackedExperimentDataProvider):
 
 
 class SAHyperOpt(TrackedExperimentDataProvider):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     class State(SAState):
         def __init__(self, params, randomState: Random, results: Dict, computeMetric: Callable[[Dict[str, Any]], float]):

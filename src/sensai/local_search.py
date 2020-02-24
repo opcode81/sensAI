@@ -11,7 +11,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class SATemperatureSchedule(ABC):
@@ -406,7 +406,7 @@ class RelativeFrequencyCounter:
 class SAChain:
     """Manages the progression of one state during simulated annealing"""
 
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, stateFactory: Callable[[random.Random], SAState], schedule: SATemperatureSchedule,
             opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator]]], randomSeed, collectStats=False):
@@ -523,7 +523,7 @@ class SAChain:
 
 
 class SimulatedAnnealing:
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     """
     The simulated annealing algorithm for discrete optimisation (cost minimisation)
@@ -586,7 +586,7 @@ class SimulatedAnnealing:
 
 
 class ParallelTempering:
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     """
     The parallel tempering algorithm for discrete optimisation (cost minimisation)

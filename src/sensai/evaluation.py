@@ -13,7 +13,7 @@ from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorCl
 from .eval_stats import RegressionEvalStats, EvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
     ClassificationEvalStatsCollection, EvalStatsCollection
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class VectorModelEvaluationData(ABC):
@@ -102,7 +102,7 @@ class VectorModelEvaluator(ABC):
         """Fits the given model's parameters using this evaluator's training data"""
         startTime = time.time()
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
-        log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
+        _log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
     @abstractmethod
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorModelEvaluationData:
@@ -349,7 +349,7 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
         fig = plt.figure(title)
 
         outputDistributionSeries = inputOutputData.outputs.iloc[:, 0]
-        log.info(f"Description of target column in training set: \n{outputDistributionSeries.describe()}")
+        _log.info(f"Description of target column in training set: \n{outputDistributionSeries.describe()}")
         if not model.isRegressionModel():
             outputDistributionSeries = outputDistributionSeries.value_counts(normalize=normalizePlots)
             ax = sns.barplot(outputDistributionSeries.index, outputDistributionSeries.values)
@@ -370,8 +370,8 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
     evaluator.fitModel(model)
     evalData = evaluator.evalModel(model)
     evalStats = evalData.getEvalStats()
-    log.info(f"Finished evaluation for model {model} in {time.time() - tStart} seconds")
-    log.info(f"Evaluation metrics: {str(evalStats.getAll())}")
+    _log.info(f"Finished evaluation for model {model} in {time.time() - tStart} seconds")
+    _log.info(f"Evaluation metrics: {str(evalStats.getAll())}")
 
     if model.isRegressionModel():
         res: RegressionEvalStats = evalStats

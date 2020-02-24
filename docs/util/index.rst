@@ -1,5 +1,12 @@
-The utils package
-=================
+util
+====
+
+.. automodule:: sensai.util
+   :members:
+   :undoc-members:
+
+Submodules
+----------
 
 .. toctree::
    :glob:

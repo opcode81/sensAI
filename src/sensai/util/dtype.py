@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def toFloatArray(data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -13,6 +13,6 @@ def toFloatArray(data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
     elif type(data) is pd.DataFrame:
         values = data.values
     if values.dtype == "object":
-        log.warning("Input array of dtype 'object' will be converted to float64 - this is potentially unsafe!")
+        _log.warning("Input array of dtype 'object' will be converted to float64 - this is potentially unsafe!")
         values = values.astype("float64", copy=False)
     return values

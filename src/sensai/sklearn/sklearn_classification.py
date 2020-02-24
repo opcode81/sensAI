@@ -1,5 +1,4 @@
 import logging
-from typing import Sequence
 
 import lightgbm
 import sklearn.ensemble
@@ -7,10 +6,10 @@ import sklearn.naive_bayes
 import sklearn.neural_network
 import sklearn.tree
 
-from .sklearn_base import AbstractSkLearnVectorClassificationModel, DataFrameTransformer
+from .sklearn_base import AbstractSkLearnVectorClassificationModel
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassificationModel):

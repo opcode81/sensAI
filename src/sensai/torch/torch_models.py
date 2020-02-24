@@ -6,7 +6,7 @@ from . import torch_modules
 from .torch_base import WrappedTorchVectorModule, TorchVectorRegressionModel, TorchVectorClassificationModel
 from ..normalisation import NormalisationMode
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class MultiLayerPerceptron(WrappedTorchVectorModule):
@@ -31,7 +31,7 @@ class TorchMultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel)
     HVS model which uses a torch implementation of a multi-layer perceptron
     """
 
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=None,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN,
@@ -54,7 +54,7 @@ class TorchMultiLayerPerceptronVectorClassificationModel(TorchVectorClassificati
     HVS model which uses a torch implementation of a multi-layer perceptron
     """
 
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None,

@@ -11,7 +11,7 @@ from .columngen import ColumnGenerator
 if TYPE_CHECKING:
     from .vector_model import VectorModel
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class DuplicateColumnNamesException(Exception):
@@ -172,7 +172,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
             if idx % 100 == 0:
-                log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
+                _log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
             value = None
             if self.cache is not None:
                 value = self.cache.get(nt.Index)
@@ -233,13 +233,13 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         resultDf = pd.DataFrame(index=df.index)
         for col in self.columns:
-            log.info(f"Flattening column {col}")
+            _log.info(f"Flattening column {col}")
             values = np.stack(df[col].values)
             if len(values.shape) != 2:
                 raise ValueError(f"Column {col} was expected to contain one dimensional vectors, something went wrong")
             dimension = values.shape[1]
             new_columns = [f"{col}_{i}" for i in range(dimension)]
-            log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
+            _log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
@@ -248,7 +248,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     Implements a feature generator via a column generator
     """
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
@@ -407,10 +407,40 @@ class FeatureGeneratorRegistry:
     """
     Represents a registry for named feature generators which can be instantiated via factories.
     Each named feature generator is a singleton, i.e. each factory will be called at most once.
+
+    Feature generators can be registered and retrieved by \n
+    registry.<name> = <featureGeneratorFactory> \n
+    registry.<name> \n
+    or through the corresponding methods
+
+    Example:
+        >>> from sensai.featuregen import FeatureGeneratorRegistry, FeatureGeneratorTakeColumns
+        >>> import pandas as pd
+
+        >>> df = pd.DataFrame({"foo": [1, 2, 3], "bar": [7, 8, 9]})
+        >>> registry = FeatureGeneratorRegistry()
+        >>> registry.testFgen = lambda: FeatureGeneratorTakeColumns("foo")
+        >>> registry.testFgen().generate(df)
+           foo
+        0    1
+        1    2
+        2    3
     """
     def __init__(self):
+        # Important: Don't set public members in init. Since we override setattr this would lead to undesired consequences
         self._featureGeneratorFactories = {}
         self._featureGeneratorSingletons = {}
+
+    def __setattr__(self, name: str, value):
+        if not name.startswith("_"):
+            self.registerFactory(name, value)
+        else:
+            super().__setattr__(name, value)
+
+    def __getattr__(self, item: str):
+        if item.startswith("_"):
+            raise ValueError(f"Access to private variables in {self.__class__.__name__} is forbidden")
+        return self.getFeatureGenerator(item)
 
     def registerFactory(self, name, factory: Callable[[], FeatureGenerator]):
         """
@@ -420,6 +450,7 @@ class FeatureGeneratorRegistry:
         """
         if name in self._featureGeneratorFactories:
             raise ValueError(f"Generator for name '{name}' already registered")
+        super().__setattr__(name, factory)
         self._featureGeneratorFactories[name] = factory
 
     def getFeatureGenerator(self, name):
