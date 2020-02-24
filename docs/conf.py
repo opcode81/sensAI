@@ -38,27 +38,30 @@ def linkcode_resolve(domain, info):
     if not info['module']:
         return None
 
-    path = findPathFromModule(info['module'])
+    path, linkExtension = getPathAndLinkExtension(info['module'])
     objectName = info['fullname']
     if "." in objectName:  # don't add source link to methods within classes (we might want to change that in the future)
         return None
     lineno = findLineFromObjectName(path, objectName)
-    return f"https://github.com/jambit/sensAI/blob/master/{path}#L{lineno}"
+    return f"https://github.com/jambit/sensAI/blob/master/{linkExtension}#L{lineno}"
 
 
-def findPathFromModule(module: str):
+def getPathAndLinkExtension(module: str):
     """
     :return: local path to module or to __init__.py of the package from the top level directory
     """
     filename = module.replace('.', '/')
     docsDir = os.path.dirname(os.path.realpath(__file__))
-    pathPrefix = os.path.join(docsDir, f"../src/{filename}")
-    if os.path.exists(pathPrefix + ".py"):
-        return pathPrefix + ".py"
-    elif os.path.exists(os.path.join(pathPrefix, "__init__.py")):
-        return os.path.join(pathPrefix, "__init__.py")
+    sourcePathPrefix = os.path.join(docsDir, f"../src/{filename}")
+
+    if os.path.exists(sourcePathPrefix + ".py"):
+        linkExtension = f"src/{filename}.py"
+        return sourcePathPrefix + ".py", linkExtension
+    elif os.path.exists(os.path.join(sourcePathPrefix, "__init__.py")):
+        linkExtension = f"src/{filename}/__init__.py"
+        return os.path.join(sourcePathPrefix, "__init__.py"), linkExtension
     else:
-        raise Exception(f"{pathPrefix} is neither a module nor a package with init - did you fortet to add an __init__.py?")
+        raise Exception(f"{sourcePathPrefix} is neither a module nor a package with init - did you fortet to add an __init__.py?")
 
 
 def findLineFromObjectName(sourceFile, objectName):
