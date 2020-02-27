@@ -1,14 +1,13 @@
-name: Python package
+name: Merge master, run tests and build docu
 
 on:
   push:
-    branches-ignore: [master]
+    branches-ignore: ['test/**']
   pull_request:
     branches: [master]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -20,13 +19,21 @@ jobs:
           fetch-depth: 0
       - name: Merge master into current branch
         run: |
-          git fetch origin master:master
+          git fetch origin master:master --update-head-ok
           git merge master
-      - name: Setup Python
+      - name: Setup Python 3.7
         uses: actions/setup-python@v1
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.7"
       - name: Install Tox and any other packages
         run: pip install tox
       - name: Run Tox
         run: tox -e py -e docs # Run tox using the version of Python in `PATH`
+      - name: Setup Python 3.6
+        uses: actions/setup-python@v1
+        with:
+          python-version: "3.6"
+      - name: Install Tox and any other packages
+        run: pip install tox
+      - name: Run Tox
+        run: tox -e py  # Run tox using the version of Python in `PATH`, don't build docs on py36 due to bugs in sphinx
