@@ -1,7 +1,6 @@
 # sensAI
 
 The library for sensible AI for you and me by jambit GmbH. 
-Read the documentation [here](https://sensai.readthedocs.io/)
 
 ## About sensAI
 
@@ -25,9 +24,18 @@ In particular, sensAI provides ...
 
 ## Documentation
 
-Additional documentation will be provided in the near future. Stay tuned.
+Source code documentation and tutorials can be found [here](https://sensai.readthedocs.io/)
 
-For now, we refer to the docstrings within the source code.
+### Using sensAI
+
+There are two suggested ways of using sensai. 
+
+1) Install it as a library with `pip install sensai`
+2) Include the code in `src/sensai` as subpackage into your project.
+
+The second way is recommended if you want to further develop/extend sensAI's functionality. In order to facilitate 
+incorporating changes within sensAI into your code and vice versa, this repo contains a [syncing utility](repo_dir_sync.py).
+Further documentation on that topic will be provided soon.
 
 ## Code Style
 
@@ -38,6 +46,8 @@ We deliberately do not comply with PEP 8. Requests to adhere to it will be ignor
 sensAI is being developed by the artificial intelligence group at jambit GmbH.
 
 The main contributors are Dominik Jain, Michael Panchenko, Kristof Schröder and Magnus Winter.
+
+### How to contribute 
 
 External contributions are welcome! Please issue a pull request.
 
