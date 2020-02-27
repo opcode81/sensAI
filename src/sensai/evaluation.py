@@ -19,7 +19,9 @@ log = logging.getLogger(__name__)
 
 TEvalStats = TypeVar("TEvalStats", RegressionEvalStats, ClassificationEvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", RegressionEvalStatsCollection, ClassificationEvalStatsCollection)
+TEvaluator = TypeVar("TEvaluator", "VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator")
 TEvalData = TypeVar("TEvalData", "VectorRegressionModelEvaluationData", "VectorClassificationModelEvaluationData")
+TCrossValData = TypeVar("TCrossValData", "VectorClassificationModelCrossValidationData", "VectorRegressionModelCrossValidationData")
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -70,7 +72,7 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
 
 class VectorModelEvaluator(ABC):
     @staticmethod
-    def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
+    def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
         if model.isRegressionModel():
             return VectorRegressionModelEvaluator(data, **kwargs)
         else:
@@ -238,7 +240,7 @@ class VectorModelCrossValidationData(ABC, Generic[TEvalData, TEvalStats, TEvalSt
                 yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-class VectorModelCrossValidator(ABC, Generic[TEvalData]):
+class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) -> Union["VectorRegressionModelCrossValidator", "VectorClassificationModelCrossValidator"]:
         if model.isRegressionModel():
@@ -271,7 +273,7 @@ class VectorModelCrossValidator(ABC, Generic[TEvalData]):
         pass
 
     @abstractmethod
-    def _createEvalData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> TEvalData:
+    def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> TCrossValData:
         pass
 
     def evalModel(self, model):
@@ -288,7 +290,7 @@ class VectorModelCrossValidator(ABC, Generic[TEvalData]):
                 trainedModels.append(modelToFit)
             evalDataList.append(evaluator.evalModel(modelToFit))
             testIndicesList.append(evaluator.testData.outputs.index)
-        return self._createEvalData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
+        return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
 
 class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
@@ -300,7 +302,7 @@ class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegres
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData) -> VectorRegressionModelEvaluator:
         return VectorRegressionModelEvaluator(trainingData, testData=testData)
 
-    def _createEvalData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorRegressionModelCrossValidationData:
+    def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorRegressionModelCrossValidationData:
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
 
 
@@ -313,7 +315,7 @@ class VectorClassificationModelCrossValidator(VectorModelCrossValidator[VectorCl
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
         return VectorClassificationModelEvaluator(trainingData, testData=testData)
 
-    def _createEvalData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorClassificationModelCrossValidationData:
+    def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorClassificationModelCrossValidationData:
         return VectorClassificationModelCrossValidationData(trainedModels, evalDataList, predictedVarNames)
 
 
