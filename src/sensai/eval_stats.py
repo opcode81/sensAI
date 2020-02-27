@@ -269,9 +269,9 @@ class RegressionEvalStats(EvalStats):
             title += "\n" + titleAdd
         if figure:
             fig = plt.figure(title)
-        y_range = [min(self.y_true), max(self.y_true)]
+        y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
         plt.plot(y_range, y_range, 'k-', lw=0.75, label="_not in legend", color="green", zorder=2)
-        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, bins=bins)
+        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
             cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
