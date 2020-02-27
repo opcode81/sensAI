@@ -2,7 +2,7 @@ name: Merge master, run tests and build docu
 
 on:
   push:
-    branches-ignore: ['test/**']
+    branches: '**'
   pull_request:
     branches: [master]
 
