@@ -62,7 +62,11 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData):
 class VectorModelEvaluator(ABC):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
-        if model.isRegressionModel():
+        return VectorModelEvaluator.forModelType(model.isRegressionModel(), data, **kwargs)
+
+    @staticmethod
+    def forModelType(isRegression: bool, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
+        if isRegression:
             return VectorRegressionModelEvaluator(data, **kwargs)
         else:
             return VectorClassificationModelEvaluator(data, **kwargs)
@@ -117,14 +121,16 @@ class VectorModelEvaluator(ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
+    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
+        if computeProbabilities:
+            raise NotImplementedError("Computing probabilities is currently not implemented for regression models")
 
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         statsDict = {}
-        predictions, groundTruth = self.computeOutputs(model, self.trainingData if onTrainingData else self.testData)
+        predictions, groundTruth = self._computeOutputs(model, self.trainingData if onTrainingData else self.testData)
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
             statsDict[predictedVarName] = evalStats
@@ -137,10 +143,9 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a pair (predictions, groundTruth)
         """
-        return self.computeOutputs(model, self.testData)
+        return self._computeOutputs(model, self.testData)
 
-    @staticmethod
-    def computeOutputs(model, inputOutputData: InputOutputData):
+    def _computeOutputs(self, model, inputOutputData: InputOutputData):
         """
         Applies the given model to the given data
 
@@ -170,7 +175,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
     def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
-        predictions, predictions_proba, groundTruth = self.computeOutputs(model, self.trainingData if onTrainingData else self.testData)
+        predictions, predictions_proba, groundTruth = self._computeOutputs(model, self.trainingData if onTrainingData else self.testData)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         return VectorClassificationModelEvaluationData(evalStats)
 
@@ -181,9 +186,9 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
-        return self.computeOutputs(model, self.testData)
+        return self._computeOutputs(model, self.testData)
 
-    def computeOutputs(self, model, inputOutputData: InputOutputData) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def _computeOutputs(self, model, inputOutputData: InputOutputData) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Applies the given model to the given data
 
@@ -192,14 +197,14 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
         if self.computeProbabilities:
-            classProbabilities = model.predictClassProbabilities(self.testData.inputs)
+            classProbabilities = model.predictClassProbabilities(inputOutputData.inputs)
             if classProbabilities is None:
                 raise Exception(f"Requested computation of class probabilities for a model which does not support it: {model} returned None")
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:
             classProbabilities = None
-            predictions = model.predict(self.testData.inputs)
-        groundTruth = self.testData.outputs
+            predictions = model.predict(inputOutputData.inputs)
+        groundTruth = inputOutputData.outputs
         return predictions, classProbabilities, groundTruth
 
 
@@ -212,7 +217,11 @@ class VectorModelCrossValidationData(ABC):
 class VectorModelCrossValidator(ABC):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) -> "VectorModelCrossValidator":
-        if model.isRegressionModel():
+        return VectorModelCrossValidator.forModelType(model.isRegressionModel(), data, folds=folds, **kwargs)
+
+    @staticmethod
+    def forModelType(isRegression: bool, data: InputOutputData, folds=5, **kwargs) -> "VectorModelCrossValidator":
+        if isRegression:
             return VectorRegressionModelCrossValidator(data, folds=folds, **kwargs)
         else:
             return VectorClassificationModelCrossValidator(data, folds=folds, **kwargs)

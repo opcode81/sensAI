@@ -71,7 +71,13 @@ class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
-    def __init__(self):
+    def __init__(self, checkInputColumns=True):
+        """
+
+        :param checkInputColumns: Whether to check if the input column list (after feature generation) during inference coincides
+            with the input column list during fit. This should be disabled if feature generation is not performed by the model itself,
+            e.g. in ensemble models.
+        """
         self._featureGenerator: Optional["FeatureGenerator"] = None
         self._inputTransformerChain = DataFrameTransformerChain(())
         self._outputTransformerChain = DataFrameTransformerChain(())
@@ -81,6 +87,7 @@ class VectorModel(PredictorModel, ABC):
         self._targetTransformer = None
         self._name = None
         self._isFitted = False
+        self.checkInputColumns = checkInputColumns
 
     @staticmethod
     def _flattened(l: Sequence[Union[T, List[T]]]) -> List[T]:
@@ -175,7 +182,7 @@ class VectorModel(PredictorModel, ABC):
         if not fit:
             if not self.isFitted():
                 raise Exception(f"Model has not been fitted")
-            if list(x.columns) != self._modelInputVariableNames:
+            if self.checkInputColumns and list(x.columns) != self._modelInputVariableNames:
                 raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(x.columns)}")
         return x
 
