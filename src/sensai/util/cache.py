@@ -8,10 +8,11 @@ import re
 import threading
 import time
 from abc import abstractmethod, ABC
-from functools import wraps, partial
 from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
 import sqlite3
+
+from .pickle import PickleFailureDebugger
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +72,11 @@ def dumpPickle(obj, picklePath):
     if dirName != "":
         os.makedirs(dirName, exist_ok=True)
     with open(picklePath, "wb") as f:
-        pickle.dump(obj, f)
+        try:
+            pickle.dump(obj, f)
+        except AttributeError as e:
+            failingPaths = PickleFailureDebugger.debugFailure(obj)
+            raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
 
 
 class DelayedUpdateHook:

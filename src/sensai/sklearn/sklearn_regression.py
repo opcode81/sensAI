@@ -9,7 +9,7 @@ import sklearn.neural_network
 import sklearn.svm
 import lightgbm
 
-from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel, InvertibleDataFrameTransformer, DataFrameTransformer
+from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
 
 
 log = logging.getLogger(__name__)

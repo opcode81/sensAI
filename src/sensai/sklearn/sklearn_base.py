@@ -1,14 +1,12 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence
 
 import numpy as np
 import pandas as pd
 from sklearn import compose
 
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
-from ..data_transformation import DataFrameTransformer, InvertibleDataFrameTransformer
 
 log = logging.getLogger(__name__)
 
@@ -191,8 +189,18 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
             strModel = str(self.model)
         return f"{self.__class__.__name__}[{strModel}]"
 
+    def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        """
+        Designed to be overridden in order to make input data-specific changes to modelArgs
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        """
+        pass
+
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         inputValues = self._transformInput(inputs, fit=True)
+        self._updateModelArgs(inputs, outputs)
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         self.model.fit(inputValues, np.ravel(outputs.values))
