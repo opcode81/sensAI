@@ -189,8 +189,18 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
             strModel = str(self.model)
         return f"{self.__class__.__name__}[{strModel}]"
 
+    def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        """
+        Designed to be overridden in order to make input data-specific changes to modelArgs
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        """
+        pass
+
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         inputValues = self._transformInput(inputs, fit=True)
+        self._updateModelArgs(inputs, outputs)
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         _log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         self.model.fit(inputValues, np.ravel(outputs.values))
