@@ -10,3 +10,4 @@ docs/_build
 /sync.py
 dist
 *.egg-info*
+/default_console.py
