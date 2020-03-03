@@ -105,20 +105,26 @@ class LSTNetwork(MCDropoutCapableNNModule):
     """
     Network for (auto-regressive) time-series prediction with long- and short-term dependencies as proposed by G. Lai et al.
     It applies two parallel paths to a time series of size (numInputTimeSlices, inputDimPerTimeSlice):
+    
         * Complex path with the following stages:
+        
             * Convolutions on the time series input data (CNNs):
               For a CNN with numCnnTimeSlices (= kernel size), it produces an output series of size numInputTimeSlices-numCnnTimeSlices+1.
               If the number of parallel convolutions is numConvolutions, the total output size of this stage is thus
               numConvolutions*(numInputTimeSlices-numCnnTimeSlices+1)
             * Two RNN components which process the CNN output in parallel:
+            
                 * RNN (GRU)
                   The output dimension of this stage is the hidden state of the GRU after seeing the entire
                   input data from the previous stage, i.e. if has size hidRNN.
                 * Skip-RNN (GRU), which processes time series elements that are 'skip' time slices apart.
                   It does this by grouping the input such that 'skip' GRUs are applied in parallel, which all use the same parameters.
                   If the hidden state dimension of each GRU is hidSkip, then the output size of this stage is skip*hidSkip.
+                  
             * Dense layer
+            
         * Direct regression dense layer (so-called "highway" path).
+        
     The model ultimately combines the outputs of these two paths via a combination function.
     Many parts of the model are optional and can be completely disabled.
     The model can produce one or more (potentially multi-dimensional) outputs, where each output typically typically corresponds
