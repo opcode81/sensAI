@@ -24,7 +24,32 @@ from ..util.string import objectRepr
 _log = logging.getLogger(__name__)
 
 
-class TensorScaler:
+class TensorScaler(ABC):
+    @abstractmethod
+    def cuda(self):
+        """
+        Makes this scaler's components use CUDA
+        """
+        pass
+
+    def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Applies scaling/normalisation to the given tensor
+        :param tensor: the tensor to scale/normalise
+        :return: the scaled/normalised tensor
+        """
+        pass
+
+    def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Applies the inverse of method normalise to the given tensor
+        :param tensor: the tensor to denormalise
+        :return: the denormalised tensor
+        """
+        pass
+
+
+class TensorScalerFromVectorDataScaler(TensorScaler):
     def __init__(self, vectorDataScaler: normalisation.VectorDataScaler, cuda: bool):
         self.scale = vectorDataScaler.scale
         if self.scale is not None:
@@ -860,10 +885,10 @@ class VectorDataUtil(DataUtil):
         self.outputValues = outputs.values
         inputScaler = normalisation.VectorDataScaler(self.inputs, self.normalisationMode)
         self.inputValues = inputScaler.getNormalisedArray(self.inputs)
-        self.inputTensorScaler = TensorScaler(inputScaler, cuda)
+        self.inputTensorScaler = TensorScalerFromVectorDataScaler(inputScaler, cuda)
         outputScaler = normalisation.VectorDataScaler(self.outputs, self.normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
         self.outputValues = outputScaler.getNormalisedArray(self.outputs)
-        self.outputTensorScaler = TensorScaler(outputScaler, cuda)
+        self.outputTensorScaler = TensorScalerFromVectorDataScaler(outputScaler, cuda)
 
     def getOutputTensorScaler(self):
         return self.outputTensorScaler
