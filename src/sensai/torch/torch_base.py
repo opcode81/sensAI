@@ -258,48 +258,6 @@ class DataUtil(ABC):
         pass
 
 
-class NNTimeSeriesForecastModel(ABC):
-    @abstractmethod
-    def getNormalisationMode(self):
-        """
-        Gets the normalisation mode with which to normalise the time series data
-
-        :return: the mode (0=none, 1=by maximum in entire data set, 2=by separate maximum in each column)
-        """
-        pass
-
-    @abstractmethod
-    def getForecastInputWindowLength(self):
-        """
-        Gets the number of input time slices used for forecasting
-
-        :return: the number of input time slices
-        """
-        pass
-
-    @abstractmethod
-    def getForecastOutputWindowLength(self):
-        """
-        Gets the number of output time slices that are forecast
-
-        :return: the number of output time slices
-        """
-        pass
-
-    @abstractmethod
-    def getForecastOffset(self):
-        """
-        Gets the offset (number of time steps) into the future after the last input time step at which forecasting begins,
-        e.g. if it's 1 then we start forecasting immediately after the input data.
-
-        :return: the offset
-        """
-
-    @abstractmethod
-    def getOutputScaler(self):
-        pass
-
-
 class _Optimiser(object):
     """
     Wrapper for classes inherited from torch.optim.Optimizer
