@@ -250,25 +250,30 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     _log = _log.getChild(__qualname__)
 
-    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
+    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, isCategorical=False, **normalisationRuleKwargs):
         """
         :param columnGen: the underlying column generator
         :param takeInputColumnIfPresent: if True, then if a column whose name corresponds to the column to generate exists
             in the input data, simply copy it to generate the output (without using the column generator); if False, always
             apply the columnGen to generate the output
+        :param isCategorical: whether the resulting column is categorical
+        :param normalisationRuleKwargs: kwargs for data_transformation.DFTNormalisation.Rule for the resulting column.
+            This should be provided if isCategorical is False
         """
+        categoricalFeatureNames = (columnGen.generatedColumnName, ) if isCategorical else ()
+        normalisationRules = [data_transformation.DFTNormalisation.Rule(fr"{columnGen.generatedColumnName}", **normalisationRuleKwargs)]
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
         if self.takeInputColumnIfPresent and colName in df.columns:
-            self.log.debug(f"Taking column '{colName}' from input data frame")
+            self._log.debug(f"Taking column '{colName}' from input data frame")
             series = df[colName]
         else:
-            self.log.debug(f"Generating column '{colName}' via {self.columnGen}")
+            self._log.debug(f"Generating column '{colName}' via {self.columnGen}")
             series = self.columnGen.generateColumn(df)
         return pd.DataFrame({colName: series})
 
@@ -537,10 +542,10 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         if self.inputFeatureGenerator:
             df = self.inputFeatureGenerator.generate(df)
         if self.useTargetFeatureGeneratorForTraining and not ctx.isFitted():
-            log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
+            _log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
             return self.targetFeatureGenerator.generate(df)
         else:
-            log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
+            _log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
 
 
