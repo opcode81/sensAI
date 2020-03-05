@@ -48,7 +48,7 @@ class PersistentList(ABC):
         """
         Adds an item to the cache
 
-        :param value: the value to store
+        :param item: the item to store
         """
         pass
 
