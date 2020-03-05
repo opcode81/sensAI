@@ -1,6 +1,5 @@
 import logging
 import os
-import typing
 from abc import ABC
 from abc import abstractmethod
 from concurrent.futures import ProcessPoolExecutor
@@ -205,9 +204,9 @@ class GridSearch(TrackedExperimentDataProvider):
     def _evalParams(cls, modelFactory, evaluatorOrValidator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
-                cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
+                cls._log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
                 return None
-        cls.log.info(f"Evaluating {params}")
+        cls._log.info(f"Evaluating {params}")
         model = modelFactory(**params)
         values = computeEvaluationMetricsDict(model, evaluatorOrValidator)
         values["str(model)"] = str(model)
@@ -348,13 +347,13 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
         if metrics is not None:
-            cls.log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
+            cls._log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
             return metrics
         else:
-            cls.log.info(f"Evaluating parameter combination {params}")
+            cls._log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
             metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
-            cls.log.info(f"Got metrics {metrics} for {params}")
+            cls._log.info(f"Got metrics {metrics} for {params}")
             if trackedExperiment is not None:
                 values = dict(metrics)
                 values["str(model)"] = str(model)
@@ -362,7 +361,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
                 trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addModelParamsMetrics(model, params, metrics)
-                cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
+                cls._log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
             if parameterCombinationEquivalenceClassValueCache is not None:
                 parameterCombinationEquivalenceClassValueCache.set(params, metrics)
         return metrics
