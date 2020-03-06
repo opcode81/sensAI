@@ -373,4 +373,4 @@ class ConfusionMatrix:
 
     def plot(self, normalize=True):
         title = 'Normalized Confusion Matrix' if normalize else 'Confusion Matrix (Counts)'
-        plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize)
+        return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize)
