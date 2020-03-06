@@ -146,7 +146,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
         inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, groundTruth = self.computeOutputs(model, inputOutputData)
+        predictions, groundTruth = self._computeOutputs(model, inputOutputData)
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
             evalStatsByVarName[predictedVarName] = evalStats
@@ -188,7 +188,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
         inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, predictions_proba, groundTruth = self.computeOutputs(model, inputOutputData)
+        predictions, predictions_proba, groundTruth = self._computeOutputs(model, inputOutputData)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         predictedVarName = model.getPredictedVariableNames()[0]
         return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs)
@@ -492,13 +492,22 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         """
         if not showPlots and resultWriter is None:
             return
+        plots = self._createPlots(data, predictedVarName)
+        self._writePlots(plots, showPlots, resultWriter)
+
+    @staticmethod
+    def _writePlots(plots: List[Tuple[str, matplotlib.figure.Figure]], showPlots, resultWriter: Optional[ResultWriter]):
+        if resultWriter is not None:
+            resultWriter.writeFigures(plots, closeFigures=not showPlots)
+
+    def _createPlots(self, data: Union[TEvalData, TCrossValData], predictedVarName) -> List[Tuple[str, matplotlib.figure.Figure]]:
         if isinstance(data, VectorModelCrossValidationData):
             evalStats = data.getEvalStatsCollection(predictedVarName=predictedVarName).getGlobalStats()
         elif isinstance(data, VectorModelEvaluationData):
             evalStats = data.getEvalStats()
         else:
             raise ValueError(f"Unexpected argument: data={data}")
-        self.createEvalStatsPlots(evalStats, showPlots=showPlots, resultWriter=resultWriter)
+        return self._createEvalStatsPlots(evalStats)
 
     def createEvalStatsPlots(self, evalStats: TEvalStats, showPlots=True, resultWriter: ResultWriter = None):
         """
@@ -510,8 +519,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         if not showPlots and resultWriter is None:
             return
         plots = self._createEvalStatsPlots(evalStats)
-        if resultWriter is not None:
-            resultWriter.writeFigures(plots, closeFigures=not showPlots)
+        self._writePlots(plots, showPlots, resultWriter)
 
     @abstractmethod
     def _createEvalStatsPlots(self, evalStats: TEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
@@ -523,7 +531,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
 
 
 class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats):
+    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
         plots = []
         plots.append(("error-dist", evalStats.plotErrorDistribution()))
         plots.append(("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions()))
@@ -532,7 +540,7 @@ class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegre
 
 
 class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats):
+    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
         plots = []
         plots.append(("confusion-matrix", evalStats.plotConfusionMatrix()))
         return plots
