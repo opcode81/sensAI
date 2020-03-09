@@ -243,13 +243,21 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     Instances of this class take columns with vectors and creates a dataframe with columns containing entries of
     these vectors.
 
-    For example, if columns "vec1", "vec2" contain vectors of dimensions dim1, dim2, a datafrane dim1+dim2 new columns
+    For example, if columns "vec1", "vec2" contain vectors of dimensions dim1, dim2, a dataframe with dim1+dim2 new columns
     will be created. It will contain the columns "vec1_<i1>", "vec2_<i2>" with i1, i2 ranging in (0, dim1), (0, dim2).
 
     """
-    def __init__(self, columns: Union[str, Sequence[str]], categoricalFeatureNames: Sequence[str] = (),
+    def __init__(self, columns: Optional[Union[str, Sequence[str]]] = None, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
             generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+        """
+
+        :param columns: column name, list of columns or None. If None, all columns in the input dataframe fill be flattened
+            during generation
+        :param categoricalFeatureNames:
+        :param normalisationRules:
+        :param generatedColumnsRuleTemplate:
+        """
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         if isinstance(columns, str):
             columns = [columns]
@@ -257,7 +265,8 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         resultDf = pd.DataFrame(index=df.index)
-        for col in self.columns:
+        columnsToFlatten = self.columns if self.columns is not None else df.columns
+        for col in columnsToFlatten:
             _log.info(f"Flattening column {col}")
             values = np.stack(df[col].values)
             if len(values.shape) != 2:
@@ -267,6 +276,17 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             _log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
+
+
+def getFlattenedFeatureGenerator(fgen: FeatureGenerator, ruleTemplate: data_transformation.DFTNormalisation.RuleTemplate):
+    """
+    Return a feature generator that will generate flattened output of the provided fgen
+
+    :param fgen: feature generator to be flattened
+    :param ruleTemplate: ruleTemplate to apply to all output columns
+    :return:
+    """
+    return ChainedFeatureGenerator(fgen, FeatureGeneratorFlattenColumns(), generatedColumnsRuleTemplate=ruleTemplate)
 
 
 class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
