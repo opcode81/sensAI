@@ -24,7 +24,8 @@ class FeatureGenerator(ABC):
     from an input DataFrame
     """
     def __init__(self, categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (), addCategoricalDefaultRules=True):
+                 normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+                 generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None, addCategoricalDefaultRules=True):
         """
         :param categoricalFeatureNames: if provided, will ensure that the respective columns in the generated data frames will
             have dtype 'category'.
@@ -32,10 +33,16 @@ class FeatureGenerator(ABC):
         :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
             These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
             within a data processing pipeline. They do not affect feature generation.
+        :param generatedColumnsRuleTemplate: If given, a normalisation rule based on this template will be created for all generated columns.
+            As with other rules, this is only relevant if DFTNormalization is used after feature generation.
+            The rule template should only be provided if no categoricalFeatureNames and normalisationRules have been passed
         :param addCategoricalDefaultRules:
             If True, normalisation rules for categorical features (which are unsupported by normalisation) and their corresponding one-hot
             encoded features (with "_<index>" appended) will be added.
         """
+        self.generatedColumnNames = None
+        self._generatedColumnsRule = None
+        self.generatedColumnsRuleTemplate = generatedColumnsRuleTemplate
         self._categoricalFeatureNames = categoricalFeatureNames
         normalisationRules = list(normalisationRules)
         if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
@@ -43,8 +50,18 @@ class FeatureGenerator(ABC):
             normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(categoricalFeatureNames), skip=True))
         self._normalisationRules = normalisationRules
 
+        self._inputValidation()
+
+    def _inputValidation(self):
+        if self.generatedColumnsRuleTemplate is not None:
+            if self.getNormalisationRules():
+                raise ValueError(f"normalisationRules should be empty when a generatedColumnsRuleTemplate is provided, instead got {self.getNormalisationRules()}")
+
     def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
         return self._normalisationRules
+
+    def getGeneratedColumnsRule(self):
+        return self._generatedColumnsRule
 
     def getCategoricalFeatureNames(self) -> Sequence[str]:
         return self._categoricalFeatureNames
@@ -85,6 +102,11 @@ class FeatureGenerator(ABC):
                 series = resultDF[colName].copy()
                 if series.dtype.name != 'category':
                     resultDF[colName] = series.astype('category', copy=False)
+
+        self.generatedColumnNames = resultDF.columns
+        if self.generatedColumnsRuleTemplate is not None:
+            self._generatedColumnsRule = data_transformation.DFTNormalisation.Rule(r"(%s)" % "|".join(self.generatedColumnNames), **self.generatedColumnsRuleTemplate.__dict__)
+            self._normalisationRules.append(self._generatedColumnsRule)
 
         return resultDF
 
@@ -164,8 +186,9 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
     feature values from each named tuple
     """
     def __init__(self, cache: util.cache.PersistentKeyValueCache = None, categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         self.cache = cache
 
     def _generate(self, df: pd.DataFrame, ctx=None):
@@ -196,8 +219,9 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
 
 class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
     def __init__(self, columns: Union[str, List[str]], categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
@@ -224,8 +248,9 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
 
     """
     def __init__(self, columns: Union[str, Sequence[str]], categoricalFeatureNames: Sequence[str] = (),
-            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = ()):
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
@@ -250,19 +275,19 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     _log = _log.getChild(__qualname__)
 
-    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, isCategorical=False, **normalisationRuleKwargs):
+    def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, isCategorical=False,
+            ruleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
         """
         :param columnGen: the underlying column generator
         :param takeInputColumnIfPresent: if True, then if a column whose name corresponds to the column to generate exists
             in the input data, simply copy it to generate the output (without using the column generator); if False, always
             apply the columnGen to generate the output
         :param isCategorical: whether the resulting column is categorical
-        :param normalisationRuleKwargs: kwargs for data_transformation.DFTNormalisation.Rule for the resulting column.
-            This should be provided if isCategorical is False
+        :param ruleTemplate: template for a DFTNormalisation for the resulting column.
+            This should only be provided if isCategorical is False
         """
         categoricalFeatureNames = (columnGen.generatedColumnName, ) if isCategorical else ()
-        normalisationRules = [data_transformation.DFTNormalisation.Rule(fr"{columnGen.generatedColumnName}", **normalisationRuleKwargs)]
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, generatedColumnsRuleTemplate=ruleTemplate)
 
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
@@ -284,12 +309,15 @@ class ChainedFeatureGenerator(FeatureGenerator):
     generator i+1 in the generator sequence.
     """
     def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: Sequence[str] = None,
-                 normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None):
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None,
+            generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
         """
         :param featureGenerators: the list of feature generators to apply in order
         :param categoricalFeatureNames: the list of categorical feature names being generated; if None, use the ones
             indicated by the last feature generator in the list
         :param normalisationRules: normalisation rules to use; if None, use rules of the last feature generator in the list
+        :param generatedColumnsRuleTemplate: rule template to apply to all output columns of the chain.
+            This should only be used if no other rules have been provided
         """
         if len(featureGenerators) == 0:
             raise ValueError("Empty list of feature generators")
@@ -297,7 +325,7 @@ class ChainedFeatureGenerator(FeatureGenerator):
             categoricalFeatureNames = featureGenerators[-1].getCategoricalFeatureNames()
         if normalisationRules is None:
             normalisationRules = featureGenerators[-1].getNormalisationRules()
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         self.featureGenerators = featureGenerators
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
@@ -351,12 +379,11 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         self.targetColumn = targetColumn
         self.targetColumnInInputDf = targetColumnInFeaturesDf
         self.targetColumnBins = targetColumnBins
-        newColumnNamesRegex = r'(%s)_%s_distribution' % ("|".join(columns), targetColumn)
         if self.flatten:
-            normalisationRule = data_transformation.DFTNormalisation.Rule(newColumnNamesRegex + r'_.+', skip=True)
+            ruleTemplate = data_transformation.DFTNormalisation.RuleTemplate(skip=True)
         else:
-            normalisationRule = data_transformation.DFTNormalisation.Rule(newColumnNamesRegex, unsupported=True)
-        super().__init__(normalisationRules=[normalisationRule])
+            ruleTemplate = data_transformation.DFTNormalisation.RuleTemplate(unsupported=True)
+        super().__init__(generatedColumnsRuleTemplate=ruleTemplate)
         self._targetColumnValues = None
         # This will hold the mapping: column -> featureValue -> targetValue -> targetValueEmpiricalProbability
         self._discreteTargetDistributionsByColumn: Dict[str, Dict[Any, Dict[Any, float]]] = None
@@ -509,13 +536,16 @@ class FeatureCollector(object):
 class FeatureGeneratorFromVectorModel(FeatureGenerator):
     def __init__(self, vectorModel: "VectorModel", targetFeatureGenerator: FeatureGenerator, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None,
             inputFeatureGenerator: FeatureGenerator = None, useTargetFeatureGeneratorForTraining=False):
         """
         Provides a feature via predictions of a given model
+
         :param vectorModel: model used for generate features from predictions
         :param targetFeatureGenerator: generator for target to be predicted
         :param categoricalFeatureNames:
         :param normalisationRules:
+        :param generatedColumnsRuleTemplate:
         :param inputFeatureGenerator: optional feature generator to be applied to input of vectorModel's fit and predict
         :param useTargetFeatureGeneratorForTraining: if False, this generator will always apply the model
             to generate features.
@@ -524,7 +554,7 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
             to receive the generated features shall be trained on the original targets rather than the predictions
             thereof.
         """
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules)
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
 
         self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.targetFeatureGenerator = targetFeatureGenerator

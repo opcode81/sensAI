@@ -167,6 +167,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
     def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
+
         :param columns: names of original columns that are to be replaced by a list one-hot encoded columns each
         :param categoriesList: numpy arrays containing the possible values of each of the specified columns.
             If None, the possible values will be inferred from the columns
@@ -244,21 +245,31 @@ class DFTNormalisation(DataFrameTransformer):
     of all applicable columns)
     """
 
-    class Rule:
+    class RuleTemplate:
+        def __init__(self, skip=False, unsupported=False, transformer: Callable = None):
+            """
+            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
+            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
+                If None the default transformer will be used.
+            """
+            if skip and transformer is not None:
+                raise ValueError("skip==True while transformer is not None")
+            self.skip = skip
+            self.unsupported = unsupported
+            self.transformer = transformer
+
+    class Rule(RuleTemplate):
         def __init__(self, regex: str, skip=False, unsupported=False, transformer=None):
             """
             :param regex: a regular expression defining the column the rule applies to
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
-            If None the default transformer will be used.
+                If None the default transformer will be used.
             """
-            if skip and transformer is not None:
-                raise ValueError("skip==True while transformer is not None")
             self.regex = re.compile(regex)
-            self.skip = skip
-            self.unsupported = unsupported
-            self.transformer = transformer
+            super().__init__(skip=skip, unsupported=unsupported, transformer=transformer)
 
         def matches(self, column: str):
             return self.regex.fullmatch(column) is not None
