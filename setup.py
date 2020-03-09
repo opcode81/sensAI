@@ -11,6 +11,7 @@ setup(
     version='0.0.1',
     description='Library for sensible AI',
     install_requires=open("requirements.txt").readlines(),
+    dependency_links=["https://download.pytorch.org/whl/torch_stable.html"],
     setup_requires=["wheel"],
     tests_require=test_requirements,
     extras_require={
