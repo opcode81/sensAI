@@ -265,10 +265,10 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
         if self.takeInputColumnIfPresent and colName in df.columns:
-            self.log.debug(f"Taking column '{colName}' from input data frame")
+            self._log.debug(f"Taking column '{colName}' from input data frame")
             series = df[colName]
         else:
-            self.log.debug(f"Generating column '{colName}' via {self.columnGen}")
+            self._log.debug(f"Generating column '{colName}' via {self.columnGen}")
             series = self.columnGen.generateColumn(df)
         return pd.DataFrame({colName: series})
 
@@ -279,7 +279,7 @@ class ChainedFeatureGenerator(FeatureGenerator):
     generator i+1 in the generator sequence.
     """
     def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: Sequence[str] = None,
-                 normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None):
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None):
         """
         :param featureGenerators: the list of feature generators to apply in order
         :param categoricalFeatureNames: the list of categorical feature names being generated; if None, use the ones
@@ -537,10 +537,8 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         if self.inputFeatureGenerator:
             df = self.inputFeatureGenerator.generate(df)
         if self.useTargetFeatureGeneratorForTraining and not ctx.isFitted():
-            log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
+            _log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
             return self.targetFeatureGenerator.generate(df)
         else:
-            log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
+            _log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
-
-

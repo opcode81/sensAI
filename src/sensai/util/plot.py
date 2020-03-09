@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 
-def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True) -> matplotlib.figure.Figure:
+def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9)) -> matplotlib.figure.Figure:
     """
     :param matrix: matrix whose data to plot, where matrix[i, j] will be rendered at x=i, y=j
     :param title: the plot's title
@@ -20,7 +20,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
 
     if normalize:
         matrix = matrix.astype('float') / matrix.sum()
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=figsize)
     fig.canvas.set_window_title(title)
     # We want to show all ticks...
     ax.set(xticks=np.arange(matrix.shape[1]),
