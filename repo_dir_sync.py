@@ -74,18 +74,28 @@ class OtherRepo:
         lg = indent + lg.replace("\n", "\n" + indent)
         return "\n\n" + lg
 
+    def _userInputYesNo(self, question) -> bool:
+        result = None
+        while result not in ("y", "n"):
+            result = input(question + " [y|n]: ").strip()
+        return result == "y"
+
     def pull(self, libRepo: "LibRepo"):
         """
         Pulls in changes from this repository into the lib repo
         """
+        # get log with relevant commits in this repo
+        lg = self.gitLogThisRepoSinceLastSync()
+
+        print("Relevant commits:\n\n" + lg + "\n\n")
+        if not self._userInputYesNo(f"The above changes will be pulled from {self.name}. Continue?"):
+            return
+
         os.chdir(libRepo.rootPath)
 
         # switch to branch in lib repo and remove library tree
         execute("git checkout %s" % self.branch)
         shutil.rmtree(LIB_DIRECTORY)
-
-        # get log with relevant commits in this repo
-        lg = self.gitLogThisRepoSinceLastSync()
 
         # copy tree from this repo to lib repo
         shutil.copytree(self.pathToLibInThisRepo, LIB_DIRECTORY)
@@ -115,9 +125,12 @@ class OtherRepo:
         """
         Pushes changes from the lib repo to this repo
         """
-
         # get change log since last sync
         libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
+
+        print("Relevant commits:\n\n" + libLogSinceLastSync + "\n\n")
+        if not self._userInputYesNo("The above changes will be pushed. Continue?"):
+            return
 
         os.chdir(libRepo.rootPath)
 

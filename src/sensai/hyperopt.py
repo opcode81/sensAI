@@ -1,6 +1,5 @@
 import logging
 import os
-import typing
 from abc import ABC
 from abc import abstractmethod
 from concurrent.futures import ProcessPoolExecutor

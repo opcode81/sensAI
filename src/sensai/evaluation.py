@@ -1,22 +1,26 @@
 import copy
 import logging
 import time
+
+import matplotlib.figure
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Union, Generator, Generic, TypeVar, List
+from typing import Tuple, Dict, Any, Union, Generator, Generic, TypeVar, List, Optional, Sequence, Callable
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+from .util.io import ResultWriter
 from .util.typing import PandasNamedTuple
-from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel
+from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel, VectorRegressionModel
 from .eval_stats import RegressionEvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
     ClassificationEvalStatsCollection
 
+
 _log = logging.getLogger(__name__)
 
-
+TModel = TypeVar("TModel", VectorRegressionModel, VectorClassificationModel)
 TEvalStats = TypeVar("TEvalStats", RegressionEvalStats, ClassificationEvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", RegressionEvalStatsCollection, ClassificationEvalStatsCollection)
 TEvaluator = TypeVar("TEvaluator", "VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator")
@@ -73,7 +77,11 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
 class VectorModelEvaluator(ABC):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
-        if model.isRegressionModel():
+        return VectorModelEvaluator.forModelType(model.isRegressionModel(), data, **kwargs)
+
+    @staticmethod
+    def forModelType(isRegression: bool, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
+        if isRegression:
             return VectorRegressionModelEvaluator(data, **kwargs)
         else:
             return VectorClassificationModelEvaluator(data, **kwargs)
@@ -128,15 +136,17 @@ class VectorModelEvaluator(ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
+    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
         super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
+        if computeProbabilities:
+            raise NotImplementedError("Computing probabilities is currently not implemented for regression models")
 
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
         inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, groundTruth = self.computeOutputs(model, inputOutputData)
+        predictions, groundTruth = self._computeOutputs(model, inputOutputData)
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
             evalStatsByVarName[predictedVarName] = evalStats
@@ -149,10 +159,9 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a pair (predictions, groundTruth)
         """
-        return self.computeOutputs(model, self.testData)
+        return self._computeOutputs(model, self.testData)
 
-    @staticmethod
-    def computeOutputs(model, inputOutputData: InputOutputData):
+    def _computeOutputs(self, model, inputOutputData: InputOutputData):
         """
         Applies the given model to the given data
 
@@ -179,7 +188,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
         inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, predictions_proba, groundTruth = self.computeOutputs(model, inputOutputData)
+        predictions, predictions_proba, groundTruth = self._computeOutputs(model, inputOutputData)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         predictedVarName = model.getPredictedVariableNames()[0]
         return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs)
@@ -191,9 +200,9 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         :param model: the model to apply
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
-        return self.computeOutputs(model, self.testData)
+        return self._computeOutputs(model, self.testData)
 
-    def computeOutputs(self, model, inputOutputData: InputOutputData) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def _computeOutputs(self, model, inputOutputData: InputOutputData) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Applies the given model to the given data
 
@@ -208,8 +217,8 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:
             classProbabilities = None
-            predictions = model.predict(self.testData.inputs)
-        groundTruth = self.testData.outputs
+            predictions = model.predict(inputOutputData.inputs)
+        groundTruth = inputOutputData.outputs
         return predictions, classProbabilities, groundTruth
 
 
@@ -243,7 +252,11 @@ class VectorModelCrossValidationData(ABC, Generic[TEvalData, TEvalStats, TEvalSt
 class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) -> Union["VectorRegressionModelCrossValidator", "VectorClassificationModelCrossValidator"]:
-        if model.isRegressionModel():
+        return VectorModelCrossValidator.forModelType(model.isRegressionModel(), data, folds=folds, **kwargs)
+
+    @staticmethod
+    def forModelType(isRegression: bool, data: InputOutputData, folds=5, **kwargs) -> "VectorModelCrossValidator":
+        if isRegression:
             return VectorRegressionModelCrossValidator(data, folds=folds, **kwargs)
         else:
             return VectorClassificationModelCrossValidator(data, folds=folds, **kwargs)
@@ -333,8 +346,8 @@ def computeEvaluationMetricsDict(model, evaluatorOrValidator: Union[VectorModelE
         raise ValueError(f"Unexpected evaluator/validator of type {type(evaluatorOrValidator)}")
 
 
-def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, testFraction=0.2,
-        plotTargetDistribution=False, computeProbabilities=True, normalizePlots=True, randomSeed=60) -> VectorModelEvaluationData:
+def evalModelViaEvaluator(model: TModel, inputOutputData: InputOutputData, testFraction=0.2,
+        plotTargetDistribution=False, computeProbabilities=True, normalizePlots=True, randomSeed=60) -> TEvalData:
     """
     Evaluates the given model via a simple evaluation mechanism that uses a single split
 
@@ -366,24 +379,207 @@ def evalModelViaEvaluator(model: VectorModel, inputOutputData: InputOutputData, 
         fig.show()
 
     if model.isRegressionModel():
-        evaluator = VectorRegressionModelEvaluator(inputOutputData, testFraction=testFraction, randomSeed=randomSeed)
+        evaluatorParams = dict(testFraction=testFraction, randomSeed=randomSeed)
     else:
-        evaluator = VectorClassificationModelEvaluator(inputOutputData, testFraction=testFraction, computeProbabilities=computeProbabilities, randomSeed=randomSeed)
+        evaluatorParams = dict(testFraction=testFraction, computeProbabilities=computeProbabilities, randomSeed=randomSeed)
+    ev = EvaluationUtil.forModelType(model.isRegressionModel(), inputOutputData, evaluatorParams=evaluatorParams)
+    return ev.performSimpleEvaluation(model, showPlots=True, logResults=True)
 
-    tStart = time.time()
-    evaluator.fitModel(model)
-    evalData = evaluator.evalModel(model)
-    evalStats = evalData.getEvalStats()
-    _log.info(f"Finished evaluation for model {model} in {time.time() - tStart} seconds")
-    _log.info(f"Evaluation metrics: {str(evalStats.getAll())}")
 
-    if model.isRegressionModel():
-        res: RegressionEvalStats = evalStats
-        res.plotErrorDistribution()
-        res.plotScatterGroundTruthPredictions()
-        res.plotHeatmapGroundTruthPredictions()
-    else:
-        res: ClassificationEvalStats = evalStats
-        res.plotConfusionMatrix(normalize=normalizePlots)
+class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, TEvalStats]):
+    """
+    Utility class for the evaluation of models based on a dataset
+    """
+    def __init__(self, inputOutputData: InputOutputData, evaluatorParams: Optional[Dict[str, Any]] = None,
+            crossValidatorParams: Optional[Dict[str, Any]] = None):
+        """
+        :param inputOutputData: the data set to use for evaluation
+        :param evaluatorParams: parameters with which to instantiate evaluators
+        :param crossValidatorParams: parameters with which to instantiate cross-validators
+        """
+        if evaluatorParams is None:
+            evaluatorParams = dict(testFraction=0.2)
+        if crossValidatorParams is None:
+            crossValidatorParams = dict(folds=5)
+        self.evaluatorParams = evaluatorParams
+        self.crossValidatorParams = crossValidatorParams
+        self.inputOutputData = inputOutputData
 
-    return evalData
+    @staticmethod
+    def forModelType(isRegression, inputOutputData: InputOutputData, evaluatorParams: Optional[Dict[str, Any]] = None,
+            crossValidatorParams: Optional[Dict[str, Any]] = None) -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
+        cons = RegressionEvaluationUtil if isRegression else ClassificationEvaluationUtil
+        return cons(inputOutputData, evaluatorParams=evaluatorParams, crossValidatorParams=crossValidatorParams)
+
+    def createEvaluator(self, model) -> TEvaluator:
+        """
+        Creates an evaluator which is suitable for evaluation of the given model
+        :param model: the model for which to create an evaluator
+        :return: an evaluator
+        """
+        return VectorModelEvaluator.forModel(model, self.inputOutputData, **self.evaluatorParams)
+
+    def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None) -> TEvalData:
+        evaluator = self.createEvaluator(model)
+        evaluator.fitModel(model)
+        evaluator.evalModel(model)
+        evalResultData = evaluator.evalModel(model)
+        strEvalResults = str(evalResultData.getEvalStats())
+        if logResults:
+            _log.info(f"Evaluation results: {strEvalResults}")
+        if resultWriter is not None:
+            resultWriter.writeTextFile("evaluator-results", strEvalResults)
+        self.createPlots(evalResultData, showPlots=showPlots, resultWriter=resultWriter)
+        return evalResultData
+
+    @staticmethod
+    def _resultWriterForModel(resultWriter: Optional[ResultWriter], model: TModel) -> Optional[ResultWriter]:
+        if resultWriter is None:
+            return None
+        return resultWriter.childWithAddedPrefix(model.getName() + "-")
+
+    def performCrossValidation(self, model: TModel, showPlots=False, logResults=True, resultWriter: Optional[ResultWriter] = None) -> TCrossValData:
+        """
+        Evaluates the given model via cross-validation
+
+        :param model: the model to evaluate
+        :param showPlots: whether to show plots that visualise evaluation results (combining all folds)
+        :param logResults: whether to log evaluation results
+        :param resultWriter: a writer with which to store text files and plots. The evaluated model's name is added to each filename
+            automatically
+        :return: cross-validation result data
+        """
+        resultWriter = self._resultWriterForModel(resultWriter, model)
+        crossValidator = VectorModelCrossValidator.forModel(model, self.inputOutputData, **self.crossValidatorParams)
+        crossValidationData = crossValidator.evalModel(model)
+        strEvalResults = str(crossValidationData.getEvalStatsCollection().aggStats())
+        if logResults:
+            _log.info(f"Cross-validation results: {strEvalResults}")
+        if resultWriter is not None:
+            resultWriter.writeTextFile("evaluator-results", strEvalResults)
+        self.createPlots(crossValidationData, showPlots=showPlots, resultWriter=resultWriter)
+        return crossValidationData
+
+    def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> pd.DataFrame:
+        """
+        Compares several models via cross-validation
+
+        :param models: the models to compare
+        :param resultWriter: a writer with which to store results of the comparison
+        :return: a data frame containing evaluation metrics on all models
+        """
+        statsList = []
+        for model in models:
+            crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter)
+            stats = crossValidationResult.getEvalStatsCollection().aggStats()
+            stats["modelName"] = model.getName()
+            statsList.append(stats)
+        resultsDF = pd.DataFrame(statsList).set_index("modelName")
+        strResults = f"Model comparison results:\n{resultsDF.to_string()}"
+        _log.info(strResults)
+        if resultWriter is not None:
+            resultWriter.writeTextFile("model-comparison-results", strResults)
+        return resultsDF
+
+    def createPlots(self, data: Union[TEvalData, TCrossValData], predictedVarName=None, showPlots=True, resultWriter: Optional[ResultWriter] = None):
+        """
+        Creates default plots that visualise the results in the given evaluation data
+
+        :param data: the evaluation data for which to create the default plots
+        :param predictedVarName: the predicted variable for which to create plots; may be None if there is only one
+        :param showPlots: whether to show plots
+        :param resultWriter: if not None, plots will be written using this writer
+        """
+        if not showPlots and resultWriter is None:
+            return
+        plots = self._createPlots(data, predictedVarName)
+        self._writePlots(plots, showPlots, resultWriter)
+
+    @staticmethod
+    def _writePlots(plots: List[Tuple[str, matplotlib.figure.Figure]], showPlots, resultWriter: Optional[ResultWriter]):
+        if resultWriter is not None:
+            resultWriter.writeFigures(plots, closeFigures=not showPlots)
+
+    def _createPlots(self, data: Union[TEvalData, TCrossValData], predictedVarName) -> List[Tuple[str, matplotlib.figure.Figure]]:
+        if isinstance(data, VectorModelCrossValidationData):
+            evalStats = data.getEvalStatsCollection(predictedVarName=predictedVarName).getGlobalStats()
+        elif isinstance(data, VectorModelEvaluationData):
+            evalStats = data.getEvalStats()
+        else:
+            raise ValueError(f"Unexpected argument: data={data}")
+        return self._createEvalStatsPlots(evalStats)
+
+    def createEvalStatsPlots(self, evalStats: TEvalStats, showPlots=True, resultWriter: ResultWriter = None):
+        """
+        Creates plots for the given evaluation stats
+        :param evalStats: the stats for which to create plots
+        :param showPlots: whether to show the plots; if False, plot windows will not remain open
+        :param resultWriter: the writer with which to store plots in files
+        """
+        if not showPlots and resultWriter is None:
+            return
+        plots = self._createEvalStatsPlots(evalStats)
+        self._writePlots(plots, showPlots, resultWriter)
+
+    @abstractmethod
+    def _createEvalStatsPlots(self, evalStats: TEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
+        """
+        :param evalStats: the evaluation results for which to create plots
+        :return: a list of pairs (name, fig) where name is name (suitable as a part of a filename) and fig is a figure
+        """
+        pass
+
+
+class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
+    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
+        plots = []
+        plots.append(("error-dist", evalStats.plotErrorDistribution()))
+        plots.append(("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions()))
+        plots.append(("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions()))
+        return plots
+
+
+class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
+    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
+        plots = []
+        plots.append(("confusion-matrix", evalStats.plotConfusionMatrix()))
+        return plots
+
+
+class MultiDataEvaluationUtil:
+    def __init__(self, inputOutputDataDict: Dict[str, InputOutputData], keyName: str = "dataset"):
+        """
+        :param inputOutputDataDict: a dictionary mapping from names to the data sets with which to evaluate models
+        :param keyName: a name for the key value used in inputOutputDataDict
+        """
+        self.inputOutputDataDict = inputOutputDataDict
+        self.keyName = keyName
+
+    def compareModelsCrossValidation(self, isRegression, modelFactories: Sequence[Callable[[], VectorModel]],
+            resultWriter: Optional[ResultWriter] = None, crossValidatorParams: Optional[Dict[str, Any]] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        :param isRegression: flag indicating whether the models to evaluate are regression models
+        :param modelFactories: a sequence of factory functions for the creation of models to evaluate
+        :param resultWriter: a writer with which to store results
+        :param crossValidatorParams: parameters to use for the instantiation of cross-validators
+        :return: a pair of data frames (allDF, meanDF) where allDF contains all the individual cross-validation results
+            for every dataset and meanDF contains one row for each model with results averaged across datasets
+        """
+        allResults = pd.DataFrame()
+        for key, inputOutputData in self.inputOutputDataDict.items():
+            _log.info(f"Evaluating models for {key}")
+            ev = EvaluationUtil.forModelType(isRegression, inputOutputData, crossValidatorParams=crossValidatorParams)
+            models = [f() for f in modelFactories]
+            df = ev.compareModelsCrossValidation(models)
+            df[self.keyName] = key
+            df["modelName"] = df.index
+            df = df.reset_index(drop=True)
+            allResults = pd.concat((allResults, df))
+        strAllResults = f"All results:\n{allResults.to_string()}"
+        _log.info(strAllResults)
+        meanResults = allResults.groupby("modelName").mean()
+        strMeanResults = f"Mean results:\n{meanResults.to_string()}"
+        _log.info(strMeanResults)
+        if resultWriter is not None:
+            resultWriter.writeTextFile("model-comparison-results", strMeanResults + "\n\n" + strAllResults)
+        return allResults, meanResults

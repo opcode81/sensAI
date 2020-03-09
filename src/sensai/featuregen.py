@@ -597,5 +597,3 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         else:
             _log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
-
-

@@ -14,7 +14,7 @@ class EnsembleVectorModel(VectorModel, ABC):
     def __init__(self, models: Sequence[VectorModel], numProcesses=1):
         self.numProcesses = numProcesses
         self.models = list(models)
-        super().__init__()
+        super().__init__(checkInputColumns=False)
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         if self.numProcesses == 1 or len(self.models) == 1:
