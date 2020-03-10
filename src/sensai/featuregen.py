@@ -218,24 +218,29 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
 
 
 class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
-    def __init__(self, columns: Union[str, List[str]], categoricalFeatureNames: Sequence[str] = (),
+    def __init__(self, columns: Union[str, List[str]] = None, categoricalFeatureNames: Sequence[str] = (),
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
             generatedColumnsRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+        """
+
+        :param columns: column name, list of columns or None. If None, all columns in the input dataframe fill be taken
+            during generation
+        :param categoricalFeatureNames:
+        :param normalisationRules:
+        :param generatedColumnsRuleTemplate:
+        """
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, generatedColumnsRuleTemplate=generatedColumnsRuleTemplate)
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        if self.columns is None:
+            return df
         missingCols = set(self.columns) - set(df.columns)
         if len(missingCols) > 0:
             raise Exception(f"Columns {missingCols} not present in data frame; available columns: {list(df.columns)}")
         return df[self.columns]
-
-
-class FeatureGeneratorTakeAllColumns(RuleBasedFeatureGenerator):
-    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
-        return df
 
 
 class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
