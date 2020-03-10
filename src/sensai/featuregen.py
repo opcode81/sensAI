@@ -1,9 +1,9 @@
 import logging
-from typing import Sequence, List, Union, Callable, Any, Dict, TYPE_CHECKING, Optional
 from abc import ABC, abstractmethod
+from typing import Sequence, List, Union, Callable, Any, Dict, TYPE_CHECKING, Optional
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from . import util, data_transformation
 from .columngen import ColumnGenerator
@@ -283,7 +283,7 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
         return resultDf
 
 
-def getFlattenedFeatureGenerator(fgen: FeatureGenerator, ruleTemplate: data_transformation.DFTNormalisation.RuleTemplate):
+def getFlattenedFeatureGenerator(fgen: FeatureGenerator, ruleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
     """
     Return a feature generator that will generate flattened output of the provided fgen
 
