@@ -265,6 +265,8 @@ class VectorModel(PredictorModel, ABC):
 
 class VectorRegressionModel(VectorModel, ABC):
     def __init__(self):
+        """
+        """
         super().__init__()
 
     def isRegressionModel(self) -> bool:
@@ -274,6 +276,8 @@ class VectorRegressionModel(VectorModel, ABC):
 class VectorClassificationModel(VectorModel, ABC):
 
     def __init__(self):
+        """
+        """
         self._labels = None
         super().__init__()
 

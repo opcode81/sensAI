@@ -950,6 +950,13 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 class TorchVectorRegressionModel(VectorRegressionModel):
     def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+        """
+        :param modelClass:
+        :param modelArgs:
+        :param modelKwArgs:
+        :param normalisationMode:
+        :param nnOptimiserParams:
+        """
         super().__init__()
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
@@ -978,6 +985,14 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 class TorchVectorClassificationModel(VectorClassificationModel):
     def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+        """
+
+        :param modelClass:
+        :param modelArgs:
+        :param modelKwArgs:
+        :param normalisationMode:
+        :param nnOptimiserParams:
+        """
         super().__init__()
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
