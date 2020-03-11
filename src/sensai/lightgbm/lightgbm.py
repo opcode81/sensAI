@@ -9,7 +9,7 @@ from sensai.sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegre
 _log = logging.getLogger(__name__)
 
 
-class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
     _log = _log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
@@ -34,7 +34,7 @@ class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRe
             self.modelArgs.update(args)
 
 
-class SkLearnLightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     _log = _log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
