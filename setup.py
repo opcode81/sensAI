@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 test_requirements = ['pytest']
 docs_requirements = ['Sphinx==2.4.2', 'sphinxcontrib-websupport==1.2.0', 'sphinx_rtd_theme']
-tf_requirements = ['tensorflow==1.13.1']
+tf_requirements = ['tensorflow==1.15.0']
 torch_requirements = ['torch==1.4.0']
 sklearn_requirements = ['lightgbm==2.3.0']
 setup(
