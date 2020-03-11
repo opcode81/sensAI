@@ -4,7 +4,6 @@ test_requirements = ['pytest']
 docs_requirements = ['Sphinx==2.4.2', 'sphinxcontrib-websupport==1.2.0', 'sphinx_rtd_theme']
 tf_requirements = ['tensorflow==1.15.0']
 torch_requirements = ['torch==1.4.0']
-sklearn_requirements = ['lightgbm==2.3.0']
 setup(
     name='sensai',
     package_dir={"": "src"},
@@ -21,7 +20,6 @@ setup(
         "docs": docs_requirements,
         "torch": torch_requirements,
         "tensorFlow": tf_requirements,
-        "sklearn": sklearn_requirements
     },
     author='jambit GmbH'
 )
