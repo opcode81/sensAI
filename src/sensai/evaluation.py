@@ -36,6 +36,7 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         """
         self.inputData = inputData
         self.evalStatsByVarName = statsDict
+        self.predictedVarNames = list(self.evalStatsByVarName.keys())
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -411,6 +412,21 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         cons = RegressionEvaluationUtil if isRegression else ClassificationEvaluationUtil
         return cons(inputOutputData, evaluatorParams=evaluatorParams, crossValidatorParams=crossValidatorParams)
 
+    class ResultCollector:
+        def __init__(self, showPlots: bool = True, resultWriter: Optional[ResultWriter] = None):
+            self.showPlots = showPlots
+            self.resultWriter = resultWriter
+
+        def addFigure(self, name, fig: matplotlib.figure.Figure):
+            if self.resultWriter is not None:
+                self.resultWriter.writeFigure(name, fig, closeFigure=not self.showPlots)
+
+        def child(self, addedFilenamePrefix):
+            resultWriter = self.resultWriter
+            if resultWriter:
+                resultWriter = resultWriter.childWithAddedPrefix(addedFilenamePrefix)
+            return self.__class__(showPlots=self.showPlots, resultWriter=resultWriter)
+
     def createEvaluator(self, model) -> TEvaluator:
         """
         Creates an evaluator which is suitable for evaluation of the given model
@@ -481,7 +497,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
             resultWriter.writeTextFile("model-comparison-results", strResults)
         return resultsDF
 
-    def createPlots(self, data: Union[TEvalData, TCrossValData], predictedVarName=None, showPlots=True, resultWriter: Optional[ResultWriter] = None):
+    def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None):
         """
         Creates default plots that visualise the results in the given evaluation data
 
@@ -492,37 +508,29 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         """
         if not showPlots and resultWriter is None:
             return
-        plots = self._createPlots(data, predictedVarName)
-        self._writePlots(plots, showPlots, resultWriter)
+        resultCollector = self.ResultCollector(showPlots=showPlots, resultWriter=resultWriter)
+        self._createPlots(data, resultCollector)
 
-    @staticmethod
-    def _writePlots(plots: List[Tuple[str, matplotlib.figure.Figure]], showPlots, resultWriter: Optional[ResultWriter]):
-        if resultWriter is not None:
-            resultWriter.writeFigures(plots, closeFigures=not showPlots)
+    def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector):
 
-    def _createPlots(self, data: Union[TEvalData, TCrossValData], predictedVarName) -> List[Tuple[str, matplotlib.figure.Figure]]:
-        if isinstance(data, VectorModelCrossValidationData):
-            evalStats = data.getEvalStatsCollection(predictedVarName=predictedVarName).getGlobalStats()
-        elif isinstance(data, VectorModelEvaluationData):
-            evalStats = data.getEvalStats()
+        def createPlots(predVarName, rc):
+            if isinstance(data, VectorModelCrossValidationData):
+                evalStats = data.getEvalStatsCollection(predictedVarName=predVarName).getGlobalStats()
+            elif isinstance(data, VectorModelEvaluationData):
+                evalStats = data.getEvalStats(predictedVarName=predVarName)
+            else:
+                raise ValueError(f"Unexpected argument: data={data}")
+            return self._createEvalStatsPlots(evalStats, rc)
+
+        predictedVarNames = data.predictedVarNames
+        if len(predictedVarNames) == 1:
+            createPlots(predictedVarNames[0], resultCollector)
         else:
-            raise ValueError(f"Unexpected argument: data={data}")
-        return self._createEvalStatsPlots(evalStats)
-
-    def createEvalStatsPlots(self, evalStats: TEvalStats, showPlots=True, resultWriter: ResultWriter = None):
-        """
-        Creates plots for the given evaluation stats
-        :param evalStats: the stats for which to create plots
-        :param showPlots: whether to show the plots; if False, plot windows will not remain open
-        :param resultWriter: the writer with which to store plots in files
-        """
-        if not showPlots and resultWriter is None:
-            return
-        plots = self._createEvalStatsPlots(evalStats)
-        self._writePlots(plots, showPlots, resultWriter)
+            for predictedVarName in predictedVarNames:
+                createPlots(predictedVarName, resultCollector.child(predictedVarName+"-"))
 
     @abstractmethod
-    def _createEvalStatsPlots(self, evalStats: TEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
+    def _createEvalStatsPlots(self, evalStats: TEvalStats, resultCollector: ResultCollector) -> List[Tuple[str, matplotlib.figure.Figure]]:
         """
         :param evalStats: the evaluation results for which to create plots
         :return: a list of pairs (name, fig) where name is name (suitable as a part of a filename) and fig is a figure
@@ -531,19 +539,15 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
 
 
 class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
-        plots = []
-        plots.append(("error-dist", evalStats.plotErrorDistribution()))
-        plots.append(("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions()))
-        plots.append(("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions()))
-        return plots
+    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats, resultCollector: EvaluationUtil.ResultCollector):
+        resultCollector.addFigure("error-dist", evalStats.plotErrorDistribution())
+        resultCollector.addFigure("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions())
+        resultCollector.addFigure("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions())
 
 
 class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats) -> List[Tuple[str, matplotlib.figure.Figure]]:
-        plots = []
-        plots.append(("confusion-matrix", evalStats.plotConfusionMatrix()))
-        return plots
+    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector):
+        resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix())
 
 
 class MultiDataEvaluationUtil:

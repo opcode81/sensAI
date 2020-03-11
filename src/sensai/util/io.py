@@ -66,19 +66,20 @@ class ResultWriter:
             f.write(df.to_string())
         return p
 
-    def writeFigure(self, filenameSuffix, fig):
+    def writeFigure(self, filenameSuffix, fig, closeFigure=False):
         """
         :param filenameSuffix: the filename suffix, which may or may not include a file extension, valid extensions being {"png", "jpg"}
         :param fig: the figure to save
+        :param closeFigure: whether to close the figure after having saved it
         :return: the path to the file that was written
         """
         p = self.path(filenameSuffix, extensionToAdd="png", validOtherExtensions=("jpg",))
         self._log.info(f"Saving figure {p}")
         fig.savefig(p)
+        if closeFigure:
+            plt.close(fig)
         return p
 
     def writeFigures(self, figures: Sequence[Tuple[str, matplotlib.figure.Figure]], closeFigures=False):
         for name, fig in figures:
-            self.writeFigure(name, fig)
-            if closeFigures:
-                plt.close(fig)
+            self.writeFigure(name, fig, closeFigure=closeFigures)
