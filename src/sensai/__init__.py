@@ -18,3 +18,4 @@ from .ensemble import AveragingVectorRegressionModel
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow
 # torch
+# lightgbm
