@@ -1,3 +1,3 @@
-def test_dummy_tf():
+def test_tf():
     import sensai.tensorflow
     assert True
