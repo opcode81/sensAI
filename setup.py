@@ -19,7 +19,7 @@ setup(
         "test": test_requirements,
         "docs": docs_requirements,
         "torch": torch_requirements,
-        "tensorFlow": tf_requirements,
+        "tensorflow": tf_requirements,
     },
     author='jambit GmbH'
 )
