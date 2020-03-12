@@ -209,11 +209,11 @@ class WrappedTorchModule(ABC):
     def scaledOutput(self, output):
         return self.outputScaler.denormalise(output)
 
-    def _extractParamsFromData(self, dataUtil):
+    def _extractParamsFromData(self, dataUtil: "DataUtil"):
         self.outputScaler = dataUtil.getOutputTensorScaler()
         self.inputScaler = dataUtil.getInputTensorScaler()
 
-    def fit(self, dataUtil, **nnOptimiserParams):
+    def fit(self, dataUtil: "DataUtil", **nnOptimiserParams):
         self._extractParamsFromData(dataUtil)
         optimiser = NNOptimiser(cuda=self.cuda, **nnOptimiserParams)
         optimiser.fit(self, dataUtil)
@@ -927,9 +927,8 @@ class ClassificationVectorDataUtil(VectorDataUtil):
 
 class WrappedTorchVectorModule(WrappedTorchModule, ABC):
     """
-    Base class for torch models that map vectors to vectors
+    Base class for wrapped torch modules that map vectors to vectors
     """
-
     def __init__(self, cuda: bool = True):
         super().__init__(cuda=cuda)
         self.inputDim = None
@@ -949,7 +948,7 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
         super().__init__()
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
@@ -958,7 +957,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model = None
+        self.model: WrappedTorchVectorModule = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
@@ -977,7 +976,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
         super().__init__()
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
@@ -986,7 +985,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model = None
+        self.model: WrappedTorchVectorModule = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
