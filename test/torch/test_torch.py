@@ -1,3 +1,3 @@
 def test_dummy_torch():
-    print("testing torch")
+    import sensai.torch
     assert True
