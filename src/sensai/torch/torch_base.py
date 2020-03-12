@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Tuple, Callable
+from typing import List, Union, Sequence, Tuple, Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,12 +14,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch import cuda as torchcuda
-from torch.autograd import Variable
 
 from ..util.dtype import toFloatArray
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..util.string import objectRepr
-from .torch_data import TensorScaler, DataUtil, VectorDataUtil, ClassificationVectorDataUtil
+from .torch_data import TensorScaler, DataUtil, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
+    TorchDataSetProviderFromDataUtil, TorchDataSetProvider
 
 _log = logging.getLogger(__name__)
 
@@ -30,8 +30,8 @@ class WrappedTorchModule(ABC):
     def __init__(self, cuda=True):
         self.cuda = cuda
         self.model = None
-        self.outputScaler: TensorScaler = None
-        self.inputScaler: TensorScaler = None
+        self.outputScaler: Optional[TensorScaler] = None
+        self.inputScaler: Optional[TensorScaler] = None
 
     def setTorchModel(self, model):
         self.model = model
@@ -526,13 +526,19 @@ class NNOptimiser:
     def __str__(self):
         return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}]"
 
-    def fit(self, model: WrappedTorchModule, dataUtilOrList: Union[DataUtil, List[DataUtil]]):
+    def fit(self, model: WrappedTorchModule, data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
         self._log.info(f"Learning parameters of {model} via {self}")
 
-        if type(dataUtilOrList) != list:  # DataUtil instance
-            dataUtilList = [dataUtilOrList]
+        def toDataSetProvider(d) -> TorchDataSetProvider:
+            if isinstance(d, TorchDataSetProvider):
+                return d
+            elif isinstance(d, DataUtil):
+                return TorchDataSetProviderFromDataUtil(d, self.cuda)
+
+        if type(data) != list:
+            dataSetProviders = [toDataSetProvider(data)]
         else:
-            dataUtilList = dataUtilOrList
+            dataSetProviders = [toDataSetProvider(item) for item in data]
 
         # initialise data to be generated
         self.trainingLog = []
@@ -557,10 +563,10 @@ class NNOptimiser:
         trainingSets = []
         outputScalers = []
         _log.info("Obtaining input/output training instances")
-        for idxDataSet, Data in enumerate(dataUtilList):
-            outputScalers.append(Data.getOutputTensorScaler())
-            trainS, valS, meta = Data.splitInputOutputPairs(self.trainFraction)
-            trainingLog(f"Data set {idxDataSet+1}/{len(dataUtilList)}: #train={trainS[1].shape[0]}, #validation={valS[1].shape[0]}")
+        for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
+            outputScalers.append(dataSetProvider.getOutputTensorScaler())
+            trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
+            trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
             validationSets.append(valS)
             trainingSets.append(trainS)
         trainingLog("Number of validation sets: %d" % len(validationSets))
@@ -653,36 +659,40 @@ class NNOptimiser:
         scaledTruth = outputScaler.denormalise(groundTruth)
         return scaledOutput, scaledTruth
 
-    def _train(self, dataSets: Sequence[Tuple[torch.Tensor, torch.Tensor]], model: nn.Module, criterion: nn.modules.loss._Loss,
+    def _train(self, dataSets: Sequence[TorchDataSet], model: nn.Module, criterion: nn.modules.loss._Loss,
             optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: Sequence[TensorScaler]):
         """Performs one training epoch"""
         model.train()
         total_loss = 0
         n_samples = 0
-        outputShape = dataSets[0][1].shape[1:]
-        numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
+        numOutputsPerDataPoint = None
         for dataSet, outputScaler in zip(dataSets, outputScalers):
-            for X, Y in self._get_batches(dataSet, batch_size, cuda, True):
+            for X, Y in dataSet.iterBatches(batch_size, shuffle=True):
+                if numOutputsPerDataPoint is None:
+                    outputShape = Y.shape[1:]
+                    numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
+
                 def closure():
                     model.zero_grad()
                     output, groundTruth = self._applyModel(model, X, Y, outputScaler)
                     loss = criterion(output, groundTruth)
                     loss.backward()
                     return loss
+
                 loss = optim.step(closure)
                 total_loss += loss.item()
                 numDataPointsInBatch = Y.size(0)
                 n_samples += numDataPointsInBatch * numOutputsPerDataPoint
         return total_loss / n_samples
 
-    def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: TensorScaler):
+    def _evaluate(self, dataSet: TorchDataSet, model: nn.Module, outputScaler: TensorScaler):
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 
         outputShape = dataSet[1].shape[1:]  # the shape of the output of a single model application
         self.lossEvaluator.startValidationCollection(outputShape)
 
-        for X, Y in self._get_batches(dataSet, self.batchSize, self.cuda, False):  # divide all applications into batches to be processed simultaneously
+        for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):  # divide all applications into batches to be processed simultaneously
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
             self.lossEvaluator.collectValidationResultBatch(output, groundTruth)
@@ -704,28 +714,6 @@ class NNOptimiser:
             torchcuda.set_device(gpuIndex)
         elif torchcuda.is_available():
             self._log.warning("You have a CUDA device, so you should probably run with cuda=True")
-
-    @classmethod
-    def _get_batches(cls, tensors: Sequence[torch.Tensor], batch_size, cuda, shuffle):
-        length = len(tensors[0])
-        if shuffle:
-            index = torch.randperm(length)
-        else:
-            index = torch.LongTensor(range(length))
-        start_idx = 0
-        while start_idx < length:
-            end_idx = min(length, start_idx + batch_size)
-            excerpt = index[start_idx:end_idx]
-            batch = []
-            for tensor in tensors:
-                if len(tensor) != length:
-                    raise Exception("Passed tensors of differing lengths")
-                t = tensor[excerpt]
-                if cuda:
-                    t = t.cuda()
-                batch.append(Variable(t))
-            yield batch
-            start_idx += batch_size
 
 
 class WrappedTorchVectorModule(WrappedTorchModule, ABC):
@@ -760,7 +748,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model: WrappedTorchVectorModule = None
+        self.model: Optional[WrappedTorchVectorModule] = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
@@ -788,7 +776,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model: WrappedTorchVectorModule = None
+        self.model: Optional[WrappedTorchVectorModule] = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
@@ -814,4 +802,3 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
     def __str__(self):
         return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
-

@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+from typing import Tuple, Sequence, Generator, Optional
 
+from torch.autograd import Variable
 import pandas as pd
 import torch
 
@@ -14,6 +16,7 @@ class TensorScaler(ABC):
         """
         pass
 
+    @abstractmethod
     def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
         """
         Applies scaling/normalisation to the given tensor
@@ -22,6 +25,7 @@ class TensorScaler(ABC):
         """
         pass
 
+    @abstractmethod
     def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
         """
         Applies the inverse of method normalise to the given tensor
@@ -63,23 +67,27 @@ class TensorScalerFromVectorDataScaler(TensorScaler):
         return tensor
 
 
+class TensorScalerIdentity(TensorScaler):
+    def cuda(self):
+        pass
+
+    def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
+        return tensor
+
+    def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
+        return tensor
+
+
 class DataUtil(ABC):
     """Interface for DataUtil classes, which are used to process data for neural networks"""
 
     @abstractmethod
-    def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
+    def splitInputOutputPairs(self, fractionalSizeOfFirstSet) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         """
         Splits the data set
 
         :param fractionalSizeOfFirstSet: the desired fractional size in
-
-        :return: a tuple (A, B, meta) where A and B are tuples (in, out) with input and output data,
-            and meta is a dictionary containing meta-data on the split, which may contain the following keys:
-
-            * "infoText": text on the data set/the split performed;
-            * "outputIndicesA": output index sequence in the set A (one index for every input/output element of A);
-            * "outputIndicesB": output index sequence in the set A;
-
+        :return: a tuple (A, B) where A and B are tuples (in, out) with input and output data
         """
         pass
 
@@ -140,8 +148,7 @@ class VectorDataUtil(DataUtil):
         indices_B = indices[sizeA:]
         A = self._inputOutputPairs(indices_A)
         B = self._inputOutputPairs(indices_B)
-        meta = dict(outputIndicesA=indices_A, outputIndicesB=indices_B)
-        return A, B, meta
+        return A, B
 
     def _inputOutputPairs(self, indices):
         n = len(indices)
@@ -201,3 +208,74 @@ class ClassificationVectorDataUtil(VectorDataUtil):
         # classifications requires that the second (1-element) dimension be dropped
         inputs, outputs = super()._inputOutputPairs(indices)
         return inputs, outputs.view(outputs.shape[0])
+
+
+class TorchDataSet:
+    @abstractmethod
+    def iterBatches(self, batchSize: int, shuffle: bool) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
+        pass
+
+    @abstractmethod
+    def size(self) -> Optional[int]:
+        pass
+
+
+class TorchDataSetProvider:
+    def __init__(self, outputTensorScaler: Optional[TensorScaler] = None):
+        if outputTensorScaler is None:
+            outputTensorScaler = TensorScalerIdentity()
+        self.outputTensorScaler = outputTensorScaler
+
+    @abstractmethod
+    def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
+        pass
+
+    def getOutputTensorScaler(self) -> TensorScaler:
+        return self.outputTensorScaler
+
+
+class TorchDataSetFromTensors(TorchDataSet):
+    def __init__(self, x: torch.Tensor, y: torch.Tensor, cuda: bool):
+        if x.shape[0] != y.shape[0]:
+            raise ValueError("Tensors are not of the same length")
+        self.x = x
+        self.y = y
+        self.cuda = cuda
+
+    def iterBatches(self, batchSize: int, shuffle: bool) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
+        yield from self._get_batches((self.x, self.y), batchSize, shuffle)
+
+    def _get_batches(self, tensors: Sequence[torch.Tensor], batch_size, shuffle):
+        length = len(tensors[0])
+        if shuffle:
+            index = torch.randperm(length)
+        else:
+            index = torch.LongTensor(range(length))
+        start_idx = 0
+        while start_idx < length:
+            end_idx = min(length, start_idx + batch_size)
+            excerpt = index[start_idx:end_idx]
+            batch = []
+            for tensor in tensors:
+                if len(tensor) != length:
+                    raise Exception("Passed tensors of differing lengths")
+                t = tensor[excerpt]
+                if self.cuda:
+                    t = t.cuda()
+                batch.append(Variable(t))
+            yield tuple(batch)
+            start_idx += batch_size
+
+    def size(self):
+        return self.y.shape[0]
+
+
+class TorchDataSetProviderFromDataUtil(TorchDataSetProvider):
+    def __init__(self, dataUtil: DataUtil, cuda: bool):
+        super().__init__(outputTensorScaler=dataUtil.getOutputTensorScaler())
+        self.dataUtil = dataUtil
+        self.cuda = cuda
+
+    def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
+        (x1, y1), (x2, y2) = self.dataUtil.splitInputOutputPairs(fractionalSizeOfFirstSet)
+        return TorchDataSetFromTensors(x1, y1, self.cuda), TorchDataSetFromTensors(x2, y2, self.cuda)
