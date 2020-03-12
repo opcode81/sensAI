@@ -3,7 +3,7 @@ import logging
 import lightgbm
 import pandas as pd
 
-from sensai.sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, \
+from ..sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, \
     AbstractSkLearnVectorClassificationModel
 
 _log = logging.getLogger(__name__)
