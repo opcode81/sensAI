@@ -152,14 +152,14 @@ class WrappedTorchModule(ABC):
     def scaledOutput(self, output):
         return self.outputScaler.denormalise(output)
 
-    def _extractParamsFromData(self, dataUtil: "DataUtil"):
-        self.outputScaler = dataUtil.getOutputTensorScaler()
-        self.inputScaler = dataUtil.getInputTensorScaler()
+    def _extractParamsFromData(self, data: TorchDataSetProvider):
+        self.outputScaler = data.getOutputTensorScaler()
+        self.inputScaler = data.getInputTensorScaler()
 
-    def fit(self, dataUtil: "DataUtil", **nnOptimiserParams):
-        self._extractParamsFromData(dataUtil)
+    def fit(self, data: TorchDataSetProvider, **nnOptimiserParams):
+        self._extractParamsFromData(data)
         optimiser = NNOptimiser(cuda=self.cuda, **nnOptimiserParams)
-        optimiser.fit(self, dataUtil)
+        optimiser.fit(self, data)
 
 
 class _Optimiser(object):
@@ -726,10 +726,10 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
         self.inputDim = None
         self.outputDim = None
 
-    def _extractParamsFromData(self, dataUtil: VectorDataUtil):
-        super()._extractParamsFromData(dataUtil)
-        self.inputDim = dataUtil.inputDim()
-        self.outputDim = dataUtil.modelOutputDim()
+    def _extractParamsFromData(self, data: TorchDataSetProvider):
+        super()._extractParamsFromData(data)
+        self.inputDim = data.getInputDim()
+        self.outputDim = data.getModelOutputDim()
 
     def createTorchModule(self):
         return self.createTorchVectorModule(self.inputDim, self.outputDim)
@@ -757,7 +757,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         self.model = self.createTorchVectorModel()
         dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
-        self.model.fit(dataUtil, **self.nnOptimiserParams)
+        dataSetProvider = TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         yArray = self.model.applyScaled(inputs.values)
@@ -782,20 +783,32 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
+    def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
+        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels),
+            normalisationMode=self.normalisationMode)
+        return TorchDataSetProviderFromDataUtil(dataUtil)
+
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         if len(outputs.columns) != 1:
             raise ValueError("Expected one output dimension: the class labels")
+
+        # transform outputs: for each data point, the new output shall be the index in the list of labels
         labels: pd.Series = outputs.iloc[:, 0]
         outputs = pd.DataFrame([self._labels.index(l) for l in labels], columns=outputs.columns, index=outputs.index)
+
         self.model = self.createTorchVectorModel()
-        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels), normalisationMode=self.normalisationMode)
-        self.model.fit(dataUtil, **self.nnOptimiserParams)
+
+        dataSet = self._createDataSetProvider(inputs, outputs)
+        self.model.fit(dataSet, **self.nnOptimiserParams)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
 
+    def _predictOutputsFromInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+        return self.model.applyScaled(inputs.values, asNumpy=True)
+
     def _predictClassProbabilities(self, inputs: pd.DataFrame):
-        y = self.model.applyScaled(inputs.values, asNumpy=True)
+        y = self._predictOutputsFromInputDataFrame(inputs)
         normalisationConstants = y.sum(axis=1)
         for i in range(y.shape[0]):
             y[i,:] /= normalisationConstants[i]
