@@ -1,5 +1,5 @@
-sensAI - sensible AI for you and me
-===================================
+sensAI - the Python library for sensible AI
+===========================================
 
 .. toctree::
    :caption: Guides and Tutorials
