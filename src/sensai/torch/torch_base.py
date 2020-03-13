@@ -790,7 +790,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels),
             normalisationMode=self.normalisationMode)
-        return TorchDataSetProviderFromDataUtil(dataUtil)
+        return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         if len(outputs.columns) != 1:
