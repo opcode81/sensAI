@@ -1,11 +1,25 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, Generator, Optional
+from typing import Tuple, Sequence, Generator, Optional, Union
 
 from torch.autograd import Variable
 import pandas as pd
+import numpy as np
 import torch
 
 from .. import normalisation
+
+
+def toTensor(d: Union[torch.Tensor, np.ndarray, list], cuda=False):
+    if not isinstance(d, torch.Tensor):
+        if isinstance(d, np.ndarray):
+            d = torch.from_numpy(d)
+        elif isinstance(d, list):
+            d = torch.from_numpy(np.array(d))
+        else:
+            raise ValueError()
+    if cuda:
+        d.cuda()
+    return d
 
 
 class TensorScaler(ABC):
