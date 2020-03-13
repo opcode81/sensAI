@@ -689,10 +689,11 @@ class NNOptimiser:
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 
-        outputShape = dataSet[1].shape[1:]  # the shape of the output of a single model application
-        self.lossEvaluator.startValidationCollection(outputShape)
-
-        for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):  # divide all applications into batches to be processed simultaneously
+        outputShape = None
+        for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):
+            if outputShape is None:
+                outputShape = Y.shape[1:]  # the shape of the output of a single model application
+                self.lossEvaluator.startValidationCollection(outputShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
             self.lossEvaluator.collectValidationResultBatch(output, groundTruth)

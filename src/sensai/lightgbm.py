@@ -3,8 +3,7 @@ import logging
 import lightgbm
 import pandas as pd
 
-from ..sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, \
-    AbstractSkLearnVectorClassificationModel
+from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
 _log = logging.getLogger(__name__)
 
