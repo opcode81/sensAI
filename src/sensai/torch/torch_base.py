@@ -87,12 +87,13 @@ class WrappedTorchModule(ABC):
         if modelBytes is not None:
             self.setModelBytes(modelBytes)
 
-    def apply(self, X: Union[torch.Tensor, np.ndarray], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
+    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
             scaleInput=False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
         Applies the model to the given input tensor and returns the result (normalized)
 
-        :param X: the input tensor (either a batch or, if createBatch=True, a single data point)
+        :param X: the input tensor (either a batch or, if createBatch=True, a single data point) or data set.
+            If it is a data set, a single tensor will be extracted from it, so the data set must not be too large to be processed at once.
         :param asNumpy: flag indicating whether to convert the result to a numpy.array (if False, return tensor)
         :param createBatch: whether to add an additional tensor dimension for a batch containing just one data point
         :param mcDropoutSamples: if not None, apply MC-Dropout-based inference with the respective number of samples; if None, apply regular inference
@@ -116,9 +117,12 @@ class WrappedTorchModule(ABC):
         model = self.getTorchModel()
         model.eval()
 
-        if isinstance(X, np.ndarray):
+        if isinstance(X, TorchDataSet):
+            X = next(X.iterBatches(X.size(), inputOnly=True, shuffle=False))
+        elif isinstance(X, np.ndarray):
             X = toFloatArray(X)
             X = torch.from_numpy(X).float()
+
         if self._isCudaEnabled():
             X = X.cuda()
         if scaleInput:
@@ -137,11 +141,11 @@ class WrappedTorchModule(ABC):
             y, stddev = model.inferMCDropout(X, mcDropoutSamples, p=mcDropoutProbability)
             return extract(y), extract(stddev)
 
-    def applyScaled(self, X: Union[torch.Tensor, np.ndarray], **kwargs) -> Union[torch.Tensor, np.ndarray]:
+    def applyScaled(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], **kwargs) -> Union[torch.Tensor, np.ndarray]:
         """
         applies the model to the given input tensor and returns the scaled result (i.e. in the original scale)
 
-        :param X: the input tensor
+        :param X: the input tensor or data set
         :param kwargs: parameters to pass on to apply
 
         :return: a scaled output tensor or, if MC-Dropout is applied, a pair (y, sd) of scaled tensors, where
@@ -804,11 +808,11 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
 
-    def _predictOutputsFromInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
         return self.model.applyScaled(inputs.values, asNumpy=True)
 
     def _predictClassProbabilities(self, inputs: pd.DataFrame):
-        y = self._predictOutputsFromInputDataFrame(inputs)
+        y = self._predictOutputsForInputDataFrame(inputs)
         normalisationConstants = y.sum(axis=1)
         for i in range(y.shape[0]):
             y[i,:] /= normalisationConstants[i]

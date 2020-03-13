@@ -237,7 +237,7 @@ class ClassificationVectorDataUtil(VectorDataUtil):
 
 class TorchDataSet:
     @abstractmethod
-    def iterBatches(self, batchSize: int, shuffle: bool) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
+    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
         pass
 
     @abstractmethod
@@ -284,15 +284,16 @@ class TorchDataSetProvider:
 
 
 class TorchDataSetFromTensors(TorchDataSet):
-    def __init__(self, x: torch.Tensor, y: torch.Tensor, cuda: bool):
-        if x.shape[0] != y.shape[0]:
+    def __init__(self, x: torch.Tensor, y: Optional[torch.Tensor], cuda: bool):
+        if y is not None and x.shape[0] != y.shape[0]:
             raise ValueError("Tensors are not of the same length")
         self.x = x
         self.y = y
         self.cuda = cuda
 
-    def iterBatches(self, batchSize: int, shuffle: bool) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
-        yield from self._get_batches((self.x, self.y), batchSize, shuffle)
+    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
+        tensors = (self.x, self.y) if not inputOnly and self.y is not None else (self.x,)
+        yield from self._get_batches(tensors, batchSize, shuffle)
 
     def _get_batches(self, tensors: Sequence[torch.Tensor], batch_size, shuffle):
         length = len(tensors[0])
@@ -312,7 +313,10 @@ class TorchDataSetFromTensors(TorchDataSet):
                 if self.cuda:
                     t = t.cuda()
                 batch.append(Variable(t))
-            yield tuple(batch)
+            if len(batch) == 1:
+                yield batch[0]
+            else:
+                yield tuple(batch)
             start_idx += batch_size
 
     def size(self):

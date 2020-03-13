@@ -1,4 +1,4 @@
-from typing import Dict, Generator, Tuple, Optional
+from typing import Dict, Generator, Tuple, Optional, Union
 
 import pandas as pd
 import torch
@@ -40,19 +40,25 @@ class TorchtextDataSetFromDataFrame(torchtext.data.Dataset):
 
 
 class TorchDataSetFromTorchtextDataSet(TorchDataSet):
-    def __init__(self, dataSet: torchtext.data.Dataset, inputField: str, outputField: str, cuda: bool):
+    def __init__(self, dataSet: torchtext.data.Dataset, inputField: str, outputField: Optional[str], cuda: bool):
         self.outputField = outputField
         self.inputField = inputField
         self.dataSet = dataSet
         self.cuda = cuda
 
-    def iterBatches(self, batchSize: int, shuffle: bool) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
+    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
         iterator = torchtext.data.BucketIterator(self.dataSet,
             batch_size=batchSize,
             sort_key=lambda x: len(x.text),
             sort_within_batch=False)
+
         for batch in iterator:
-            yield toTensor(getattr(batch, self.inputField), self.cuda), toTensor(getattr(batch, self.outputField), self.cuda)
+            x = toTensor(getattr(batch, self.inputField), self.cuda)
+            if not inputOnly and self.outputField is not None:
+                y = toTensor(getattr(batch, self.outputField), self.cuda)
+                yield x, y
+            else:
+                yield x
 
     def size(self) -> Optional[int]:
         return len(self.dataSet)
