@@ -14,3 +14,4 @@ dist
 /default_console.py
 /build
 /git-split.sh
+/.pytest_cache
