@@ -289,11 +289,11 @@ class NNLossEvaluator(ABC):
         pass
 
     @abstractmethod
-    def startValidationCollection(self, outputShape):
+    def startValidationCollection(self, groundTruthShape):
         """
         Initiates validation data collection for a new epoch
 
-        :param outputShape: the tensor shape of a single model application
+        :param groundTruthShape: the tensor shape of a single ground truth data point
         """
         pass
 
@@ -372,10 +372,10 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    def startValidationCollection(self, outputShape):
-        if len(outputShape) != 1:
+    def startValidationCollection(self, groundTruthShape):
+        if len(groundTruthShape) != 1:
             raise ValueError("Outputs that are not vectors are currently unsupported")
-        self.outputDims = outputShape[-1]
+        self.outputDims = groundTruthShape[-1]
         self.total_loss_l1 = np.zeros(self.outputDims)
         self.total_loss_l2 = np.zeros(self.outputDims)
         self.allTrueOutputs = None
@@ -442,7 +442,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
 
         # transient members: state for validation
         self.totalLossCE = None
-        self.allTrueOutputs = None
+        self.numValidationSamples = None
 
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
@@ -459,9 +459,9 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    def startValidationCollection(self, outputShape):
-        if len(outputShape) != 0:
-            raise ValueError("Outputs must be scalars, specifically integers, not tensors")
+    def startValidationCollection(self, groundTruthShape):
+        if len(groundTruthShape) != 0:
+            raise ValueError("Outputs must be scalars, specifically integers indicating the true class indices, not tensors")
         self.totalLossCE = 0
         self.numValidationSamples = 0
 
@@ -693,11 +693,11 @@ class NNOptimiser:
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 
-        outputShape = None
+        groundTruthShape = None
         for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):
-            if outputShape is None:
-                outputShape = Y.shape[1:]  # the shape of the output of a single model application
-                self.lossEvaluator.startValidationCollection(outputShape)
+            if groundTruthShape is None:
+                groundTruthShape = Y.shape[1:]  # the shape of the output of a single model application
+                self.lossEvaluator.startValidationCollection(groundTruthShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
             self.lossEvaluator.collectValidationResultBatch(output, groundTruth)
