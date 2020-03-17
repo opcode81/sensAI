@@ -259,7 +259,16 @@ class DFTNormalisation(DataFrameTransformer):
             self.unsupported = unsupported
             self.transformer = transformer
 
-    class Rule(RuleTemplate):
+        def toRule(self, regex: str):
+            """
+            Convert the template to a rule for all columns matching the regex
+
+            :param regex: a regular expression defining the column the rule applies to
+            :return: the resulting Rule
+            """
+            return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer)
+
+    class Rule:
         def __init__(self, regex: str, skip=False, unsupported=False, transformer=None):
             """
             :param regex: a regular expression defining the column the rule applies to
@@ -268,8 +277,12 @@ class DFTNormalisation(DataFrameTransformer):
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
                 If None the default transformer will be used.
             """
+            if skip and transformer is not None:
+                raise ValueError("skip==True while transformer is not None")
             self.regex = re.compile(regex)
-            super().__init__(skip=skip, unsupported=unsupported, transformer=transformer)
+            self.skip = skip
+            self.unsupported = unsupported
+            self.transformer = transformer
 
         def matches(self, column: str):
             return self.regex.fullmatch(column) is not None
