@@ -4,7 +4,7 @@ import random
 import time
 from abc import ABC, abstractmethod
 import math
-from typing import Optional, Tuple, Callable, Type, Sequence, Dict
+from typing import Optional, Tuple, Callable, Type, Sequence
 
 import numpy as np
 import pandas as pd

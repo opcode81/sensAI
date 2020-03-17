@@ -1,3 +1,6 @@
+Modules
+=======
+
 .. automodule:: sensai
    :members:
    :undoc-members:

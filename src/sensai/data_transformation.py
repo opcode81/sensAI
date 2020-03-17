@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 from .columngen import ColumnGenerator
+from .util.string import orRegexGroup
 
 _log = logging.getLogger(__name__)
 
@@ -167,6 +168,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
     def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
+
         :param columns: names of original columns that are to be replaced by a list one-hot encoded columns each
         :param categoriesList: numpy arrays containing the possible values of each of the specified columns.
             If None, the possible values will be inferred from the columns
@@ -244,6 +246,29 @@ class DFTNormalisation(DataFrameTransformer):
     of all applicable columns)
     """
 
+    class RuleTemplate:
+        def __init__(self, skip=False, unsupported=False, transformer: Callable = None):
+            """
+            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
+            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
+                If None the default transformer will be used.
+            """
+            if skip and transformer is not None:
+                raise ValueError("skip==True while transformer is not None")
+            self.skip = skip
+            self.unsupported = unsupported
+            self.transformer = transformer
+
+        def toRule(self, regex: str):
+            """
+            Convert the template to a rule for all columns matching the regex
+
+            :param regex: a regular expression defining the column the rule applies to
+            :return: the resulting Rule
+            """
+            return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer)
+
     class Rule:
         def __init__(self, regex: str, skip=False, unsupported=False, transformer=None):
             """
@@ -251,7 +276,7 @@ class DFTNormalisation(DataFrameTransformer):
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
-            If None the default transformer will be used.
+                If None the default transformer will be used.
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
@@ -310,7 +335,7 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            r = "|".join([re.escape(colName) for colName in matchingColumns])
+            r = orRegexGroup(matchingColumns)
             try:
                 specialisedRule.regex = re.compile(r)
             except Exception as e:
