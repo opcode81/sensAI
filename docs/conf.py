@@ -81,6 +81,17 @@ def findLineFromObjectName(sourceFile, objectName):
 autodoc_mock_imports = ["torch", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml", "sqlite3",
                         "azureml", "mlflow", "MySQLdb"]
 
+# Render docu of __init__ methods
+# autoclass_content = 'both'
+
+
+autodoc_default_options = {
+    'exclude-members': 'log, DuplicateColumnNamesException',
+    'member-order': 'bysource',
+    'special-members': '__init__',
+    'show-inheritance': True
+}
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 

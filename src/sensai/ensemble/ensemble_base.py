@@ -12,6 +12,10 @@ from ..util.pickle import PickleFailureDebugger
 
 class EnsembleVectorModel(VectorModel, ABC):
     def __init__(self, models: Sequence[VectorModel], numProcesses=1):
+        """
+        :param models:
+        :param numProcesses:
+        """
         self.numProcesses = numProcesses
         self.models = list(models)
         super().__init__(checkInputColumns=False)

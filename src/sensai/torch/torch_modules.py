@@ -134,23 +134,23 @@ class LSTNetwork(MCDropoutCapableNNModule):
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
             hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid"):
         """
-        numInputTimeSlices: the number of input time slices
-        inputDimPerTimeSlice: the dimension of the input data per time slice
-        numOutputTimeSlices: the number of time slices for which to produce outputs
-        outputDimPerTimeSlice: the number of dimensions per output time slice
-        maxHorizon: the number of time steps predicted by the model (i.e. the maximum horizon)
-        numCnnTimeSlices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
+        :param numInputTimeSlices: the number of input time slices
+        :param inputDimPerTimeSlice: the dimension of the input data per time slice
+        :param numOutputTimeSlices: the number of time slices for which to produce outputs
+        :param outputDimPerTimeSlice: the number of dimensions per output time slice
+        :param maxHorizon: the number of time steps predicted by the model (i.e. the maximum horizon)
+        :param numCnnTimeSlices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
             convolutions, the other dimension being inputDimPerTimeSlice), a.k.a. "Ck"
-        numConvolutions: the number of separate convolutions to apply, i.e. the number of independent convolution matrices, a.k.a "hidC";
+        :param numConvolutions: the number of separate convolutions to apply, i.e. the number of independent convolution matrices, a.k.a "hidC";
             if it is 0, then the entire complex processing path is not applied.
-        hidRNN: the number of hidden output dimensions for the RNN stage
-        skip: the number of time slices to skip for the skip-RNN. If it is 0, then the skip-RNN is not used.
-        hidSkip: the number of output dimensions of each
-        hwWindow: the number of time slices from the end of the input time series to consider as input for the highway component.
+        :param hidRNN: the number of hidden output dimensions for the RNN stage
+        :param skip: the number of time slices to skip for the skip-RNN. If it is 0, then the skip-RNN is not used.
+        :param hidSkip: the number of output dimensions of each
+        :param hwWindow: the number of time slices from the end of the input time series to consider as input for the highway component.
             If it is 0, the highway component is not used.
-        hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
-        dropout: the dropout probability to use during training (dropouts are applied after every major step in the evaluation path)
-        outputActivation: the output activation function
+        :param hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
+        :param dropout: the dropout probability to use during training (dropouts are applied after every major step in the evaluation path)
+        :param outputActivation: the output activation function
         """
         if numConvolutions == 0 and hwWindow == 0:
             raise ValueError("No processing paths remain")

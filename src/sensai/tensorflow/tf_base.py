@@ -49,6 +49,15 @@ class KerasVectorRegressionModel(VectorRegressionModel, ABC):
 
     def __init__(self, normalisationMode: normalisation.NormalisationMode, loss, metrics, optimiser,
             batchSize=64, epochs=1000, validationFraction=0.2):
+        """
+        :param normalisationMode:
+        :param loss:
+        :param metrics:
+        :param optimiser:
+        :param batchSize:
+        :param epochs:
+        :param validationFraction:
+        """
         super().__init__()
         self.normalisationMode = normalisationMode
         self.batchSize = batchSize
