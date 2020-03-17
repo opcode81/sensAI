@@ -4,7 +4,6 @@ from .evaluation import VectorRegressionModelEvaluator, VectorRegressionModelEva
 from .normalisation import NormalisationMode
 from . import eval_stats
 from . import sklearn
-from . import torch
 from . import naive_bayes
 from . import util
 from . import hyperopt
@@ -18,3 +17,5 @@ from .ensemble import AveragingVectorRegressionModel
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow
+# torch
+# lightgbm

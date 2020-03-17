@@ -1,6 +1,6 @@
 # sensAI
 
-The library for sensible AI for you and me by jambit GmbH. 
+the Python library for sensible AI 
 
 ## About sensAI
 

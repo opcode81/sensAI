@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Tuple, Callable
+from typing import List, Union, Sequence, Tuple, Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,71 +14,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch import cuda as torchcuda
-from torch.autograd import Variable
 
 from ..util.dtype import toFloatArray
-from .. import normalisation
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..util.string import objectRepr
+from .torch_data import TensorScaler, DataUtil, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
+    TorchDataSetProviderFromDataUtil, TorchDataSetProvider
 
 _log = logging.getLogger(__name__)
-
-
-class TensorScaler(ABC):
-    @abstractmethod
-    def cuda(self):
-        """
-        Makes this scaler's components use CUDA
-        """
-        pass
-
-    def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        """
-        Applies scaling/normalisation to the given tensor
-        :param tensor: the tensor to scale/normalise
-        :return: the scaled/normalised tensor
-        """
-        pass
-
-    def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        """
-        Applies the inverse of method normalise to the given tensor
-        :param tensor: the tensor to denormalise
-        :return: the denormalised tensor
-        """
-        pass
-
-
-class TensorScalerFromVectorDataScaler(TensorScaler):
-    def __init__(self, vectorDataScaler: normalisation.VectorDataScaler, cuda: bool):
-        self.scale = vectorDataScaler.scale
-        if self.scale is not None:
-            self.scale = torch.from_numpy(vectorDataScaler.scale).float()
-        self.translate = vectorDataScaler.translate
-        if self.translate is not None:
-            self.translate = torch.from_numpy(vectorDataScaler.translate).float()
-        if cuda:
-            self.cuda()
-
-    def cuda(self):
-        if self.scale is not None:
-            self.scale = self.scale.cuda()
-        if self.translate is not None:
-            self.translate = self.translate.cuda()
-
-    def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        if self.translate is not None:
-            tensor -= self.translate
-        if self.scale is not None:
-            tensor /= self.scale
-        return tensor
-
-    def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        if self.scale is not None:
-            tensor *= self.scale
-        if self.translate is not None:
-            tensor += self.translate
-        return tensor
 
 
 class WrappedTorchModule(ABC):
@@ -87,8 +30,8 @@ class WrappedTorchModule(ABC):
     def __init__(self, cuda=True):
         self.cuda = cuda
         self.model = None
-        self.outputScaler: TensorScaler = None
-        self.inputScaler: TensorScaler = None
+        self.outputScaler: Optional[TensorScaler] = None
+        self.inputScaler: Optional[TensorScaler] = None
 
     def setTorchModel(self, model):
         self.model = model
@@ -144,12 +87,13 @@ class WrappedTorchModule(ABC):
         if modelBytes is not None:
             self.setModelBytes(modelBytes)
 
-    def apply(self, X: Union[torch.Tensor, np.ndarray], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
+    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
             scaleInput=False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
         Applies the model to the given input tensor and returns the result (normalized)
 
-        :param X: the input tensor (either a batch or, if createBatch=True, a single data point)
+        :param X: the input tensor (either a batch or, if createBatch=True, a single data point) or data set.
+            If it is a data set, a single tensor will be extracted from it, so the data set must not be too large to be processed at once.
         :param asNumpy: flag indicating whether to convert the result to a numpy.array (if False, return tensor)
         :param createBatch: whether to add an additional tensor dimension for a batch containing just one data point
         :param mcDropoutSamples: if not None, apply MC-Dropout-based inference with the respective number of samples; if None, apply regular inference
@@ -173,9 +117,12 @@ class WrappedTorchModule(ABC):
         model = self.getTorchModel()
         model.eval()
 
-        if isinstance(X, np.ndarray):
+        if isinstance(X, TorchDataSet):
+            X = next(X.iterBatches(X.size(), inputOnly=True, shuffle=False))
+        elif isinstance(X, np.ndarray):
             X = toFloatArray(X)
             X = torch.from_numpy(X).float()
+
         if self._isCudaEnabled():
             X = X.cuda()
         if scaleInput:
@@ -194,11 +141,11 @@ class WrappedTorchModule(ABC):
             y, stddev = model.inferMCDropout(X, mcDropoutSamples, p=mcDropoutProbability)
             return extract(y), extract(stddev)
 
-    def applyScaled(self, X: Union[torch.Tensor, np.ndarray], **kwargs) -> Union[torch.Tensor, np.ndarray]:
+    def applyScaled(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], **kwargs) -> Union[torch.Tensor, np.ndarray]:
         """
         applies the model to the given input tensor and returns the scaled result (i.e. in the original scale)
 
-        :param X: the input tensor
+        :param X: the input tensor or data set
         :param kwargs: parameters to pass on to apply
 
         :return: a scaled output tensor or, if MC-Dropout is applied, a pair (y, sd) of scaled tensors, where
@@ -209,53 +156,14 @@ class WrappedTorchModule(ABC):
     def scaledOutput(self, output):
         return self.outputScaler.denormalise(output)
 
-    def _extractParamsFromData(self, dataUtil):
-        self.outputScaler = dataUtil.getOutputTensorScaler()
-        self.inputScaler = dataUtil.getInputTensorScaler()
+    def _extractParamsFromData(self, data: TorchDataSetProvider):
+        self.outputScaler = data.getOutputTensorScaler()
+        self.inputScaler = data.getInputTensorScaler()
 
-    def fit(self, dataUtil, **nnOptimiserParams):
-        self._extractParamsFromData(dataUtil)
+    def fit(self, data: TorchDataSetProvider, **nnOptimiserParams):
+        self._extractParamsFromData(data)
         optimiser = NNOptimiser(cuda=self.cuda, **nnOptimiserParams)
-        optimiser.fit(self, dataUtil)
-
-
-class DataUtil(ABC):
-    """Interface for DataUtil classes, which are used to process data for neural networks"""
-
-    @abstractmethod
-    def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
-        """
-        Splits the data set
-
-        :param fractionalSizeOfFirstSet: the desired fractional size in
-
-        :return: a tuple (A, B, meta) where A and B are tuples (in, out) with input and output data,
-            and meta is a dictionary containing meta-data on the split, which may contain the following keys:
-
-            * "infoText": text on the data set/the split performed;
-            * "outputIndicesA": output index sequence in the set A (one index for every input/output element of A);
-            * "outputIndicesB": output index sequence in the set A;
-
-        """
-        pass
-
-    @abstractmethod
-    def getOutputTensorScaler(self) -> TensorScaler:
-        """
-        Gets the scaler with which to scale model outputs
-
-        :return: the scaler
-        """
-        pass
-
-    @abstractmethod
-    def getInputTensorScaler(self) -> TensorScaler:
-        """
-        Gets the scaler with which to scale model inputs
-
-        :return: the scaler
-        """
-        pass
+        optimiser.fit(self, data)
 
 
 class _Optimiser(object):
@@ -622,13 +530,19 @@ class NNOptimiser:
     def __str__(self):
         return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}]"
 
-    def fit(self, model: WrappedTorchModule, dataUtilOrList: Union[DataUtil, List[DataUtil]]):
+    def fit(self, model: WrappedTorchModule, data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
         self._log.info(f"Learning parameters of {model} via {self}")
 
-        if type(dataUtilOrList) != list:  # DataUtil instance
-            dataUtilList = [dataUtilOrList]
+        def toDataSetProvider(d) -> TorchDataSetProvider:
+            if isinstance(d, TorchDataSetProvider):
+                return d
+            elif isinstance(d, DataUtil):
+                return TorchDataSetProviderFromDataUtil(d, self.cuda)
+
+        if type(data) != list:
+            dataSetProviders = [toDataSetProvider(data)]
         else:
-            dataUtilList = dataUtilOrList
+            dataSetProviders = [toDataSetProvider(item) for item in data]
 
         # initialise data to be generated
         self.trainingLog = []
@@ -653,10 +567,10 @@ class NNOptimiser:
         trainingSets = []
         outputScalers = []
         _log.info("Obtaining input/output training instances")
-        for idxDataSet, Data in enumerate(dataUtilList):
-            outputScalers.append(Data.getOutputTensorScaler())
-            trainS, valS, meta = Data.splitInputOutputPairs(self.trainFraction)
-            trainingLog(f"Data set {idxDataSet+1}/{len(dataUtilList)}: #train={trainS[1].shape[0]}, #validation={valS[1].shape[0]}")
+        for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
+            outputScalers.append(dataSetProvider.getOutputTensorScaler())
+            trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
+            trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
             validationSets.append(valS)
             trainingSets.append(trainS)
         trainingLog("Number of validation sets: %d" % len(validationSets))
@@ -749,36 +663,41 @@ class NNOptimiser:
         scaledTruth = outputScaler.denormalise(groundTruth)
         return scaledOutput, scaledTruth
 
-    def _train(self, dataSets: Sequence[Tuple[torch.Tensor, torch.Tensor]], model: nn.Module, criterion: nn.modules.loss._Loss,
+    def _train(self, dataSets: Sequence[TorchDataSet], model: nn.Module, criterion: nn.modules.loss._Loss,
             optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: Sequence[TensorScaler]):
         """Performs one training epoch"""
         model.train()
         total_loss = 0
         n_samples = 0
-        outputShape = dataSets[0][1].shape[1:]
-        numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
+        numOutputsPerDataPoint = None
         for dataSet, outputScaler in zip(dataSets, outputScalers):
-            for X, Y in self._get_batches(dataSet, batch_size, cuda, True):
+            for X, Y in dataSet.iterBatches(batch_size, shuffle=True):
+                if numOutputsPerDataPoint is None:
+                    outputShape = Y.shape[1:]
+                    numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
+
                 def closure():
                     model.zero_grad()
                     output, groundTruth = self._applyModel(model, X, Y, outputScaler)
                     loss = criterion(output, groundTruth)
                     loss.backward()
                     return loss
+
                 loss = optim.step(closure)
                 total_loss += loss.item()
                 numDataPointsInBatch = Y.size(0)
                 n_samples += numDataPointsInBatch * numOutputsPerDataPoint
         return total_loss / n_samples
 
-    def _evaluate(self, dataSet: Tuple[torch.Tensor, torch.Tensor], model: nn.Module, outputScaler: TensorScaler):
+    def _evaluate(self, dataSet: TorchDataSet, model: nn.Module, outputScaler: TensorScaler):
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
 
-        outputShape = dataSet[1].shape[1:]  # the shape of the output of a single model application
-        self.lossEvaluator.startValidationCollection(outputShape)
-
-        for X, Y in self._get_batches(dataSet, self.batchSize, self.cuda, False):  # divide all applications into batches to be processed simultaneously
+        outputShape = None
+        for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):
+            if outputShape is None:
+                outputShape = Y.shape[1:]  # the shape of the output of a single model application
+                self.lossEvaluator.startValidationCollection(outputShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
             self.lossEvaluator.collectValidationResultBatch(output, groundTruth)
@@ -801,144 +720,20 @@ class NNOptimiser:
         elif torchcuda.is_available():
             self._log.warning("You have a CUDA device, so you should probably run with cuda=True")
 
-    @classmethod
-    def _get_batches(cls, tensors: Sequence[torch.Tensor], batch_size, cuda, shuffle):
-        length = len(tensors[0])
-        if shuffle:
-            index = torch.randperm(length)
-        else:
-            index = torch.LongTensor(range(length))
-        start_idx = 0
-        while start_idx < length:
-            end_idx = min(length, start_idx + batch_size)
-            excerpt = index[start_idx:end_idx]
-            batch = []
-            for tensor in tensors:
-                if len(tensor) != length:
-                    raise Exception("Passed tensors of differing lengths")
-                t = tensor[excerpt]
-                if cuda:
-                    t = t.cuda()
-                batch.append(Variable(t))
-            yield batch
-            start_idx += batch_size
-
-
-class VectorDataUtil(DataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN,
-            differingOutputNormalisationMode=None):
-        """
-        :param inputs: the inputs
-        :param outputs: the outputs
-        :param cuda: whether to apply CUDA
-        :param normalisationMode: the normalisation mode to use for inputs and (unless differingOutputNormalisationMode is specified) outputs
-        :param differingOutputNormalisationMode: the normalisation mode to apply to outputs
-        """
-        if inputs.shape[0] != outputs.shape[0]:
-            raise ValueError("Output length must be equal to input length")
-        self.inputs = inputs
-        self.outputs = outputs
-        self.normalisationMode = normalisationMode
-        self.inputValues = inputs.values
-        self.outputValues = outputs.values
-        inputScaler = normalisation.VectorDataScaler(self.inputs, self.normalisationMode)
-        self.inputValues = inputScaler.getNormalisedArray(self.inputs)
-        self.inputTensorScaler = TensorScalerFromVectorDataScaler(inputScaler, cuda)
-        outputScaler = normalisation.VectorDataScaler(self.outputs, self.normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
-        self.outputValues = outputScaler.getNormalisedArray(self.outputs)
-        self.outputTensorScaler = TensorScalerFromVectorDataScaler(outputScaler, cuda)
-
-    def getOutputTensorScaler(self):
-        return self.outputTensorScaler
-
-    def getInputTensorScaler(self):
-        return self.inputTensorScaler
-
-    def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
-        n = self.inputs.shape[0]
-        sizeA = int(n * fractionalSizeOfFirstSet)
-        indices = list(range(n))
-        indices_A = indices[:sizeA]
-        indices_B = indices[sizeA:]
-        A = self._inputOutputPairs(indices_A)
-        B = self._inputOutputPairs(indices_B)
-        meta = dict(outputIndicesA=indices_A, outputIndicesB=indices_B)
-        return A, B, meta
-
-    def _inputOutputPairs(self, indices):
-        n = len(indices)
-        X = torch.zeros((n, self.inputDim()))
-        Y = torch.zeros((n, self.outputDim()), dtype=self._torchOutputDtype())
-
-        for i, outputIdx in enumerate(indices):
-            inputData, outputData = self._inputOutputPair(outputIdx)
-            if i == 0:
-                if inputData.size() != X[i].size():
-                    raise Exception(f"Unexpected input size: expected {X[i].size()}, got {inputData.size()}")
-                if outputData.size() != Y[i].size():
-                    raise Exception(f"Unexpected output size: expected {Y[i].size()}, got {outputData.size()}")
-            X[i] = inputData
-            Y[i] = outputData
-
-        return X, Y
-
-    def _inputOutputPair(self, idx):
-        outputData = torch.from_numpy(self.outputValues[idx, :])
-        inputData = torch.from_numpy(self.inputValues[idx, :])
-        return inputData, outputData
-
-    def inputDim(self):
-        return self.inputs.shape[1]
-
-    def outputDim(self):
-        """
-        :return: the dimensionality of the outputs (ground truth values)
-        """
-        return self.outputs.shape[1]
-
-    def modelOutputDim(self):
-        """
-        :return: the dimensionality that is to be output by the model to be trained
-        """
-        return self.outputDim()
-
-    def _torchOutputDtype(self):
-        return None  # use default (some float)
-
-
-class ClassificationVectorDataUtil(VectorDataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN):
-        if len(outputs.columns) != 1:
-            raise Exception(f"Exactly one output dimension (the class index) is required, got {len(outputs.columns)}")
-        super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode, differingOutputNormalisationMode=normalisation.NormalisationMode.NONE)
-        self.numClasses = numClasses
-
-    def modelOutputDim(self):
-        return self.numClasses
-
-    def _torchOutputDtype(self):
-        return torch.long
-
-    def _inputOutputPairs(self, indices):
-        # classifications requires that the second (1-element) dimension be dropped
-        inputs, outputs = super()._inputOutputPairs(indices)
-        return inputs, outputs.view(outputs.shape[0])
-
 
 class WrappedTorchVectorModule(WrappedTorchModule, ABC):
     """
-    Base class for torch models that map vectors to vectors
+    Base class for wrapped torch modules that map vectors to vectors
     """
-
     def __init__(self, cuda: bool = True):
         super().__init__(cuda=cuda)
         self.inputDim = None
         self.outputDim = None
 
-    def _extractParamsFromData(self, dataUtil: VectorDataUtil):
-        super()._extractParamsFromData(dataUtil)
-        self.inputDim = dataUtil.inputDim()
-        self.outputDim = dataUtil.modelOutputDim()
+    def _extractParamsFromData(self, data: TorchDataSetProvider):
+        super()._extractParamsFromData(data)
+        self.inputDim = data.getInputDim()
+        self.outputDim = data.getModelOutputDim()
 
     def createTorchModule(self):
         return self.createTorchVectorModule(self.inputDim, self.outputDim)
@@ -949,7 +744,7 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
         """
         :param modelClass:
         :param modelArgs:
@@ -965,7 +760,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model = None
+        self.model: Optional[WrappedTorchVectorModule] = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
@@ -973,7 +768,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         self.model = self.createTorchVectorModel()
         dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
-        self.model.fit(dataUtil, **self.nnOptimiserParams)
+        dataSetProvider = TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         yArray = self.model.applyScaled(inputs.values)
@@ -984,9 +780,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
-    def __init__(self, modelClass, modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
         """
-
         :param modelClass:
         :param modelArgs:
         :param modelKwArgs:
@@ -1001,25 +796,37 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model = None
+        self.model: Optional[WrappedTorchVectorModule] = None
 
     def createTorchVectorModel(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
+    def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
+        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels),
+            normalisationMode=self.normalisationMode)
+        return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         if len(outputs.columns) != 1:
             raise ValueError("Expected one output dimension: the class labels")
+
+        # transform outputs: for each data point, the new output shall be the index in the list of labels
         labels: pd.Series = outputs.iloc[:, 0]
         outputs = pd.DataFrame([self._labels.index(l) for l in labels], columns=outputs.columns, index=outputs.index)
+
         self.model = self.createTorchVectorModel()
-        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels), normalisationMode=self.normalisationMode)
-        self.model.fit(dataUtil, **self.nnOptimiserParams)
+
+        dataSet = self._createDataSetProvider(inputs, outputs)
+        self.model.fit(dataSet, **self.nnOptimiserParams)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
 
+    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+        return self.model.applyScaled(inputs.values, asNumpy=True)
+
     def _predictClassProbabilities(self, inputs: pd.DataFrame):
-        y = self.model.applyScaled(inputs.values, asNumpy=True)
+        y = self._predictOutputsForInputDataFrame(inputs)
         normalisationConstants = y.sum(axis=1)
         for i in range(y.shape[0]):
             y[i,:] /= normalisationConstants[i]
@@ -1027,4 +834,3 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
     def __str__(self):
         return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
-
