@@ -51,7 +51,7 @@ class _Optimiser(object):
         else:
             raise RuntimeError("Invalid optim method: " + self.method)
 
-    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, **optimiserArgs):
+    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, use_shrinkage=True, **optimiserArgs):
         """
 
         :param params: an iterable of torch.Tensor s or dict s. Specifies what Tensors should be optimized.
@@ -71,7 +71,7 @@ class _Optimiser(object):
         self.start_decay_at = start_decay_at
         self.start_decay = False
         self.optimiserArgs = optimiserArgs
-        self.use_shrinkage = True
+        self.use_shrinkage = use_shrinkage
         self._makeOptimizer()
 
     def step(self, lossBackward: Callable):
@@ -339,18 +339,20 @@ class NNOptimiser:
     log = log.getChild(__qualname__)
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
-             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None, **optimiserArgs):
+            batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None,
+            useShrinkage=True, **optimiserArgs):
         """
         :param cuda: whether to use CUDA or not
         :param lossEvaluator: the loss evaluator to use
         :param gpu: index of the gpu to be used, if parameter cuda is True
         :param optimiser: the optimizer to be used; defaults to "adam"
-        :param optimiserClip: max value for gradient clipping
+        :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
         :param optimiserLR: the optimizer's learning rate decay
         :param trainFraction: the fraction of the data used for training; defaults to 0.75
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
-        :param optimiserArgs: keyword arguments to be used in actual torch optimiser
+        :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
+        :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
         """
         if optimiser == 'lbfgs':
             largeBatchSize = 1e12
@@ -377,12 +379,15 @@ class NNOptimiser:
         self.startLRDecayAtEpoch = startLRDecayAtEpoch
         self.optimiserLRDecay = optimiserLRDecay
         self.optimiserArgs = optimiserArgs
+        self.useShrinkage = useShrinkage
 
         self.trainingLog = None
         self.bestEpoch = None
 
     def __str__(self):
-        return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}]"
+        return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, " \
+            f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
+            f"optimiserArgs={self.optimiserArgs}]"
 
     def fit(self, model: "WrappedTorchModule", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
         self.log.info(f"Learning parameters of {model} via {self}")
@@ -446,7 +451,7 @@ class NNOptimiser:
         best_epoch = 0
         optim = _Optimiser(torchModel.parameters(), method=self.optimiser, lr=self.optimiserLR,
             max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
-            **self.optimiserArgs)
+            use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
         bestModelBytes = None
         self.lossEvaluator.startTraining(self.cuda)
