@@ -618,9 +618,8 @@ def flattenFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] 
     Example:
         >>> from sensai.featuregen import FeatureGeneratorTakeColumns, flattenFeatureGenerator
         >>> import pandas as pd
-        >>> import numpy as np
 
-        >>> df = pd.DataFrame({"foo": [np.array([1, 2]), np.array([3, 4])], "bar": ["a", "b"]})
+        >>> df = pd.DataFrame({"foo": [[1, 2], [3, 4]], "bar": ["a", "b"]})
         >>> fgen = flattenFeatureGenerator(FeatureGeneratorTakeColumns(), columnsToFlatten=["foo"])
         >>> fgen.generate(df)
            foo_0  foo_1 bar
