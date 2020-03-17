@@ -9,6 +9,7 @@ import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 from .columngen import ColumnGenerator
+from .util.string import orRegexGroup
 
 _log = logging.getLogger(__name__)
 
@@ -334,7 +335,7 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            r = "|".join([re.escape(colName) for colName in matchingColumns])
+            r = orRegexGroup(matchingColumns)
             try:
                 specialisedRule.regex = re.compile(r)
             except Exception as e:

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from . import util, data_transformation
+from .util.string import orRegexGroup
 from .columngen import ColumnGenerator
 
 if TYPE_CHECKING:
@@ -48,8 +49,8 @@ class FeatureGenerator(ABC):
         self._categoricalFeatureNames = categoricalFeatureNames
         normalisationRules = list(normalisationRules)
         if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
-            normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)" % "|".join(categoricalFeatureNames), unsupported=True))
-            normalisationRules.append(data_transformation.DFTNormalisation.Rule(r"(%s)_\d+" % "|".join(categoricalFeatureNames), skip=True))
+            normalisationRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames), unsupported=True))
+            normalisationRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames) + r"_\d+", skip=True))
         self._normalisationRules = normalisationRules
 
     def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
@@ -108,7 +109,7 @@ class FeatureGenerator(ABC):
         self._generatedColumnNames = resultDF.columns
         if self._normalisationRuleTemplate is not None:
             nonCategoricalFeatures = list(set(self._generatedColumnNames).difference(self._categoricalFeatureNames))
-            self._generatedColumnsRule = self._normalisationRuleTemplate.toRule(r"(%s)" % "|".join(nonCategoricalFeatures))
+            self._generatedColumnsRule = self._normalisationRuleTemplate.toRule(orRegexGroup(nonCategoricalFeatures))
             self._normalisationRules.append(self._generatedColumnsRule)
 
         return resultDF
