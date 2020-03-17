@@ -47,14 +47,14 @@ class FeatureGenerator(ABC):
         self._generatedColumnsRule = None
         self._normalisationRuleTemplate = normalisationRuleTemplate
         self._categoricalFeatureNames = categoricalFeatureNames
-        normalisationRules = list(normalisationRules)
+        self._categoricalFeatureRules = []
+        self._normalisationRules = list(normalisationRules)
         if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
-            normalisationRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames), unsupported=True))
-            normalisationRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames) + r"_\d+", skip=True))
-        self._normalisationRules = normalisationRules
+            self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames), unsupported=True))
+            self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames) + r"_\d+", skip=True))
 
-    def getNormalisationRules(self) -> Sequence[data_transformation.DFTNormalisation.Rule]:
-        return self._normalisationRules
+    def getNormalisationRules(self) -> List[data_transformation.DFTNormalisation.Rule]:
+        return self._normalisationRules + self._categoricalFeatureRules
 
     def getNormalisationRuleTemplate(self) -> Optional[data_transformation.DFTNormalisation.RuleTemplate]:
         return self._normalisationRuleTemplate
@@ -109,8 +109,7 @@ class FeatureGenerator(ABC):
         self._generatedColumnNames = resultDF.columns
         if self._normalisationRuleTemplate is not None:
             nonCategoricalFeatures = list(set(self._generatedColumnNames).difference(self._categoricalFeatureNames))
-            self._generatedColumnsRule = self._normalisationRuleTemplate.toRule(orRegexGroup(nonCategoricalFeatures))
-            self._normalisationRules.append(self._generatedColumnsRule)
+            self._normalisationRules = [self._normalisationRuleTemplate.toRule(orRegexGroup(nonCategoricalFeatures))]
 
         return resultDF
 
