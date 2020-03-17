@@ -221,12 +221,13 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
 
 
 class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
-    def __init__(self, columns: Union[str, List[str]] = None, categoricalFeatureNames: Sequence[str] = (),
+    def __init__(self, columns: Union[str, List[str]] = None, exceptColumns: List[str] = None, categoricalFeatureNames: Sequence[str] = (),
                  normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
                  normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
         """
 
         :param columns: name of the column or list of names of columns to be taken. If None, all columns will be taken.
+        :param exceptColumns: list of names of columns to not take if present in the input df
         :param categoricalFeatureNames:
         :param normalisationRules:
         :param normalisationRuleTemplate:
@@ -235,14 +236,17 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
         if isinstance(columns, str):
             columns = [columns]
         self.columns = columns
+        self.exceptColumns = exceptColumns if exceptColumns is not None else []
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
-        if self.columns is None:
-            return df
-        missingCols = set(self.columns) - set(df.columns)
+        columnsToTake = self.columns if self.columns is not None else df.columns
+        columnsToTake = set(columnsToTake).difference(self.exceptColumns)
+
+        missingCols = columnsToTake.difference(df.columns)
         if len(missingCols) > 0:
             raise Exception(f"Columns {missingCols} not present in data frame; available columns: {list(df.columns)}")
-        return df[self.columns]
+
+        return df[sorted(columnsToTake)]
 
 
 class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
@@ -282,17 +286,6 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             _log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
-
-
-def getFlattenedFeatureGenerator(fgen: FeatureGenerator, normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
-    """
-    Return a feature generator that will generate flattened output of the provided fgen
-
-    :param fgen: feature generator to be flattened
-    :param normalisationRuleTemplate: normalisationRuleTemplate to apply to all output columns
-    :return:
-    """
-    return ChainedFeatureGenerator(fgen, FeatureGeneratorFlattenColumns(), normalisationRuleTemplate=normalisationRuleTemplate)
 
 
 class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
@@ -606,3 +599,37 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         else:
             _log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
+
+
+def flattenFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
+                            normalisationRules=None, normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+    """
+    Return a flattening version of the input feature generator.
+
+    :param fgen: feature generator to be flattened
+    :param columnsToFlatten: list of names of output columns to be flattened.
+        If None, all output columns will be flattened.
+    :param normalisationRules: additional normalisation rules for the flattened output columns
+    :param normalisationRuleTemplate: This parameter can be supplied instead of normalisationRules for the case where
+        there shall be a single rule that applies to all flattened output columns
+    :return: FeatureGenerator instance that will generate flattened versions of the specified output columns and leave
+        all non specified output columns as is.
+
+    Example:
+        >>> from sensai.featuregen import FeatureGeneratorTakeColumns, flattenFeatureGenerator
+        >>> import pandas as pd
+        >>> import numpy as np
+
+        >>> df = pd.DataFrame({"foo": [np.array([1, 2]), np.array([3, 4])], "bar": ["a", "b"]})
+        >>> fgen = flattenFeatureGenerator(FeatureGeneratorTakeColumns(), columnsToFlatten=["foo"])
+        >>> fgen.generate(df)
+           foo_0  foo_1 bar
+        0      1      2   a
+        1      3      4   b
+    """
+
+    flatteningGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(columnsToFlatten), FeatureGeneratorFlattenColumns(),
+                                                  normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate)
+    passthroughColumnsGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten))
+
+    return MultiFeatureGenerator([flatteningGenerator, passthroughColumnsGenerator])
