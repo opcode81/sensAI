@@ -151,7 +151,14 @@ class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
 
 
 class MultiFeatureGenerator(FeatureGenerator):
+    """
+    Wrapper for multiple feature generators. Calling generate here applies all given feature generators independently and
+    returns the concatenation of their outputs
+    """
     def __init__(self, featureGenerators: Sequence[FeatureGenerator]):
+        """
+        :param featureGenerators:
+        """
         self.featureGenerators = featureGenerators
         categoricalFeatureNames = util.concatSequences([fg.getCategoricalFeatureNames() for fg in featureGenerators])
         normalisationRules = util.concatSequences([fg.getNormalisationRules() for fg in featureGenerators])
@@ -618,7 +625,7 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
     Example:
         >>> from sensai.featuregen import FeatureGeneratorTakeColumns, flattenedFeatureGenerator
         >>> import pandas as pd
-
+        >>>
         >>> df = pd.DataFrame({"foo": [[1, 2], [3, 4]], "bar": ["a", "b"]})
         >>> fgen = flattenedFeatureGenerator(FeatureGeneratorTakeColumns(), columnsToFlatten=["foo"])
         >>> fgen.generate(df)
