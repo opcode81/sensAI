@@ -132,7 +132,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
     """
     def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1, cuda=True,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
-            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid"):
+            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid", isClassification=False):
         """
         :param numInputTimeSlices: the number of input time slices
         :param inputDimPerTimeSlice: the dimension of the input data per time slice
@@ -151,10 +151,12 @@ class LSTNetwork(MCDropoutCapableNNModule):
         :param hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
         :param dropout: the dropout probability to use during training (dropouts are applied after every major step in the evaluation path)
         :param outputActivation: the output activation function
+        :param isClassification: whether the model is to serve as a classifier, in which case the output tensor dimension ordering is adapted
+            to suit loss functions such CrossEntropyLoss
         """
         if numConvolutions == 0 and hwWindow == 0:
             raise ValueError("No processing paths remain")
-        if numInputTimeSlices < numCnnTimeSlices or hwWindow < numInputTimeSlices:
+        if numInputTimeSlices < numCnnTimeSlices or (hwWindow != 0 and hwWindow < numInputTimeSlices):
             raise Exception("Inconsistent numbers of times slices provided")
 
         super().__init__()
@@ -172,6 +174,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
         self.skip = skip
         self.hw = hwWindow
         self.pDropout = dropout
+        self.isClassification = isClassification
 
         # configure CNN-RNN path
         if self.numConv > 0:
@@ -258,7 +261,11 @@ class LSTNetwork(MCDropoutCapableNNModule):
 
         if self.output:
             res = self.output(res)
-        return res.view(batch_size, self.numOutputTimeSlices, self.timeSeriesDimPerTimeSlice)
+
+        res = res.view(batch_size, self.numOutputTimeSlices, self.timeSeriesDimPerTimeSlice)
+        if self.isClassification:
+            res = res.permute(0, 2, 1)
+        return res
 
     @staticmethod
     def _plus(x, y):

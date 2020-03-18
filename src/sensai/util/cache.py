@@ -513,12 +513,14 @@ class CachedValueProviderMixin(ABC):
         pass
 
 
-def cached(fn: Callable[[], T], picklePath) -> T:
+def cached(fn: Callable[[], T], picklePath, functionName=None) -> T:
+    if functionName is None:
+        functionName = fn.__name__
     if os.path.exists(picklePath):
-        _log.info(f"Loading cached result of function '{fn.__name__}' from {picklePath}")
+        _log.info(f"Loading cached result of function '{functionName}' from {picklePath}")
         return loadPickle(picklePath)
     else:
-        _log.info(f"No cached result found in {picklePath}, calling function '{fn.__name__}' ...")
+        _log.info(f"No cached result found in {picklePath}, calling function '{functionName}' ...")
         result = fn()
         _log.info(f"Saving cached result in {picklePath}")
         dumpPickle(result, picklePath)
@@ -546,4 +548,4 @@ class PickleCached(object):
         if self.filename is None:
             self.filename = self.filenamePrefix + fn.__qualname__ + ".cache.pickle"
         picklePath = os.path.join(self.cacheBasePath,  self.filename)
-        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath)
+        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__)

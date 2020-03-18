@@ -314,8 +314,6 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
         return criterion
 
     def startValidationCollection(self, groundTruthShape):
-        if len(groundTruthShape) != 0:
-            raise ValueError("Outputs must be scalars, specifically integers indicating the true class indices, not tensors")
         self.totalLossCE = 0
         self.numValidationSamples = 0
 

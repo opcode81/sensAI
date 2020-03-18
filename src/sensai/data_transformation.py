@@ -64,6 +64,10 @@ class DataFrameTransformerChain:
             df = transformer.apply(df)
         return df
 
+    def fit(self, df: pd.DataFrame):
+        for transformer in self.dataFrameTransformers:
+            transformer.fit(df)
+
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
     def __init__(self, columnsMap: Dict[str, str]):
