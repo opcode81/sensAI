@@ -43,7 +43,7 @@ class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
         pass
 
 
-class DataFrameTransformerChain:
+class DataFrameTransformerChain(DataFrameTransformer):
     """Supports the application of a chain of data frame transformers"""
 
     def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
@@ -65,8 +65,7 @@ class DataFrameTransformerChain:
         return df
 
     def fit(self, df: pd.DataFrame):
-        for transformer in self.dataFrameTransformers:
-            transformer.fit(df)
+        self.apply(df, fit=True)
 
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
