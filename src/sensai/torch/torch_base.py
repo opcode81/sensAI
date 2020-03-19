@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 from ..util.string import objectRepr
@@ -184,15 +185,20 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs=(), modelKwArgs=None,
+            normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
-        :param modelClass:
-        :param modelArgs:
-        :param modelKwArgs:
-        :param normalisationMode:
-        :param nnOptimiserParams:
+        :param modelClass: the constructor with which to create the wrapped torch vector model
+        :param modelArgs: the constructor argument list to pass to modelClass
+        :param modelKwArgs: the dictionary of constructor keyword arguments to pass to modelClass
+        :param normalisationMode: the normalisation mode to apply to input data frames
+        :param nnOptimiserParams: the parameters to apply in NNOptimiser during training
         """
         super().__init__()
+        if modelKwArgs is None:
+            modelKwArgs = {}
+        if nnOptimiserParams is None:
+            nnOptimiserParams = {}
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
         self.normalisationMode = normalisationMode
@@ -202,11 +208,11 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[WrappedTorchVectorModule] = None
 
-    def createTorchVectorModel(self) -> WrappedTorchVectorModule:
+    def _createWrappedTorchVectorModule(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        self.model = self.createTorchVectorModel()
+        self.model = self._createWrappedTorchVectorModule()
         dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
         dataSetProvider = TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
         self.model.fit(dataSetProvider, **self.nnOptimiserParams)
@@ -220,15 +226,20 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
-    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs, modelKwArgs, normalisationMode, nnOptimiserParams):
+    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs=(), modelKwArgs=None,
+            normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
-        :param modelClass:
-        :param modelArgs:
-        :param modelKwArgs:
-        :param normalisationMode:
-        :param nnOptimiserParams:
+        :param modelClass: the constructor with which to create the wrapped torch vector model
+        :param modelArgs: the constructor argument list to pass to modelClass
+        :param modelKwArgs: the dictionary of constructor keyword arguments to pass to modelClass
+        :param normalisationMode: the normalisation mode to apply to input data frames
+        :param nnOptimiserParams: the parameters to apply in NNOptimiser during training
         """
         super().__init__()
+        if modelKwArgs is None:
+            modelKwArgs = {}
+        if nnOptimiserParams is None:
+            nnOptimiserParams = {}
         if "lossEvaluator" not in nnOptimiserParams:
             nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
         self.normalisationMode = normalisationMode
@@ -238,7 +249,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[WrappedTorchVectorModule] = None
 
-    def createTorchVectorModel(self) -> WrappedTorchVectorModule:
+    def _createWrappedTorchVectorModule(self) -> WrappedTorchVectorModule:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
@@ -254,10 +265,10 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         labels: pd.Series = outputs.iloc[:, 0]
         outputs = pd.DataFrame([self._labels.index(l) for l in labels], columns=outputs.columns, index=outputs.index)
 
-        self.model = self.createTorchVectorModel()
+        self.model = self._createWrappedTorchVectorModule()
 
-        dataSet = self._createDataSetProvider(inputs, outputs)
-        self.model.fit(dataSet, **self.nnOptimiserParams)
+        dataSetProvider = self._createDataSetProvider(inputs, outputs)
+        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))

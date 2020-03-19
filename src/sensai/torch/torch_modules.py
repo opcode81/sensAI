@@ -130,7 +130,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
     The model can produce one or more (potentially multi-dimensional) outputs, where each output typically typically corresponds
     to a time slice for which a prediction is made.
     """
-    def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1, cuda=True,
+    def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
             hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid", isClassification=False):
         """
@@ -164,7 +164,6 @@ class LSTNetwork(MCDropoutCapableNNModule):
         self.timeSeriesDimPerTimeSlice = outputDimPerTimeSlice
         self.totalOutputDim = self.timeSeriesDimPerTimeSlice * numOutputTimeSlices
         self.numOutputTimeSlices = numOutputTimeSlices
-        self.useCuda = cuda
         self.window = numInputTimeSlices
         self.hidRNN = hidRNN
         self.numConv = numConvolutions

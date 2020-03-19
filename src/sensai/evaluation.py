@@ -219,8 +219,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         else:
             classProbabilities = None
             predictions = model.predict(inputOutputData.inputs)
-        tt = model.getTargetTransformer()
-        groundTruth = tt.apply(inputOutputData.outputs)
+        groundTruth = inputOutputData.outputs
         return predictions, classProbabilities, groundTruth
 
 
