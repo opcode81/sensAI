@@ -14,10 +14,20 @@ def call(cmd):
     return p.stdout.read().decode("utf-8")
 
 
-def execute(cmd):
+def execute(cmd, exceptionOnError=True):
+    """
+    :param cmd: the command to execute
+    :param exceptionOnError: if True, raise on exception on error (return code not 0); if False return
+        whether the call was successful
+    :return: True if the call was successful, False otherwise (if exceptionOnError==False)
+    """
     ret = os.system(cmd)
-    if ret != 0:
-        raise Exception("Command failed: %s" % cmd)
+    success = ret == 0
+    if exceptionOnError:
+        if not success:
+            raise Exception("Command failed: %s" % cmd)
+    else:
+        return success
 
 
 def gitLog(path, arg):
@@ -54,7 +64,12 @@ class OtherRepo:
         with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_THIS_REPO), "r") as f:
             commitId = f.read().strip()
         return commitId
-    
+
+    def lastSyncIdLibRepo(self):
+        with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO), "r") as f:
+            commitId = f.read().strip()
+        return commitId
+
     def gitLogThisRepoSinceLastSync(self):
         lg = gitLog(self.pathToLibInThisRepo, '--name-only HEAD "^%s" .' % self.lastSyncIdThisRepo())
         lg = re.sub(r'commit [0-9a-z]{8,40}\n.*\n.*\n\s*\n.*\n\s*(\n.*\.syncCommitId\.(this|remote))+', r"", lg, flags=re.MULTILINE)  # remove commits with sync commit id update
@@ -84,7 +99,18 @@ class OtherRepo:
         """
         Pulls in changes from this repository into the lib repo
         """
-        # get log with relevant commits in this repo
+        # switch to branch in lib repo
+        os.chdir(libRepo.rootPath)
+        execute("git checkout %s" % self.branch)
+
+        # check if the branch contains the commit that is referenced as the remote commit
+        remoteCommitId = self.lastSyncIdLibRepo()
+        remoteCommitExists = execute("git rev-list HEAD..%s" % remoteCommitId, exceptionOnError=False)
+        if not remoteCommitExists:
+            if not self._userInputYesNo(f"\nWARNING: The referenced remote commit {remoteCommitId} does not exist in your {LIB_NAME} branch '{self.branch}'!\nSomeone else may have pulled/pushed in the meantime.\nIt is recommended that you do not continue. Continue?"):
+                return
+
+        # get log with relevant commits in this repo that are to be pulled
         lg = self.gitLogThisRepoSinceLastSync()
 
         print("Relevant commits:\n\n" + lg + "\n\n")
@@ -93,8 +119,7 @@ class OtherRepo:
 
         os.chdir(libRepo.rootPath)
 
-        # switch to branch in lib repo and remove library tree
-        execute("git checkout %s" % self.branch)
+        # remove library tree in lib repo
         shutil.rmtree(LIB_DIRECTORY)
 
         # copy tree from this repo to lib repo
