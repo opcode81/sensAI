@@ -164,7 +164,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
         self.timeSeriesDimPerTimeSlice = outputDimPerTimeSlice
         self.totalOutputDim = self.timeSeriesDimPerTimeSlice * numOutputTimeSlices
         self.numOutputTimeSlices = numOutputTimeSlices
-        self.cuda = cuda
+        self.useCuda = cuda
         self.window = numInputTimeSlices
         self.hidRNN = hidRNN
         self.numConv = numConvolutions

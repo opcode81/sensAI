@@ -248,6 +248,9 @@ class VectorModel(PredictorModel, ABC):
                 return it
         return None
 
+    def getTargetTransformer(self):
+        return self._targetTransformer
+
     def setName(self, name):
         self._name = name
 

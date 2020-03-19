@@ -155,7 +155,9 @@ class WrappedTorchModule(ABC):
 
     def fit(self, data: TorchDataSetProvider, **nnOptimiserParams):
         self._extractParamsFromData(data)
-        optimiser = NNOptimiser(cuda=self.cuda, **nnOptimiserParams)
+        if "cuda" not in nnOptimiserParams:
+            nnOptimiserParams["cuda"] = self.cuda
+        optimiser = NNOptimiser(**nnOptimiserParams)
         optimiser.fit(self, data)
 
 
@@ -261,7 +263,14 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
-        return self.model.applyScaled(inputs.values, asNumpy=True)
+        results = []
+        i = 0
+        batchSize = 64
+        while i < len(inputs):
+            inputSlice = inputs.iloc[i:i+batchSize]
+            results.append(self.model.applyScaled(inputSlice.values, asNumpy=True))
+            i += batchSize
+        return np.concatenate(results)
 
     def _predictClassProbabilities(self, inputs: pd.DataFrame):
         y = self._predictOutputsForInputDataFrame(inputs)

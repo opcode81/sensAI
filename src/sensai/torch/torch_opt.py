@@ -451,7 +451,7 @@ class NNOptimiser:
             max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
             use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
-        bestModelBytes = None
+        bestModelBytes = model.getModelBytes()
         self.lossEvaluator.startTraining(self.cuda)
         validationMetricName = self.lossEvaluator.getValidationMetricName()
         try:
