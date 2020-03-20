@@ -159,7 +159,7 @@ class OtherRepo:
             unpulledCommits = self.gitLogThisRepoSinceLastSync().strip()
             if unpulledCommits != "":
                 print(f"\n{unpulledCommits}\n\n")
-                if not self._userInputYesNo("WARNING: The above changes in repository {} have not yet been pulled.\nIt is recommended that you do not continue and pull these changes before pushing. Continue?"):
+                if not self._userInputYesNo(f"WARNING: The above changes in repository '{self.name}' have not yet been pulled.\nYou might want to pull them.\nIf you continue with the push, they will be lost. Continue?"):
                     return
 
             # get change log in lib repo since last sync
