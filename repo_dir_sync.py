@@ -59,6 +59,9 @@ class OtherRepo:
             raise ValueError(f"Repository directory '{self.pathToLibInThisRepo}' does not exist")
         self.name = name
         self.branch = branch
+
+    def isSyncEstablished(self):
+        return os.path.exists(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO))
     
     def lastSyncIdThisRepo(self):
         with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_THIS_REPO), "r") as f:
@@ -144,20 +147,29 @@ class OtherRepo:
         execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
         execute('git commit -m "Updated sync commit identifiers (pull)"')
 
-        print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
+        print(f"\n\nIf everything was successful, you should now push your changes to branch '{self.branch}'\nand get your branch merged into master (issuing a pull request where appropriate)")
         
     def push(self, libRepo: "LibRepo"):
         """
         Pushes changes from the lib repo to this repo
         """
-        # TODO when pushing, check if there would be changes to be pulled and warn if so
+        if self.isSyncEstablished():
 
-        # get change log since last sync
-        libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
+            # check if there are any commits that have not yet been pulled
+            unpulledCommits = self.gitLogThisRepoSinceLastSync().strip()
+            if unpulledCommits != "":
+                print(f"\n{unpulledCommits}\n\n")
+                if not self._userInputYesNo(f"WARNING: The above changes in repository '{self.name}' have not yet been pulled.\nYou might want to pull them.\nIf you continue with the push, they will be lost. Continue?"):
+                    return
 
-        print("Relevant commits:\n\n" + libLogSinceLastSync + "\n\n")
-        if not self._userInputYesNo("The above changes will be pushed. Continue?"):
-            return
+            # get change log in lib repo since last sync
+            libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
+
+            print("Relevant commits:\n\n" + libLogSinceLastSync + "\n\n")
+            if not self._userInputYesNo("The above changes will be pushed. Continue?"):
+                return
+        else:
+            libLogSinceLastSync = ""
 
         os.chdir(libRepo.rootPath)
 
