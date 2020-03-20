@@ -144,10 +144,10 @@ class ClassificationEvalStats(EvalStats):
             d["GeoMeanTrueClassProb"] = self.getGeoMeanTrueClassProbability()
         return d
 
-    def plotConfusionMatrix(self, normalize=True):
+    def plotConfusionMatrix(self, normalize=True, titleAdd: str = None):
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         confusionMatrix = self.getConfusionMatrix()
-        return confusionMatrix.plot(normalize=normalize)
+        return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
 
 
 class RegressionEvalStats(EvalStats):
@@ -234,7 +234,7 @@ class RegressionEvalStats(EvalStats):
         plt.ylabel("probability density")
         return fig
 
-    def plotScatterGroundTruthPredictions(self, figure=True, **kwargs):
+    def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs):
         """
         :param figure: whether to plot in a separate figure
         :param kwargs: will be passed to plt.scatter()
@@ -243,6 +243,8 @@ class RegressionEvalStats(EvalStats):
         """
         fig = None
         title = "Scatter Plot of Ground Truth vs. Predicted Values"
+        if titleAdd is not None:
+            title += "\n" + titleAdd
         if figure:
             fig = plt.figure(title)
         y_range = [min(self.y_true), max(self.y_true)]
@@ -371,6 +373,7 @@ class ConfusionMatrix:
         self.labels = sklearn.utils.multiclass.unique_labels(y_true, y_predicted)
         self.confusionMatrix = confusion_matrix(y_true, y_predicted, labels=self.labels)
 
-    def plot(self, normalize=True):
+    def plot(self, normalize=True, titleAdd: str = None):
         title = 'Normalized Confusion Matrix' if normalize else 'Confusion Matrix (Counts)'
-        return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize)
+        return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize,
+            titleAdd=titleAdd)
