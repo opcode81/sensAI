@@ -129,6 +129,12 @@ class LSTNetwork(MCDropoutCapableNNModule):
     Many parts of the model are optional and can be completely disabled.
     The model can produce one or more (potentially multi-dimensional) outputs, where each output typically typically corresponds
     to a time slice for which a prediction is made.
+
+    The model expects as input a tensor of size (batchSize, numInputTimeSlices, inputDimPerTimeSlice).
+    As output, the model will produce a tensor of size (batchSize, numOutputTimeSlices, outputDimPerTimeSlice)
+    if isClassification==False (default) and a tensor of size (batchSize, outputDimPerTimeSlice=numClasses, numOutputTimeSlices)
+    if isClassification==True; the latter shape matches what is required by the multi-dimensional case of loss function
+    CrossEntropyLoss, for example, and therefore is suitable for classification use cases.
     """
     def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
@@ -137,7 +143,8 @@ class LSTNetwork(MCDropoutCapableNNModule):
         :param numInputTimeSlices: the number of input time slices
         :param inputDimPerTimeSlice: the dimension of the input data per time slice
         :param numOutputTimeSlices: the number of time slices for which to produce outputs
-        :param outputDimPerTimeSlice: the number of dimensions per output time slice
+        :param outputDimPerTimeSlice: the number of dimensions per output time slice. While this is the number of
+            target variables per time slice for regression problems, this must be the number of classes for classification problems.
         :param maxHorizon: the number of time steps predicted by the model (i.e. the maximum horizon)
         :param numCnnTimeSlices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
             convolutions, the other dimension being inputDimPerTimeSlice), a.k.a. "Ck"
@@ -145,7 +152,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
             if it is 0, then the entire complex processing path is not applied.
         :param hidRNN: the number of hidden output dimensions for the RNN stage
         :param skip: the number of time slices to skip for the skip-RNN. If it is 0, then the skip-RNN is not used.
-        :param hidSkip: the number of output dimensions of each
+        :param hidSkip: the number of output dimensions of each of the skip parallel RNNs
         :param hwWindow: the number of time slices from the end of the input time series to consider as input for the highway component.
             If it is 0, the highway component is not used.
         :param hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output

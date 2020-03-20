@@ -89,7 +89,7 @@ class VectorModelEvaluator(ABC):
         else:
             return VectorClassificationModelEvaluator(data, **kwargs)
 
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42):
+    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, shuffle=True):
         """
         Constructs an evaluator with test and training data.
         Exactly one of the parameters {testFraction, testData} must be given
@@ -98,6 +98,7 @@ class VectorModelEvaluator(ABC):
         :param testFraction: the fraction of the data to use for testing/evaluation
         :param testData: the data to use for testing/evaluation
         :param randomSeed: the random seed to use for splits of the data
+        :param shuffle: whether to randomly (based on randomSeed) shuffle the dataset when splitting it
         """
         self.testFraction = testFraction
 
@@ -110,10 +111,13 @@ class VectorModelEvaluator(ABC):
             if not 0 <= self.testFraction <= 1:
                 raise Exception(f"invalid testFraction: {testFraction}")
             numDataPoints = len(data)
-            permutedIndices = np.random.RandomState(randomSeed).permutation(numDataPoints)
             splitIndex = int(numDataPoints * self.testFraction)
-            trainingIndices = permutedIndices[splitIndex:]
-            testIndices = permutedIndices[:splitIndex]
+            if shuffle:
+                indices = np.random.RandomState(randomSeed).permutation(numDataPoints)
+            else:
+                indices = range(numDataPoints)
+            trainingIndices = indices[splitIndex:]
+            testIndices = indices[:splitIndex]
             self.trainingData = data.filterIndices(list(trainingIndices))
             self.testData = data.filterIndices(list(testIndices))
         else:
@@ -139,10 +143,8 @@ class VectorModelEvaluator(ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
-        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
-        if computeProbabilities:
-            raise NotImplementedError("Computing probabilities is currently not implemented for regression models")
+    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, shuffle=True):
+        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
 
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
@@ -182,9 +184,9 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None,
-                 testData: InputOutputData = None, randomSeed=42, computeProbabilities=False):
-        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed)
+    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None,
+            randomSeed=42, computeProbabilities=False, shuffle=True):
+        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities
 
     def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
