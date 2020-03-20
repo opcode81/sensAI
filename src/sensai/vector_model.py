@@ -66,6 +66,10 @@ class PredictorModel(ABC):
     def isRegressionModel(self) -> bool:
         pass
 
+    @abstractmethod
+    def getName(self) -> str:
+        pass
+
 
 class VectorModel(PredictorModel, ABC):
     """

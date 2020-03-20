@@ -29,14 +29,16 @@ TCrossValData = TypeVar("TCrossValData", "VectorClassificationModelCrossValidati
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame):
+    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: PredictorModel):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
         :param inputData: the input data that was used to produce the results
+        :param model: the model that was used to produce predictions
         """
         self.inputData = inputData
         self.evalStatsByVarName = statsDict
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
+        self.modelName = model.getName()
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -81,7 +83,7 @@ class VectorModelEvaluator(ABC):
         return VectorModelEvaluator.forModelType(model.isRegressionModel(), data, **kwargs)
 
     @staticmethod
-    def forModelType(isRegression: bool, data: InputOutputData, **kwargs) -> "VectorModelEvaluator":
+    def forModelType(isRegression: bool, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
         if isRegression:
             return VectorRegressionModelEvaluator(data, **kwargs)
         else:
@@ -151,7 +153,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
             evalStatsByVarName[predictedVarName] = evalStats
-        return VectorRegressionModelEvaluationData(evalStatsByVarName, inputOutputData.inputs)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, inputOutputData.inputs, model)
 
     def computeTestDataOutputs(self, model: PredictorModel) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -192,7 +194,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, inputOutputData)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
         predictedVarName = model.getPredictedVariableNames()[0]
-        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs, model)
 
     def computeTestDataOutputs(self, model: VectorClassificationModel) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
@@ -223,12 +225,16 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         return predictions, classProbabilities, groundTruth
 
 
-class VectorModelCrossValidationData(ABC, Generic[TEvalData, TEvalStats, TEvalStatsCollection]):
-    def __init__(self, trainedModels, evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
+class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):
+    def __init__(self, trainedModels: List[TModel], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
         self.predictedVarNames = predictedVarNames
         self.trainedModels = trainedModels
         self.evalDataList = evalDataList
         self.testIndicesList = testIndicesList
+
+    @property
+    def modelName(self):
+        return self.evalDataList[0].modelName
 
     @abstractmethod
     def _createEvalStatsCollection(self, l: List[TEvalStats]) -> TEvalStatsCollection:
@@ -256,7 +262,7 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
         return VectorModelCrossValidator.forModelType(model.isRegressionModel(), data, folds=folds, **kwargs)
 
     @staticmethod
-    def forModelType(isRegression: bool, data: InputOutputData, folds=5, **kwargs) -> "VectorModelCrossValidator":
+    def forModelType(isRegression: bool, data: InputOutputData, folds=5, **kwargs) -> Union["VectorRegressionModelCrossValidator", "VectorClassificationModelCrossValidator"]:
         if isRegression:
             return VectorRegressionModelCrossValidator(data, folds=folds, **kwargs)
         else:
@@ -307,7 +313,7 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
 
-class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
+class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[RegressionEvalStats]) -> RegressionEvalStatsCollection:
         return RegressionEvalStatsCollection(l)
 
@@ -320,7 +326,7 @@ class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegres
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
 
 
-class VectorClassificationModelCrossValidationData(VectorModelCrossValidationData[VectorClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
+class VectorClassificationModelCrossValidationData(VectorModelCrossValidationData[VectorClassificationModel, VectorClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[ClassificationEvalStats]) -> ClassificationEvalStatsCollection:
         return ClassificationEvalStatsCollection(l)
 
@@ -497,7 +503,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
             resultWriter.writeTextFile("model-comparison-results", strResults)
         return resultsDF
 
-    def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None):
+    def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None, subtitle: str = None):
         """
         Creates default plots that visualise the results in the given evaluation data
 
@@ -505,13 +511,14 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         :param predictedVarName: the predicted variable for which to create plots; may be None if there is only one
         :param showPlots: whether to show plots
         :param resultWriter: if not None, plots will be written using this writer
+        :param subtitle: the subtitle to use in plot titles (if any)
         """
         if not showPlots and resultWriter is None:
             return
         resultCollector = self.ResultCollector(showPlots=showPlots, resultWriter=resultWriter)
-        self._createPlots(data, resultCollector)
+        self._createPlots(data, resultCollector, subtitle=data.modelName)
 
-    def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector):
+    def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector, subtitle=None):
 
         def createPlots(predVarName, rc):
             if isinstance(data, VectorModelCrossValidationData):
@@ -520,7 +527,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
                 evalStats = data.getEvalStats(predictedVarName=predVarName)
             else:
                 raise ValueError(f"Unexpected argument: data={data}")
-            return self._createEvalStatsPlots(evalStats, rc)
+            return self._createEvalStatsPlots(evalStats, rc, subtitle=subtitle)
 
         predictedVarNames = data.predictedVarNames
         if len(predictedVarNames) == 1:
@@ -530,24 +537,25 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
                 createPlots(predictedVarName, resultCollector.child(predictedVarName+"-"))
 
     @abstractmethod
-    def _createEvalStatsPlots(self, evalStats: TEvalStats, resultCollector: ResultCollector) -> List[Tuple[str, matplotlib.figure.Figure]]:
+    def _createEvalStatsPlots(self, evalStats: TEvalStats, resultCollector: ResultCollector, subtitle=None):
         """
         :param evalStats: the evaluation results for which to create plots
-        :return: a list of pairs (name, fig) where name is name (suitable as a part of a filename) and fig is a figure
+        :param resultCollector: the collector to which all plots are to be passed
+        :param subtitle: the subtitle to use for generated plots (if any)
         """
         pass
 
 
 class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats, resultCollector: EvaluationUtil.ResultCollector):
-        resultCollector.addFigure("error-dist", evalStats.plotErrorDistribution())
-        resultCollector.addFigure("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions())
-        resultCollector.addFigure("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions())
+    def _createEvalStatsPlots(self, evalStats: RegressionEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
+        resultCollector.addFigure("error-dist", evalStats.plotErrorDistribution(titleAdd=subtitle))
+        resultCollector.addFigure("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions(titleAdd=subtitle))
+        resultCollector.addFigure("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions(titleAdd=subtitle))
 
 
 class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
-    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector):
-        resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix())
+    def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
+        resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix(titleAdd=subtitle))
 
 
 class MultiDataEvaluationUtil:

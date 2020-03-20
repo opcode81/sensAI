@@ -5,7 +5,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 
-def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9)) -> matplotlib.figure.Figure:
+def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
+        titleAdd: str = None) -> matplotlib.figure.Figure:
     """
     :param matrix: matrix whose data to plot, where matrix[i, j] will be rendered at x=i, y=j
     :param title: the plot's title
@@ -14,9 +15,13 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
     :param xlabel: the label for the x-axis
     :param ylabel: the label for the y-axis
     :param normalize: whether to normalise the matrix before plotting it (dividing each entry by the sum of all entries)
+    :param titleAdd: an optional second line to add to the title
     :return: the figure object
     """
     matrix = np.transpose(matrix)
+
+    if titleAdd is not None:
+        title += "\n" + titleAdd
 
     if normalize:
         matrix = matrix.astype('float') / matrix.sum()
