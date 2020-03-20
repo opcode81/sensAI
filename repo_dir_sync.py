@@ -150,6 +150,8 @@ class OtherRepo:
         """
         Pushes changes from the lib repo to this repo
         """
+        # TODO when pushing, check if there would be changes to be pulled and warn if so
+
         # get change log since last sync
         libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
 
