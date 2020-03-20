@@ -71,7 +71,15 @@ To initialise the synchronisation, proceed as follows:
 1. Create the branch `myprj-branch` in the sensAI repository, i.e. in `sensAI/` run this command:
    `git branch myprj-branch master`
 2. Create the directory `myprj/src/sensai`.
-3. Perform the initial *push*, i.e. in `sensAI/` run this command:
+3. Make sure you have a `.gitignore` file in `myprj/` with at least the following entries:
+
+       *.pyc
+       __pycache__
+       *.bak
+       *.orig
+  
+   Otherwise you may end up with unwanted tracked files after a synchronisation.
+4. Perform the initial *push*, i.e. in `sensAI/` run this command:
    `python sync.py myprj push`
 
 ##### Things to Keep in Mind
