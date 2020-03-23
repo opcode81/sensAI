@@ -154,6 +154,12 @@ class OtherRepo:
         """
         Pushes changes from the lib repo to this repo
         """
+        os.chdir(libRepo.rootPath)
+
+        # switch to the source repo branch and merge master into it (to make sure it's up to date)
+        execute(f"git checkout {self.branch}")
+        execute("git merge master")
+
         if self.isSyncEstablished():
 
             # check if there are any commits that have not yet been pulled
@@ -171,12 +177,6 @@ class OtherRepo:
                 return
         else:
             libLogSinceLastSync = ""
-
-        os.chdir(libRepo.rootPath)
-
-        # switch to the source repo branch and merge master into it (to make sure it's up to date)
-        execute(f"git checkout {self.branch}")
-        execute("git merge master")
 
         # remove the target repo tree and update it with the tree from the source repo
         shutil.rmtree(self.pathToLibInThisRepo)
