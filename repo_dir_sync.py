@@ -174,11 +174,6 @@ class OtherRepo:
 
         os.chdir(libRepo.rootPath)
 
-        # check if this repo's branch in the source repo was merged into master
-        unmergedBranches = call("git branch --no-merged master")
-        if self.branch in unmergedBranches:
-            raise Exception(f"Branch {self.branch} has not been merged into master")
-
         # switch to the source repo branch and merge master into it (to make sure it's up to date)
         execute(f"git checkout {self.branch}")
         execute("git merge master")
