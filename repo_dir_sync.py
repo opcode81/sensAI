@@ -52,6 +52,7 @@ LIB_NAME = "sensai"
 class OtherRepo:
     SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId.remote"
     SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
+    SYNC_COMMIT_MESSAGE = f"Updated {LIB_NAME} sync commit identifiers"
     
     def __init__(self, name, branch, pathToBasicModels):
         self.pathToLibInThisRepo = os.path.abspath(pathToBasicModels)
@@ -145,7 +146,7 @@ class OtherRepo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(newSyncCommitIdThisRepo)
         execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
-        execute('git commit -m "Updated sync commit identifiers (pull)"')
+        execute(f'git commit -m "{self.SYNC_COMMIT_MESSAGE} (pull)"')
 
         print(f"\n\nIf everything was successful, you should now push your changes to branch '{self.branch}'\nand get your branch merged into master (issuing a pull request where appropriate)")
         
@@ -203,7 +204,7 @@ class OtherRepo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(commitId)
         execute("git add %s" % self.SYNC_COMMIT_ID_FILE_THIS_REPO)
-        execute('git commit -m "Updated sync commit identifier (push)"')
+        execute(f'git commit -m "{self.SYNC_COMMIT_MESSAGE} (push)"')
 
         os.chdir(libRepo.rootPath)
         
