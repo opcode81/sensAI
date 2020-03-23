@@ -46,7 +46,7 @@ def gitCommit(msg):
 
 
 LIB_DIRECTORY = os.path.join("src", "sensai")
-LIB_NAME = "sensai"
+LIB_NAME = "sensAI"
 
 
 class OtherRepo:
