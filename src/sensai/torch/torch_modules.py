@@ -69,7 +69,7 @@ class MCDropoutCapableNNModule(nn.Module, ABC):
         return mean, stddev
 
 
-class MultiLayerPerceptronModule(MCDropoutCapableNNModule):
+class MultiLayerPerceptron(MCDropoutCapableNNModule):
     def __init__(self, inputDim, outputDim, hiddenDims, hidActivationFn=torch.sigmoid, outputActivationFn=torch.sigmoid,
             pDropout=None):
         super().__init__()

@@ -18,29 +18,35 @@ from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorCl
 log = logging.getLogger(__name__)
 
 
-class WrappedTorchModule(ABC):
+class TorchModel(ABC):
+    """
+    sensAI abstraction for torch models, which supports one-line training, allows for convenient model application,
+    has basic mechanisms for data scaling, and soundly handles persistence (via pickle).
+    An instance wraps a torch.nn.Module, which is constructed on demand during training via the factory method
+    createTorchModule.
+    """
     log = log.getChild(__qualname__)
 
     def __init__(self, cuda=True):
         self.cuda = cuda
-        self.model = None
+        self.module: torch.nn.Module = None
         self.outputScaler: Optional[TensorScaler] = None
         self.inputScaler: Optional[TensorScaler] = None
 
-    def setTorchModel(self, model):
-        self.model = model
+    def setTorchModule(self, module: torch.nn.Module):
+        self.module = module
 
-    def getModelBytes(self):
+    def getModuleBytes(self):
         bytesIO = io.BytesIO()
-        torch.save(self.model, bytesIO)
+        torch.save(self.module, bytesIO)
         return bytesIO.getvalue()
 
-    def setModelBytes(self, modelBytes):
+    def setModuleBytes(self, modelBytes):
         modelFile = io.BytesIO(modelBytes)
         self._loadModel(modelFile)
 
-    def getTorchModel(self):
-        return self.model
+    def getTorchModule(self):
+        return self.module
 
     def _setCudaEnabled(self, isCudaEnabled):
         self.cuda = isCudaEnabled
@@ -50,26 +56,26 @@ class WrappedTorchModule(ABC):
 
     def _loadModel(self, modelFile):
         try:
-            self.model = torch.load(modelFile)
+            self.module = torch.load(modelFile)
         except:
             if self._isCudaEnabled():
                 self.log.warning("Loading of CUDA model failed, trying without CUDA...")
                 if type(modelFile) != str:
                     modelFile.seek(0)
-                self.model = torch.load(modelFile, map_location='cpu')
+                self.module = torch.load(modelFile, map_location='cpu')
                 self._setCudaEnabled(False)
                 self.log.info("Model successfully loaded to CPU")
             else:
                 raise
 
     @abstractmethod
-    def createTorchModule(self):
+    def createTorchModule(self) -> torch.nn.Module:
         pass
 
     def __getstate__(self):
         state = dict(self.__dict__)
         del state["model"]
-        state["modelBytes"] = self.getModelBytes()
+        state["modelBytes"] = self.getModuleBytes()
         return state
 
     def __setstate__(self, d):
@@ -79,7 +85,7 @@ class WrappedTorchModule(ABC):
             del d["modelBytes"]
         self.__dict__ = d
         if modelBytes is not None:
-            self.setModelBytes(modelBytes)
+            self.setModuleBytes(modelBytes)
 
     def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
             scaleInput=False) -> Union[torch.Tensor, np.ndarray, Tuple]:
@@ -108,7 +114,7 @@ class WrappedTorchModule(ABC):
                 z = z.numpy()
             return z
 
-        model = self.getTorchModel()
+        model = self.getTorchModule()
         model.eval()
 
         if isinstance(X, TorchDataSet):
@@ -162,9 +168,9 @@ class WrappedTorchModule(ABC):
         optimiser.fit(self, data)
 
 
-class WrappedTorchVectorModule(WrappedTorchModule, ABC):
+class VectorTorchModel(TorchModel, ABC):
     """
-    Base class for wrapped torch modules that map vectors to vectors
+    Adds
     """
     def __init__(self, cuda: bool = True):
         super().__init__(cuda=cuda)
@@ -177,15 +183,15 @@ class WrappedTorchVectorModule(WrappedTorchModule, ABC):
         self.outputDim = data.getModelOutputDim()
 
     def createTorchModule(self):
-        return self.createTorchVectorModule(self.inputDim, self.outputDim)
+        return self.createTorchModuleForDims(self.inputDim, self.outputDim)
 
     @abstractmethod
-    def createTorchVectorModule(self, inputDim, outputDim):
+    def createTorchModuleForDims(self, inputDim, outputDim) -> torch.nn.Module:
         pass
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs=(), modelKwArgs=None,
+    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
             normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
@@ -206,9 +212,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model: Optional[WrappedTorchVectorModule] = None
+        self.model: Optional[VectorTorchModel] = None
 
-    def _createWrappedTorchVectorModule(self) -> WrappedTorchVectorModule:
+    def _createWrappedTorchVectorModule(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -226,7 +232,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
-    def __init__(self, modelClass: Callable[..., WrappedTorchVectorModule], modelArgs=(), modelKwArgs=None,
+    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
             normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
@@ -247,9 +253,9 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model: Optional[WrappedTorchVectorModule] = None
+        self.model: Optional[VectorTorchModel] = None
 
-    def _createWrappedTorchVectorModule(self) -> WrappedTorchVectorModule:
+    def _createWrappedTorchVectorModule(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:

@@ -15,7 +15,7 @@ from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider
 if TYPE_CHECKING:
-    from .torch_base import WrappedTorchModule
+    from .torch_base import TorchModel
 
 log = logging.getLogger(__name__)
 
@@ -387,7 +387,7 @@ class NNOptimiser:
             f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
             f"optimiserArgs={self.optimiserArgs}]"
 
-    def fit(self, model: "WrappedTorchModule", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
+    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
         self.log.info(f"Learning parameters of {model} via {self}")
 
         def toDataSetProvider(d) -> TorchDataSetProvider:
@@ -435,7 +435,7 @@ class NNOptimiser:
         torchModel = model.createTorchModule()
         if self.cuda:
             torchModel.cuda()
-        model.setTorchModel(torchModel)
+        model.setTorchModule(torchModel)
 
         nParams = sum([p.nelement() for p in torchModel.parameters()])
         trainingLog('Number of parameters: %d' % nParams)
@@ -451,7 +451,7 @@ class NNOptimiser:
             max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
             use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
-        bestModelBytes = model.getModelBytes()
+        bestModelBytes = model.getModuleBytes()
         self.lossEvaluator.startTraining(self.cuda)
         validationMetricName = self.lossEvaluator.getValidationMetricName()
         try:
@@ -492,7 +492,7 @@ class NNOptimiser:
                         ", ".join(["%s %5.4f" % e for e in metrics.items()]),
                         bestStr))
                 if isNewBest:
-                    bestModelBytes = model.getModelBytes()
+                    bestModelBytes = model.getModuleBytes()
             trainingLog("Training complete")
         except KeyboardInterrupt:
             trainingLog('Exiting from training early')
@@ -500,7 +500,7 @@ class NNOptimiser:
         self.bestEpoch = best_epoch
 
         # reload best model
-        model.setModelBytes(bestModelBytes)
+        model.setModuleBytes(bestModelBytes)
 
     def getTrainingLog(self):
         return self.trainingLog
