@@ -513,18 +513,37 @@ class CachedValueProviderMixin(ABC):
         pass
 
 
-def cached(fn: Callable[[], T], picklePath, functionName=None) -> T:
+def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None) -> T:
+    """
+    :param fn: the function whose result is to be cached
+    :param picklePath: the path in which to store the cached result
+    :param functionName: the name of the function fn (for the case where its __name__ attribute is not
+        informative)
+    :param validityCheckFn: an optional function to call in order to check whether a cached result is still valid;
+        the function shall return True if the res is still valid and false otherwise. If a cached result is invalid,
+        the function fn is called to compute the result and the cached result is updated.
+    :return: the res (either obtained from the cache or the function)
+    """
     if functionName is None:
         functionName = fn.__name__
+
+    def callFnAndCacheResult():
+        res = fn()
+        _log.info(f"Saving cached res in {picklePath}")
+        dumpPickle(res, picklePath)
+        return res
+
     if os.path.exists(picklePath):
-        _log.info(f"Loading cached result of function '{functionName}' from {picklePath}")
-        return loadPickle(picklePath)
-    else:
-        _log.info(f"No cached result found in {picklePath}, calling function '{functionName}' ...")
-        result = fn()
-        _log.info(f"Saving cached result in {picklePath}")
-        dumpPickle(result, picklePath)
+        _log.info(f"Loading cached res of function '{functionName}' from {picklePath}")
+        result = loadPickle(picklePath)
+        if validityCheckFn is not None:
+            if not validityCheckFn(result):
+                _log.info(f"Cached result is no longer valid, recomputing ...")
+                result = callFnAndCacheResult()
         return result
+    else:
+        _log.info(f"No cached res found in {picklePath}, calling function '{functionName}' ...")
+        return callFnAndCacheResult()
 
 
 class PickleCached(object):

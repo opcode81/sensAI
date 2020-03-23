@@ -142,10 +142,9 @@ class LSTNetwork(MCDropoutCapableNNModule):
         """
         :param numInputTimeSlices: the number of input time slices
         :param inputDimPerTimeSlice: the dimension of the input data per time slice
-        :param numOutputTimeSlices: the number of time slices for which to produce outputs
+        :param numOutputTimeSlices: the number of time slices predicted by the model
         :param outputDimPerTimeSlice: the number of dimensions per output time slice. While this is the number of
             target variables per time slice for regression problems, this must be the number of classes for classification problems.
-        :param numOutputTimeSlices: the number of time slices predicted by the model
         :param numCnnTimeSlices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
             convolutions, the other dimension being inputDimPerTimeSlice), a.k.a. "Ck"
         :param numConvolutions: the number of separate convolutions to apply, i.e. the number of independent convolution matrices, a.k.a "hidC";
