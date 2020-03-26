@@ -74,7 +74,8 @@ class TorchModel(ABC):
 
     def __getstate__(self):
         state = dict(self.__dict__)
-        del state["model"]
+        if "model" in state:
+            del state["model"]
         state["modelBytes"] = self.getModuleBytes()
         return state
 
