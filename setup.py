@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 test_requirements = ['pytest']
 docs_requirements = ['Sphinx==2.4.2', 'sphinxcontrib-websupport==1.2.0', 'sphinx_rtd_theme']
 tf_requirements = ['tensorflow==1.15.0']
-torch_requirements = ['torch==1.4.0']
+torch_requirements = ['torch==1.4.0', 'torchtext==0.5.0']
 lightgbm_requirements = ['lightgbm==2.3.0']
 setup(
     name='sensai',
