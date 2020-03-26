@@ -5,12 +5,12 @@ log = logging.getLogger(os.path.basename(__file__))
 
 
 def moduleTemplate(modulePath: str):
-    moduleName = os.path.basename(modulePath).replace("_", r'\_')
-    moduleName = moduleName[:-3]
+    title = os.path.basename(modulePath).replace("_", r'\_')
+    title = title[:-3] # removing trailing .py
     modulePath = modulePath[:-3]
     template = \
-        f"""{moduleName}
-{"="*len(moduleName)}
+        f"""{title}
+{"="*len(title)}
 
 .. automodule:: {modulePath.replace(os.path.sep, ".")}
    :members:
@@ -20,10 +20,11 @@ def moduleTemplate(modulePath: str):
 
 
 def packageTemplate(packagePath: str):
-    packageName = os.path.basename(packagePath).replace("_", r'\_')
+    packageName = os.path.basename(packagePath)
+    title = packageName.replace("_", r'\_')
     template = \
-        f"""{packageName}
-{"="*len(packageName)}
+        f"""{title}
+{"="*len(title)}
 
 .. automodule:: {packagePath.replace(os.path.sep, ".")}
    :members:
