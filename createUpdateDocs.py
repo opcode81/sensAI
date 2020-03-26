@@ -15,11 +15,6 @@ def moduleTemplate(modulePath: str):
 .. automodule:: {modulePath.replace(os.path.sep, ".")}
    :members:
    :undoc-members:
-
-.. toctree::
-   :glob:
-
-   *
 """
     return template
 
@@ -42,9 +37,10 @@ def packageTemplate(packagePath: str):
     return template
 
 
-def makeDocu(basedir=os.path.join("src/sensai"), overwrite=False):
+def makeDocu(basedir=os.path.join("src", "sensai"), overwrite=False):
     """
-    Creates/updates documentary if form of rst files for modules and packages. It should be executed from the top
+    Creates/updates documentary if form of rst files for modules and packages.
+    It should be executed from the project's top-level directory
 
     :param basedir: path to library basedir, typically "src/<library_name>"
     :param overwrite: if True, will overwrite existing rst files

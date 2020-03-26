@@ -5,7 +5,3 @@ torchtext
    :members:
    :undoc-members:
 
-.. toctree::
-   :glob:
-
-   *

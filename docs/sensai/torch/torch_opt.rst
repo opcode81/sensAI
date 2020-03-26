@@ -5,7 +5,3 @@ torch\_opt
    :members:
    :undoc-members:
 
-.. toctree::
-   :glob:
-
-   *
