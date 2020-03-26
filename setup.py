@@ -10,7 +10,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     include_package_data=True,
-    version='0.0.3-alpha',
+    version='0.0.3-alpha2',
     description='Library for sensible AI',
     install_requires=open("requirements.txt").readlines(),
     dependency_links=["https://download.pytorch.org/whl/torch_stable.html"],
