@@ -634,9 +634,9 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         1      3      4   b
     """
 
-    flatteningGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(columnsToFlatten), FeatureGeneratorFlattenColumns(),
-                                                  normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate)
-    exceptColumns = columnsToFlatten if columnsToFlatten is not None else []
-    passthroughColumnsGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=exceptColumns))
+    generators = [ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(columnsToFlatten), FeatureGeneratorFlattenColumns(),
+                        normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate)]
+    if columnsToFlatten is not None:
+        generators.append(ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)))
 
-    return MultiFeatureGenerator([flatteningGenerator, passthroughColumnsGenerator])
+    return MultiFeatureGenerator(generators)
