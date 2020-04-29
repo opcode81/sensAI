@@ -109,6 +109,9 @@ class ParameterCombinationEquivalenceClassValueCache(ABC):
 
 
 class ParametersMetricsCollection:
+    """
+    Utility class for holding and persisting evaluation results
+    """
     def __init__(self, csvPath=None, sortColumnName=None):
         """
         :param csvPath: path to save the data frame to upon every update
@@ -121,6 +124,13 @@ class ParametersMetricsCollection:
         self._currentRow = 0
 
     def addValues(self, values: Dict[str, Any]):
+        """
+        Adds the provided values as a new row to the collection.
+        If csvPath was provided in the constructor, saves the updated collection to that file.
+
+        :param values: Dict holding the evaluation results and parameters
+        :return:
+        """
         if self.df is None:
             self.cols = list(values.keys())
 
@@ -157,6 +167,10 @@ class ParametersMetricsCollection:
 
 
 class GridSearch(TrackedExperimentDataProvider):
+    """
+    Instances of this class can be used for evaluating clustering models with different user-provided parametrizations
+    over the same data and persisting the results
+    """
     _log = _log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
@@ -214,6 +228,9 @@ class GridSearch(TrackedExperimentDataProvider):
 
     def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator], sortColumnName=None) -> pd.DataFrame:
         """
+        Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
+        to that file directly after being computed
+
         :param evaluatorOrValidator: the evaluator or cross-validator with which to evaluate models
         :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
             Note that the column names that are generated depend on the evaluator/validator being applied.
