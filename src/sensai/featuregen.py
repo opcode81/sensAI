@@ -653,10 +653,8 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
     :param normalisationRuleTemplate: This parameter can be supplied instead of normalisationRules for the case where
         there shall be a single rule that applies to all flattened output columns
     :return: FeatureGenerator instance that will generate flattened versions of the specified columns
-    """
-
-    # TODO reinstate semantics with parallel path where columns not to be flattened are taken over via a new concept ParallelFeatureGenerator that can be used within a chain
-    """
+    
+    
     Example:
         >>> from sensai.featuregen import FeatureGeneratorTakeColumns, flattenedFeatureGenerator
         >>> import pandas as pd
@@ -668,15 +666,13 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         0      1      2   a
         1      3      4   b
     """
+    # TODO should introduce new concept ParallelFeatureGenerator that can be used within a chain in order to avoid duplicate application of fgen
     flatteningGenerator = ChainedFeatureGenerator(
-        fgen,
-        FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate))
+            fgen,
+            FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate))
     if columnsToFlatten is None:
         return flatteningGenerator
     else:
-        raise RuntimeError("Parallel path for non-flattened part not implemented")
-        # The code below results in fgen being called twice; should be done as described above
+        return MultiFeatureGenerator([flatteningGenerator,
+            ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten))])
 
-        #exceptColumns = columnsToFlatten if columnsToFlatten is not None else []
-        #passthroughColumnsGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=exceptColumns))
-        #return MultiFeatureGenerator([flatteningGenerator, passthroughColumnsGenerator])
