@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from dcs.sensai.util.string import objectRepr
+from ..util.string import objectRepr
 
 
 class MCDropoutCapableNNModule(nn.Module, ABC):

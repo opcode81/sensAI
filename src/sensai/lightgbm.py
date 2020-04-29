@@ -4,7 +4,7 @@ import lightgbm
 import pandas as pd
 import re
 
-from dcs.sensai.util.string import orRegexGroup
+from .util.string import orRegexGroup
 from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
 _log = logging.getLogger(__name__)
