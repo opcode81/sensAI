@@ -1,8 +1,8 @@
 from typing import Sequence, Union, Optional
 import logging
-import lightgbm
 import pandas as pd
 import re
+import catboost
 
 from dcs.sensai.util.string import orRegexGroup
 from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
@@ -10,7 +10,8 @@ from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionM
 _log = logging.getLogger(__name__)
 
 
-class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class CatBoostVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+
     _log = _log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None, random_state=42, num_leaves=31, **modelArgs):
@@ -20,10 +21,10 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
             need not be specified (should be inferred automatically).
             In general, passing categorical features is preferable to using one-hot encoding, for example.
         :param random_state: the random seed to use
-        :param num_leaves: the maximum number of leaves in one tree (original lightgbm default is 31)
-        :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/Parameters.html
+        :param num_leaves: the maximum number of leaves in one tree (original catboost default is 31)
+        :param modelArgs: see https://catboost.ai/docs/concepts/python-reference_parameters-list.html#python-reference_parameters-list
         """
-        super().__init__(lightgbm.sklearn.LGBMRegressor, random_state=random_state, num_leaves=num_leaves, **modelArgs)
+        super().__init__(catboost.CatBoostRegressor, random_seed=random_state, num_leaves=num_leaves, **modelArgs)
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames
@@ -39,12 +40,12 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
             cols = list(inputs.columns)
             categoricalFeatureNames = [col for col in cols if re.match(self._categoricalFeatureNameRegex, col)]
             colIndices = [cols.index(f) for f in categoricalFeatureNames]
-            args = {"cat_column": colIndices}
+            args = {"cat_features": colIndices}
             self._log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
 
 
-class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+class CatBoostVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     _log = _log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
@@ -55,10 +56,10 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             successfully for a classification model).
             In general, passing categorical features may be preferable to using one-hot encoding, for example.
         :param random_state: the random seed to use
-        :param num_leaves: the maximum number of leaves in one tree (original lightgbm default is 31)
-        :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/Parameters.html
+        :param num_leaves: the maximum number of leaves in one tree (original catboost default is 31)
+        :param modelArgs: see https://catboost.ai/docs/concepts/python-reference_parameters-list.html#python-reference_parameters-list
         """
-        super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves, **modelArgs)
+        super().__init__(catboost.CatBoostClassifier, random_seed=random_state, num_leaves=num_leaves, **modelArgs)
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames
@@ -74,6 +75,6 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             cols = list(inputs.columns)
             categoricalFeatureNames = [col for col in cols if re.match(self._categoricalFeatureNameRegex, col)]
             colIndices = [cols.index(f) for f in categoricalFeatureNames]
-            args = {"cat_column": colIndices}
+            args = {"cat_features": colIndices}
             self._log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)

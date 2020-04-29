@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Sequence, List, Union, Callable, Any, Dict, TYPE_CHECKING, Optional
 
@@ -12,7 +13,7 @@ from .columngen import ColumnGenerator
 if TYPE_CHECKING:
     from .vector_model import VectorModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class DuplicateColumnNamesException(Exception):
@@ -24,12 +25,12 @@ class FeatureGenerator(ABC):
     Base class for feature generators that create a new DataFrame containing feature values
     from an input DataFrame
     """
-    def __init__(self, categoricalFeatureNames: Sequence[str] = (),
+    def __init__(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
                  normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
                  normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None, addCategoricalDefaultRules=True):
         """
-        :param categoricalFeatureNames: if provided, will ensure that the respective columns in the generated data frames will
-            have dtype 'category'.
+        :param categoricalFeatureNames: either a sequence of column names or a regex that is to match all categorical feature names.
+            It will be ensured that the respective columns in the generated data frames will have dtype 'category'.
             Furthermore, presence of meta-information can later be leveraged for further transformations, e.g. one-hot encoding.
         :param normalisationRules: Rules to be used by DFTNormalisation (e.g. for constructing an input transformer for a model).
             These rules are only relevant if a DFTNormalisation object consuming them is instantiated and used
@@ -40,27 +41,46 @@ class FeatureGenerator(ABC):
             If True, normalisation rules for categorical features (which are unsupported by normalisation) and their corresponding one-hot
             encoded features (with "_<index>" appended) will be added.
         """
-        if normalisationRules and normalisationRuleTemplate is not None:
+        if len(normalisationRules) > 0 and normalisationRuleTemplate is not None:
             raise ValueError(f"normalisationRules should be empty when a normalisationRuleTemplate is provided")
 
         self._generatedColumnNames = None
-        self._generatedColumnsRule = None
-        self._normalisationRuleTemplate = normalisationRuleTemplate
-        self._categoricalFeatureNames = categoricalFeatureNames
+
+        if type(categoricalFeatureNames) == str:
+            categoricalFeatureNameRegex = categoricalFeatureNames
+        else:
+            if categoricalFeatureNames is not None and len(categoricalFeatureNames) > 0:
+                categoricalFeatureNameRegex = orRegexGroup(categoricalFeatureNames)
+            else:
+                categoricalFeatureNameRegex = None
+        self._categoricalFeatureNameRegex: str = categoricalFeatureNameRegex
         self._categoricalFeatureRules = []
-        self._normalisationRules = list(normalisationRules)
-        if addCategoricalDefaultRules and len(categoricalFeatureNames) > 0:
-            self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames), unsupported=True))
-            self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(orRegexGroup(categoricalFeatureNames) + r"_\d+", skip=True))
 
-    def getNormalisationRules(self) -> List[data_transformation.DFTNormalisation.Rule]:
-        return self._normalisationRules + self._categoricalFeatureRules
+        if normalisationRuleTemplate is not None:
+            self._normalisationRules = [normalisationRuleTemplate.toPlaceholderRule()]  # placeholder rule's regex will be set in generate
+            self._mustUpdateNormalisationRuleBasedOnColumnNames = True
+        else:
+            self._normalisationRules = list(normalisationRules)
+            self._mustUpdateNormalisationRuleBasedOnColumnNames = False
 
-    def getNormalisationRuleTemplate(self) -> Optional[data_transformation.DFTNormalisation.RuleTemplate]:
-        return self._normalisationRuleTemplate
+        if addCategoricalDefaultRules:
+            if categoricalFeatureNameRegex is not None:
+                self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex, unsupported=True))
+                self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex + r"_\d+", skip=True))  # rule for one-hot transformation
 
-    def getCategoricalFeatureNames(self) -> Sequence[str]:
-        return self._categoricalFeatureNames
+    def getNormalisationRules(self, includeGeneratedCategoricalRules=True) -> List[data_transformation.DFTNormalisation.Rule]:
+        if includeGeneratedCategoricalRules:
+            return self._normalisationRules + self._categoricalFeatureRules
+        else:
+            return self._normalisationRules
+
+    def getCategoricalFeatureNameRegex(self) -> Optional[str]:
+        return self._categoricalFeatureNameRegex
+
+    def isCategoricalFeature(self, featureName):
+        if self._categoricalFeatureNameRegex is None:
+            return False
+        return re.fullmatch(self._categoricalFeatureNameRegex, featureName) is not None
 
     def getGeneratedColumnNames(self) -> Optional[List[str]]:
         """
@@ -91,6 +111,7 @@ class FeatureGenerator(ABC):
             this is typically the model instance that this feature generator is to generate inputs for
         :return: a data frame containing the generated features, which uses the same index as X (and Y)
         """
+        log.debug(f"Generating features with {self}")
         resultDF = self._generate(df, ctx=ctx)
 
         isColumnDuplicatedArray = resultDF.columns.duplicated()
@@ -99,17 +120,27 @@ class FeatureGenerator(ABC):
             raise DuplicateColumnNamesException(f"Feature data frame contains duplicate column names: {duplicatedColumns}")
 
         # ensure that categorical columns have dtype 'category'
-        if len(self._categoricalFeatureNames) > 0:
+        categoricalFeatureNames = []
+        if self._categoricalFeatureNameRegex is not None:
             resultDF = resultDF.copy()  # resultDF we got might be a view of some other DF, so before we modify it, we must copy it
-            for colName in self._categoricalFeatureNames:
+            categoricalFeatureNames = [col for col in resultDF.columns if self.isCategoricalFeature(col)]
+            for colName in categoricalFeatureNames:
                 series = resultDF[colName].copy()
                 if series.dtype.name != 'category':
                     resultDF[colName] = series.astype('category', copy=False)
 
         self._generatedColumnNames = resultDF.columns
-        if self._normalisationRuleTemplate is not None:
-            nonCategoricalFeatures = list(set(self._generatedColumnNames).difference(self._categoricalFeatureNames))
-            self._normalisationRules = [self._normalisationRuleTemplate.toRule(orRegexGroup(nonCategoricalFeatures))]
+
+        # finalise normalisation rule template (if any) by making it apply to all non-categorical features
+        # (a default rule applies to categorical features)
+        if self._mustUpdateNormalisationRuleBasedOnColumnNames:
+            nonCategoricalFeatures = list(set(self._generatedColumnNames).difference(categoricalFeatureNames))
+            # NOTE: We here update the existing rule which was instantiated with a dummy regex because
+            # some mechanisms (e.g. MultiFeatureGenerators) retrieve rule instances early on (before generate
+            # is ever called) and therefore updating an existing rule is the safe route and should always
+            # work, because rules should never actually be applied before generate has indeed been called
+            self._normalisationRules[0].setRegex(orRegexGroup(nonCategoricalFeatures))
+            self._mustUpdateNormalisationRuleBasedOnColumnNames = False
 
         return resultDF
 
@@ -160,7 +191,11 @@ class MultiFeatureGenerator(FeatureGenerator):
         :param featureGenerators:
         """
         self.featureGenerators = featureGenerators
-        categoricalFeatureNames = util.concatSequences([fg.getCategoricalFeatureNames() for fg in featureGenerators])
+        categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
+        if len(categoricalFeatureNameRegexes) > 0:
+            categoricalFeatureNames = "|".join(categoricalFeatureNameRegexes)
+        else:
+            categoricalFeatureNames = ()
         normalisationRules = util.concatSequences([fg.getNormalisationRules() for fg in featureGenerators])
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
             addCategoricalDefaultRules=False)
@@ -205,7 +240,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
             if idx % 100 == 0:
-                _log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
+                log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
             value = None
             if self.cache is not None:
                 value = self.cache.get(nt.Index)
@@ -284,13 +319,15 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
         resultDf = pd.DataFrame(index=df.index)
         columnsToFlatten = self.columns if self.columns is not None else df.columns
         for col in columnsToFlatten:
-            _log.info(f"Flattening column {col}")
+            log.debug(f"Flattening column {col}")
+            # NOTE: we found the use of np.stack to produce the most runtime-efficient results.
+            # Other variants, e.g. based on lists instead of numpy.arrays, perform much worse.
             values = np.stack(df[col].values)
             if len(values.shape) != 2:
                 raise ValueError(f"Column {col} was expected to contain one dimensional vectors, something went wrong")
             dimension = values.shape[1]
             new_columns = [f"{col}_{i}" for i in range(dimension)]
-            _log.info(f"Adding {len(new_columns)} new columns to feature dataframe")
+            log.debug(f"Flattening resulted in {len(new_columns)} new columns")
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
@@ -299,7 +336,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     Implements a feature generator via a column generator
     """
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, columnGen: ColumnGenerator, takeInputColumnIfPresent=False, isCategorical=False,
             normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
@@ -324,10 +361,10 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
         if self.takeInputColumnIfPresent and colName in df.columns:
-            self._log.debug(f"Taking column '{colName}' from input data frame")
+            self.log.debug(f"Taking column '{colName}' from input data frame")
             series = df[colName]
         else:
-            self._log.debug(f"Generating column '{colName}' via {self.columnGen}")
+            self.log.debug(f"Generating column '{colName}' via {self.columnGen}")
             series = self.columnGen.generateColumn(df)
         return pd.DataFrame({colName: series})
 
@@ -337,24 +374,16 @@ class ChainedFeatureGenerator(FeatureGenerator):
     Chains feature generators such that they are executed one after another. The output of generator i>=1 is the input of
     generator i+1 in the generator sequence.
     """
-    def __init__(self, *featureGenerators: FeatureGenerator, categoricalFeatureNames: Sequence[str] = None,
-                 normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = None,
-                 normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+    def __init__(self, *featureGenerators: FeatureGenerator):
         """
-        :param featureGenerators: the list of feature generators to apply in order
-        :param categoricalFeatureNames: the list of categorical feature names being generated; if None, use the ones
-            indicated by the last feature generator in the list
-        :param normalisationRules: normalisation rules to use; if None, use rules of the last feature generator in the list
-        :param normalisationRuleTemplate: rule template to apply to all output columns of the chain.
-            This should only be used if no other rules have been provided
+        :param featureGenerators: feature generators to apply in order; the properties of the last feature generator
+            determine the relevant meta-data such as categorical feature names and normalisation rules
         """
         if len(featureGenerators) == 0:
             raise ValueError("Empty list of feature generators")
-        if categoricalFeatureNames is None:
-            categoricalFeatureNames = featureGenerators[-1].getCategoricalFeatureNames()
-        if normalisationRules is None:
-            normalisationRules = featureGenerators[-1].getNormalisationRules()
-        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate)
+        lastFG: FeatureGenerator = featureGenerators[-1]
+        super().__init__(categoricalFeatureNames=lastFG.getCategoricalFeatureNameRegex(), normalisationRules=lastFG.getNormalisationRules(),
+            addCategoricalDefaultRules=False)
         self.featureGenerators = featureGenerators
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
@@ -503,6 +532,10 @@ class FeatureGeneratorRegistry:
             raise ValueError(f"Access to private variables in {self.__class__.__name__} is forbidden")
         return self.getFeatureGenerator(item)
 
+    @property
+    def availableFeatures(self):
+        return list(self._featureGeneratorFactories.keys())
+
     def registerFactory(self, name, factory: Callable[[], FeatureGenerator]):
         """
         Registers a feature generator factory which can subsequently be referenced by models via their name
@@ -601,15 +634,15 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         if self.inputFeatureGenerator:
             df = self.inputFeatureGenerator.generate(df)
         if self.useTargetFeatureGeneratorForTraining and not ctx.isFitted():
-            _log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
+            log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
             return self.targetFeatureGenerator.generate(df)
         else:
-            _log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
+            log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
 
 
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
-                            normalisationRules=None, normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+                            normalisationRules=(), normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
     """
     Return a flattening version of the input feature generator.
 
@@ -619,9 +652,11 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
     :param normalisationRules: additional normalisation rules for the flattened output columns
     :param normalisationRuleTemplate: This parameter can be supplied instead of normalisationRules for the case where
         there shall be a single rule that applies to all flattened output columns
-    :return: FeatureGenerator instance that will generate flattened versions of the specified output columns and leave
-        all non specified output columns as is.
+    :return: FeatureGenerator instance that will generate flattened versions of the specified columns
+    """
 
+    # TODO reinstate semantics with parallel path where columns not to be flattened are taken over via a new concept ParallelFeatureGenerator that can be used within a chain
+    """
     Example:
         >>> from sensai.featuregen import FeatureGeneratorTakeColumns, flattenedFeatureGenerator
         >>> import pandas as pd
@@ -633,10 +668,15 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         0      1      2   a
         1      3      4   b
     """
+    flatteningGenerator = ChainedFeatureGenerator(
+        fgen,
+        FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate))
+    if columnsToFlatten is None:
+        return flatteningGenerator
+    else:
+        raise RuntimeError("Parallel path for non-flattened part not implemented")
+        # The code below results in fgen being called twice; should be done as described above
 
-    flatteningGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(columnsToFlatten), FeatureGeneratorFlattenColumns(),
-                                                  normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate)
-    exceptColumns = columnsToFlatten if columnsToFlatten is not None else []
-    passthroughColumnsGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=exceptColumns))
-
-    return MultiFeatureGenerator([flatteningGenerator, passthroughColumnsGenerator])
+        #exceptColumns = columnsToFlatten if columnsToFlatten is not None else []
+        #passthroughColumnsGenerator = ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=exceptColumns))
+        #return MultiFeatureGenerator([flatteningGenerator, passthroughColumnsGenerator])

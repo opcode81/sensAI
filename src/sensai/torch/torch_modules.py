@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from dcs.sensai.util.string import objectRepr
+
 
 class MCDropoutCapableNNModule(nn.Module, ABC):
     """
@@ -88,6 +90,11 @@ class MultiLayerPerceptron(MCDropoutCapableNNModule):
         for dim in [*hiddenDims, outputDim]:
             self.layers.append(nn.Linear(prevDim, dim))
             prevDim = dim
+
+    def __str__(self):
+        return objectRepr(self, dict(inputDim=self.inputDim, outputDim=self.outputDim, hiddenDims=self.hiddenDims,
+            hidActivationFn=self.hidActivationFn.__name__, outputActivationFn=self.outputActivationFn.__name__,
+            pDropout=self.pDropout))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):

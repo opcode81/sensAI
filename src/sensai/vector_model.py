@@ -257,7 +257,7 @@ class VectorModel(PredictorModel, ABC):
 
     def getName(self):
         if self._name is None:
-            return "unnamed-%x" % id(self)
+            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
         return self._name
 
     def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):

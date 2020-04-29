@@ -443,17 +443,28 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         """
         return VectorModelEvaluator.forModel(model, self.inputOutputData, **self.evaluatorParams)
 
-    def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None) -> TEvalData:
+    def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
+            additionalEvaluationOnTrainingData=False) -> TEvalData:
         evaluator = self.createEvaluator(model)
         evaluator.fitModel(model)
-        evaluator.evalModel(model)
+
+        def gatherResults(evalResultData, resultWriter, subtitlePrefix=""):
+            strEvalResults = ""
+            for predictedVarName in model.getPredictedVariableNames():
+                strEvalResult = str(evalResultData.getEvalStats(predictedVarName))
+                if logResults:
+                    _log.info(f"Evaluation results for {predictedVarName}: {strEvalResult}")
+                strEvalResults += predictedVarName + ": " + strEvalResult + "\n"
+            if resultWriter is not None:
+                resultWriter.writeTextFile("evaluator-results", strEvalResults)
+            self.createPlots(evalResultData, showPlots=showPlots, resultWriter=resultWriter, subtitlePrefix=subtitlePrefix)
+
         evalResultData = evaluator.evalModel(model)
-        strEvalResults = str(evalResultData.getEvalStats())
-        if logResults:
-            _log.info(f"Evaluation results: {strEvalResults}")
-        if resultWriter is not None:
-            resultWriter.writeTextFile("evaluator-results", strEvalResults)
-        self.createPlots(evalResultData, showPlots=showPlots, resultWriter=resultWriter)
+        gatherResults(evalResultData, resultWriter)
+        if additionalEvaluationOnTrainingData:
+            evalResultDataTrain = evaluator.evalModel(model, onTrainingData=True)
+            gatherResults(evalResultDataTrain, resultWriter.childWithAddedPrefix("-onTrain-"), subtitlePrefix="[onTrain] ")
+
         return evalResultData
 
     @staticmethod
@@ -505,7 +516,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
             resultWriter.writeTextFile("model-comparison-results", strResults)
         return resultsDF
 
-    def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None, subtitle: str = None):
+    def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None, subtitlePrefix: str = ""):
         """
         Creates default plots that visualise the results in the given evaluation data
 
@@ -513,30 +524,30 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         :param predictedVarName: the predicted variable for which to create plots; may be None if there is only one
         :param showPlots: whether to show plots
         :param resultWriter: if not None, plots will be written using this writer
-        :param subtitle: the subtitle to use in plot titles (if any)
+        :param subtitlePrefix: a prefix to add to the subtitle (which itself is the model name)
         """
         if not showPlots and resultWriter is None:
             return
         resultCollector = self.ResultCollector(showPlots=showPlots, resultWriter=resultWriter)
-        self._createPlots(data, resultCollector, subtitle=data.modelName)
+        self._createPlots(data, resultCollector, subtitle=subtitlePrefix + data.modelName)
 
     def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector, subtitle=None):
 
-        def createPlots(predVarName, rc):
+        def createPlots(predVarName, rc, subt):
             if isinstance(data, VectorModelCrossValidationData):
                 evalStats = data.getEvalStatsCollection(predictedVarName=predVarName).getGlobalStats()
             elif isinstance(data, VectorModelEvaluationData):
                 evalStats = data.getEvalStats(predictedVarName=predVarName)
             else:
                 raise ValueError(f"Unexpected argument: data={data}")
-            return self._createEvalStatsPlots(evalStats, rc, subtitle=subtitle)
+            return self._createEvalStatsPlots(evalStats, rc, subtitle=subt)
 
         predictedVarNames = data.predictedVarNames
         if len(predictedVarNames) == 1:
-            createPlots(predictedVarNames[0], resultCollector)
+            createPlots(predictedVarNames[0], resultCollector, subtitle)
         else:
             for predictedVarName in predictedVarNames:
-                createPlots(predictedVarName, resultCollector.child(predictedVarName+"-"))
+                createPlots(predictedVarName, resultCollector.child(predictedVarName+"-"), f"{predictedVarName}, {subtitle}")
 
     @abstractmethod
     def _createEvalStatsPlots(self, evalStats: TEvalStats, resultCollector: ResultCollector, subtitle=None):

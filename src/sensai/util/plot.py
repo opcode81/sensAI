@@ -1,8 +1,13 @@
-from typing import Sequence
+import logging
+from matplotlib.colors import LinearSegmentedColormap
+from typing import Sequence, Callable
 
 import matplotlib.figure
 from matplotlib import pyplot as plt
 import numpy as np
+
+
+log = logging.getLogger(__name__)
 
 
 def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
@@ -21,12 +26,12 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
     matrix = np.transpose(matrix)
 
     if titleAdd is not None:
-        title += "\n" + titleAdd
+        title += f"\n {titleAdd} "
 
     if normalize:
         matrix = matrix.astype('float') / matrix.sum()
     fig, ax = plt.subplots(figsize=figsize)
-    fig.canvas.set_window_title(title)
+    fig.canvas.set_window_title(title.replace("\n", " "))
     # We want to show all ticks...
     ax.set(xticks=np.arange(matrix.shape[1]),
         yticks=np.arange(matrix.shape[0]),
@@ -52,3 +57,42 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
                 color="white" if matrix[i, j] > thresh else "black")
     fig.tight_layout()
     return fig
+
+
+class Plot:
+    def __init__(self, draw: Callable[[], plt.Axes]):
+        self.fig: matplotlib.figure.Figure = plt.figure()
+        self.ax = draw()
+
+    def xlabel(self, label):
+        plt.xlabel(label)
+        return self
+
+    def ylabel(self, label):
+        plt.ylabel(label)
+        return self
+
+    def save(self, path):
+        log.info(f"Saving figure in {path}")
+        self.fig.savefig(path)
+
+
+class ScatterPlot(Plot):
+    def __init__(self, x, y, **kwargs):
+        super().__init__(lambda: plt.scatter(x, y, **kwargs))
+
+
+class HeatMapPlot(Plot):
+    def __init__(self, x, y, bins=60, cmap=None, **kwargs):
+
+        def draw():
+            nonlocal cmap
+            x_range = [min(x), max(x)]
+            y_range = [min(y), max(y)]
+            heatmap, _, _ = np.histogram2d(x, y, range=[x_range, y_range], bins=bins)
+            extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
+            if cmap is None:
+                cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
+            return plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, aspect="auto", **kwargs)
+
+        super().__init__(draw)
