@@ -666,13 +666,10 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         0      1      2   a
         1      3      4   b
     """
-    # TODO should introduce new concept ParallelFeatureGenerator that can be used within a chain in order to avoid duplicate application of fgen
-    flatteningGenerator = ChainedFeatureGenerator(
-            fgen,
-            FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules, normalisationRuleTemplate=normalisationRuleTemplate))
+    flatteningGenerator = FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules,
+        normalisationRuleTemplate=normalisationRuleTemplate)
     if columnsToFlatten is None:
-        return flatteningGenerator
+        return ChainedFeatureGenerator(fgen, flatteningGenerator)
     else:
-        return MultiFeatureGenerator([flatteningGenerator,
-            ChainedFeatureGenerator(fgen, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten))])
-
+        return ChainedFeatureGenerator(fgen,
+            MultiFeatureGenerator([flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)]))
