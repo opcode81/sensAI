@@ -1,6 +1,7 @@
 import atexit
 import enum
 import glob
+import joblib
 import logging
 import os
 import pickle
@@ -62,21 +63,31 @@ class PersistentList(ABC):
         pass
 
 
-def loadPickle(path):
+def loadPickle(path, backend="pickle"):
     with open(path, "rb") as f:
-        return pickle.load(f)
+        if backend == "pickle":
+            return pickle.load(f)
+        elif backend == "joblib":
+            return joblib.load(f)
+        else:
+            raise ValueError(f"Unknown backend '{backend}'")
 
 
-def dumpPickle(obj, picklePath):
+def dumpPickle(obj, picklePath, backend="pickle"):
     dirName = os.path.dirname(picklePath)
     if dirName != "":
         os.makedirs(dirName, exist_ok=True)
     with open(picklePath, "wb") as f:
-        try:
-            pickle.dump(obj, f)
-        except AttributeError as e:
-            failingPaths = PickleFailureDebugger.debugFailure(obj)
-            raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
+        if backend == "pickle":
+            try:
+                pickle.dump(obj, f)
+            except AttributeError as e:
+                failingPaths = PickleFailureDebugger.debugFailure(obj)
+                raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
+        elif backend == "joblib":
+            joblib.dump(obj, f)
+        else:
+            raise ValueError(f"Unknown backend '{backend}'")
 
 
 class DelayedUpdateHook:
@@ -513,7 +524,8 @@ class CachedValueProviderMixin(ABC):
         pass
 
 
-def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None) -> T:
+def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None,
+        backend="pickle") -> T:
     """
     :param fn: the function whose result is to be cached
     :param picklePath: the path in which to store the cached result
@@ -529,25 +541,25 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
 
     def callFnAndCacheResult():
         res = fn()
-        _log.info(f"Saving cached res in {picklePath}")
-        dumpPickle(res, picklePath)
+        _log.info(f"Saving cached result in {picklePath}")
+        dumpPickle(res, picklePath, backend=backend)
         return res
 
     if os.path.exists(picklePath):
-        _log.info(f"Loading cached res of function '{functionName}' from {picklePath}")
-        result = loadPickle(picklePath)
+        _log.info(f"Loading cached result of function '{functionName}' from {picklePath}")
+        result = loadPickle(picklePath, backend=backend)
         if validityCheckFn is not None:
             if not validityCheckFn(result):
                 _log.info(f"Cached result is no longer valid, recomputing ...")
                 result = callFnAndCacheResult()
         return result
     else:
-        _log.info(f"No cached res found in {picklePath}, calling function '{functionName}' ...")
+        _log.info(f"No cached result found in {picklePath}, calling function '{functionName}' ...")
         return callFnAndCacheResult()
 
 
 class PickleCached(object):
-    def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None):
+    def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle"):
         """
 
         :param cacheBasePath:
@@ -557,6 +569,7 @@ class PickleCached(object):
         self.filename = filename
         self.cacheBasePath = cacheBasePath
         self.filenamePrefix = filenamePrefix
+        self.backend = backend
 
         if self.filenamePrefix is None:
             self.filenamePrefix = ""
@@ -567,4 +580,4 @@ class PickleCached(object):
         if self.filename is None:
             self.filename = self.filenamePrefix + fn.__qualname__ + ".cache.pickle"
         picklePath = os.path.join(self.cacheBasePath,  self.filename)
-        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__)
+        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend)

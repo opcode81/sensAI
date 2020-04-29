@@ -32,6 +32,7 @@ class TorchModel(ABC):
         self.module: torch.nn.Module = None
         self.outputScaler: Optional[TensorScaler] = None
         self.inputScaler: Optional[TensorScaler] = None
+        self.bestEpoch = None
 
     def setTorchModule(self, module: torch.nn.Module):
         self.module = module
@@ -74,7 +75,7 @@ class TorchModel(ABC):
 
     def __getstate__(self):
         state = dict(self.__dict__)
-        del state["model"]
+        del state["module"]
         state["modelBytes"] = self.getModuleBytes()
         return state
 
@@ -166,6 +167,7 @@ class TorchModel(ABC):
             nnOptimiserParams["cuda"] = self.cuda
         optimiser = NNOptimiser(**nnOptimiserParams)
         optimiser.fit(self, data)
+        self.bestEpoch = optimiser.getBestEpoch()
 
 
 class VectorTorchModel(TorchModel, ABC):
@@ -191,7 +193,7 @@ class VectorTorchModel(TorchModel, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
-    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
+    def __init__(self, modelClass: Callable[..., TorchModel], modelArgs=(), modelKwArgs=None,
             normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
@@ -212,19 +214,32 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
-        self.model: Optional[VectorTorchModel] = None
+        self.model: Optional[TorchModel] = None
 
-    def _createWrappedTorchVectorModule(self) -> VectorTorchModel:
+    def _createWrappedTorchVectorModule(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
+
+    def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
+        dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
+        return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         self.model = self._createWrappedTorchVectorModule()
-        dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
-        dataSetProvider = TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+        dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, **self.nnOptimiserParams)
 
+    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+        results = []
+        i = 0
+        batchSize = 2**13
+        while i < len(inputs):
+            inputSlice = inputs.iloc[i:i+batchSize]
+            results.append(self.model.applyScaled(inputSlice.values, asNumpy=True))
+            i += batchSize
+        return np.concatenate(results)
+
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
-        yArray = self.model.applyScaled(inputs.values)
+        yArray = self._predictOutputsForInputDataFrame(inputs)
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
     def __str__(self):

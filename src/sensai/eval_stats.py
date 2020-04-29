@@ -155,8 +155,14 @@ class RegressionEvalStats(EvalStats):
 
     def getAll(self):
         """Gets a dictionary with all metrics"""
-        return dict(RRSE=self.getRRSE(), R2=self.getR2(), PCC=self.getCorrelationCoeff(), MAE=self.getMAE(),
+        return dict(RRSE=self.getRRSE(), R2=self.getR2(), PCC=self.getCorrelationCoeff(), MSE=self.getMSE(), MAE=self.getMAE(),
                     StdDevAE=self.getStdDevAE(), RMSE=self.getRMSE())
+
+    def getMSE(self):
+        y_predicted = np.array(self.y_predicted)
+        y_true = np.array(self.y_true)
+        residuals = y_predicted - y_true
+        return np.sum(residuals * residuals) / len(residuals)
 
     def getRRSE(self):
         """Gets the root relative squared error"""
@@ -227,7 +233,7 @@ class RegressionEvalStats(EvalStats):
         if titleAdd is not None:
             title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
+            fig = plt.figure(title.replace("\n", " "))
         sns.distplot(errors, bins=bins)
         plt.title(title)
         plt.xlabel("error (prediction - ground truth)")
@@ -246,7 +252,7 @@ class RegressionEvalStats(EvalStats):
         if titleAdd is not None:
             title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
+            fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
         plt.scatter(self.y_true, self.y_predicted, **kwargs)
         plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
@@ -270,7 +276,7 @@ class RegressionEvalStats(EvalStats):
         if titleAdd:
             title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
+            fig = plt.figure(title.replace("\n", " "))
         y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
         plt.plot(y_range, y_range, 'k-', lw=0.75, label="_not in legend", color="green", zorder=2)
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)

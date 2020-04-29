@@ -138,38 +138,8 @@ class NNLossEvaluator(ABC):
         pass
 
     @abstractmethod
-    def startTraining(self, cuda):
+    def startTraining(self, cuda) -> "NNLossEvaluatorState":
         """Prepares for a new training process, initialising internal state as required"""
-        pass
-
-    @abstractmethod
-    def startValidationCollection(self, groundTruthShape):
-        """
-        Initiates validation data collection for a new epoch
-
-        :param groundTruthShape: the tensor shape of a single ground truth data point
-        """
-        pass
-
-    @abstractmethod
-    def collectValidationResultBatch(self, output, groundTruth):
-        """
-        Collects, for validation, the given output and ground truth data (tensors holding data on one batch,
-        where the first dimensions is the batch)
-
-        :param output: the model's output
-        :param groundTruth: the corresponding ground truth
-        :return:
-        """
-        pass
-
-    @abstractmethod
-    def endValidationCollection(self) -> OrderedDict:
-        """
-        Computes validation metrics based on the data previously collected.
-
-        :return: an ordered dictionary with validation metrics
-        """
         pass
 
     def getValidationMetricName(self) -> str:
@@ -180,6 +150,38 @@ class NNLossEvaluator(ABC):
         :return: the name of the metrics that is indicated of model quality
         """
         pass
+
+
+    class State(ABC):
+        @abstractmethod
+        def startValidationCollection(self, groundTruthShape):
+            """
+            Initiates validation data collection for a new epoch
+
+            :param groundTruthShape: the tensor shape of a single ground truth data point
+            """
+            pass
+
+        @abstractmethod
+        def collectValidationResultBatch(self, output, groundTruth):
+            """
+            Collects, for validation, the given output and ground truth data (tensors holding data on one batch,
+            where the first dimensions is the batch)
+
+            :param output: the model's output
+            :param groundTruth: the corresponding ground truth
+            :return:
+            """
+            pass
+
+        @abstractmethod
+        def endValidationCollection(self) -> OrderedDict:
+            """
+            Computes validation metrics based on the data previously collected.
+
+            :return: an ordered dictionary with validation metrics
+            """
+            pass
 
 
 class NNLossEvaluatorRegression(NNLossEvaluator):
@@ -199,21 +201,11 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
         except ValueError:
             raise Exception(f"Loss function {lossFn} not supported. Available are: {[e.value for e in self.LossFunction]}")
 
-        # transient members: state for validation
-        self.total_loss_l1 = None
-        self.total_loss_l2 = None
-        self.outputDims = None
-        self.allTrueOutputs = None
-
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
 
     def startTraining(self, cuda):
-        self.evaluateL1 = nn.L1Loss(reduction='sum')
-        self.evaluateL2 = nn.MSELoss(reduction='sum')
-        if cuda:
-            self.evaluateL1 = self.evaluateL1.cuda()
-            self.evaluateL2 = self.evaluateL2.cuda()
+        return self.State(cuda)
 
     def getTrainingCriterion(self):
         if self.lossFn is self.LossFunction.L1LOSS:
@@ -226,50 +218,62 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    def startValidationCollection(self, groundTruthShape):
-        if len(groundTruthShape) != 1:
-            raise ValueError("Outputs that are not vectors are currently unsupported")
-        self.outputDims = groundTruthShape[-1]
-        self.total_loss_l1 = np.zeros(self.outputDims)
-        self.total_loss_l2 = np.zeros(self.outputDims)
-        self.allTrueOutputs = None
+    class State(NNLossEvaluator.State):
+        def __init__(self, cuda: bool):
+            self.total_loss_l1 = None
+            self.total_loss_l2 = None
+            self.outputDims = None
+            self.allTrueOutputs = None
+            self.evaluateL1 = nn.L1Loss(reduction='sum')
+            self.evaluateL2 = nn.MSELoss(reduction='sum')
+            if cuda:
+                self.evaluateL1 = self.evaluateL1.cuda()
+                self.evaluateL2 = self.evaluateL2.cuda()
 
-    def collectValidationResultBatch(self, output, groundTruth):
-        # obtain series of outputs per output dimension: (batch_size, output_size) -> (output_size, batch_size)
-        predictedOutput = output.permute(1, 0)
-        trueOutput = groundTruth.permute(1, 0)
+        def startValidationCollection(self, groundTruthShape):
+            if len(groundTruthShape) != 1:
+                raise ValueError("Outputs that are not vectors are currently unsupported")
+            self.outputDims = groundTruthShape[-1]
+            self.total_loss_l1 = np.zeros(self.outputDims)
+            self.total_loss_l2 = np.zeros(self.outputDims)
+            self.allTrueOutputs = None
 
-        if self.allTrueOutputs is None:
-            self.allTrueOutputs = trueOutput
-        else:
-            self.allTrueOutputs = torch.cat((self.allTrueOutputs, trueOutput), dim=1)
+        def collectValidationResultBatch(self, output, groundTruth):
+            # obtain series of outputs per output dimension: (batch_size, output_size) -> (output_size, batch_size)
+            predictedOutput = output.permute(1, 0)
+            trueOutput = groundTruth.permute(1, 0)
 
-        for i in range(self.outputDims):
-            self.total_loss_l1[i] += self.evaluateL1(predictedOutput[i], trueOutput[i]).item()
-            self.total_loss_l2[i] += self.evaluateL2(predictedOutput[i], trueOutput[i]).item()
+            if self.allTrueOutputs is None:
+                self.allTrueOutputs = trueOutput
+            else:
+                self.allTrueOutputs = torch.cat((self.allTrueOutputs, trueOutput), dim=1)
 
-    def endValidationCollection(self):
-        outputDims = self.outputDims
-        rae = np.zeros(outputDims)
-        rrse = np.zeros(outputDims)
-        mae = np.zeros(outputDims)
-        mse = np.zeros(outputDims)
+            for i in range(self.outputDims):
+                self.total_loss_l1[i] += self.evaluateL1(predictedOutput[i], trueOutput[i]).item()
+                self.total_loss_l2[i] += self.evaluateL2(predictedOutput[i], trueOutput[i]).item()
 
-        for i in range(outputDims):
-            mean = torch.mean(self.allTrueOutputs[i])
-            refModelErrors = self.allTrueOutputs[i] - mean
-            refModelSumAbsErrors = torch.sum(torch.abs(refModelErrors)).item()
-            refModelSumSquaredErrors = torch.sum(refModelErrors * refModelErrors).item()
-            numSamples = refModelErrors.size(0)
+        def endValidationCollection(self):
+            outputDims = self.outputDims
+            rae = np.zeros(outputDims)
+            rrse = np.zeros(outputDims)
+            mae = np.zeros(outputDims)
+            mse = np.zeros(outputDims)
 
-            mae[i] = self.total_loss_l1[i] / numSamples
-            mse[i] = self.total_loss_l2[i] / numSamples
-            rae[i] = self.total_loss_l1[i] / refModelSumAbsErrors if refModelSumAbsErrors != 0 else np.inf
-            rrse[i] = np.sqrt(mse[i]) / np.sqrt(
-                refModelSumSquaredErrors / numSamples) if refModelSumSquaredErrors != 0 else np.inf
+            for i in range(outputDims):
+                mean = torch.mean(self.allTrueOutputs[i])
+                refModelErrors = self.allTrueOutputs[i] - mean
+                refModelSumAbsErrors = torch.sum(torch.abs(refModelErrors)).item()
+                refModelSumSquaredErrors = torch.sum(refModelErrors * refModelErrors).item()
+                numSamples = refModelErrors.size(0)
 
-        metrics = OrderedDict([("RRSE", np.mean(rrse)), ("RAE", np.mean(rae)), ("MSE", np.mean(mse)), ("MAE", np.mean(mae))])
-        return metrics
+                mae[i] = self.total_loss_l1[i] / numSamples
+                mse[i] = self.total_loss_l2[i] / numSamples
+                rae[i] = self.total_loss_l1[i] / refModelSumAbsErrors if refModelSumAbsErrors != 0 else np.inf
+                rrse[i] = np.sqrt(mse[i]) / np.sqrt(
+                    refModelSumSquaredErrors / numSamples) if refModelSumSquaredErrors != 0 else np.inf
+
+            metrics = OrderedDict([("RRSE", np.mean(rrse)), ("RAE", np.mean(rae)), ("MSE", np.mean(mse)), ("MAE", np.mean(mae))])
+            return metrics
 
     def getValidationMetricName(self):
         if self.lossFn is self.LossFunction.L1LOSS or self.lossFn is self.LossFunction.SMOOTHL1LOSS:
@@ -294,17 +298,11 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
         except ValueError:
             raise Exception(f"Loss function {lossFn} not supported. Available are: {[e.value for e in self.LossFunction]}")
 
-        # transient members: state for validation
-        self.totalLossCE = None
-        self.numValidationSamples = None
-
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
 
     def startTraining(self, cuda):
-        self.evaluateCE = nn.CrossEntropyLoss(reduction="sum")
-        if cuda:
-            self.evaluateCE = self.evaluateCE.cuda()
+        return self.State(cuda)
 
     def getTrainingCriterion(self):
         if self.lossFn is self.LossFunction.CROSSENTROPY:
@@ -313,18 +311,26 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    def startValidationCollection(self, groundTruthShape):
-        self.totalLossCE = 0
-        self.numValidationSamples = 0
+    class State(NNLossEvaluator.State):
+        def __init__(self, cuda: bool):
+            self.totalLossCE = None
+            self.numValidationSamples = None
+            self.evaluateCE = nn.CrossEntropyLoss(reduction="sum")
+            if cuda:
+                self.evaluateCE = self.evaluateCE.cuda()
 
-    def collectValidationResultBatch(self, output, groundTruth):
-        self.totalLossCE += self.evaluateCE(output, groundTruth).item()
-        self.numValidationSamples += output.shape[0]
+        def startValidationCollection(self, groundTruthShape):
+            self.totalLossCE = 0
+            self.numValidationSamples = 0
 
-    def endValidationCollection(self):
-        ce = self.totalLossCE / self.numValidationSamples
-        metrics = OrderedDict([("CE", ce), ("GeoMeanProbTrueClass", math.exp(-ce))])
-        return metrics
+        def collectValidationResultBatch(self, output, groundTruth):
+            self.totalLossCE += self.evaluateCE(output, groundTruth).item()
+            self.numValidationSamples += output.shape[0]
+
+        def endValidationCollection(self):
+            ce = self.totalLossCE / self.numValidationSamples
+            metrics = OrderedDict([("CE", ce), ("GeoMeanProbTrueClass", math.exp(-ce))])
+            return metrics
 
     def getValidationMetricName(self):
         if self.lossFn is self.LossFunction.CROSSENTROPY:
@@ -379,6 +385,7 @@ class NNOptimiser:
         self.optimiserArgs = optimiserArgs
         self.useShrinkage = useShrinkage
 
+        self.lossEvaluatorState = None
         self.trainingLog = None
         self.bestEpoch = None
 
@@ -452,7 +459,7 @@ class NNOptimiser:
             use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
-        self.lossEvaluator.startTraining(self.cuda)
+        self.lossEvaluatorState = self.lossEvaluator.startTraining(self.cuda)
         validationMetricName = self.lossEvaluator.getValidationMetricName()
         try:
             self.log.info('Begin training')
@@ -554,12 +561,12 @@ class NNOptimiser:
         for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):
             if groundTruthShape is None:
                 groundTruthShape = Y.shape[1:]  # the shape of the output of a single model application
-                self.lossEvaluator.startValidationCollection(groundTruthShape)
+                self.lossEvaluatorState.startValidationCollection(groundTruthShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
-            self.lossEvaluator.collectValidationResultBatch(output, groundTruth)
+            self.lossEvaluatorState.collectValidationResultBatch(output, groundTruth)
 
-        return self.lossEvaluator.endValidationCollection()
+        return self.lossEvaluatorState.endValidationCollection()
 
     def _init_cuda(self):
         """Initialises CUDA (for learning) by setting the appropriate device if necessary"""
