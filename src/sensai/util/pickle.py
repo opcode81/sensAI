@@ -2,10 +2,13 @@ import logging
 import pickle
 from typing import List
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class PickleFailureDebugger:
+    """
+    A collection of methods for testing whether objects can be pickled and logging useful infos in case they cannot
+    """
 
     enabled = False  # global flag controlling the behaviour of debugFailureIfEnabled
 
@@ -76,6 +79,6 @@ class PickleFailureDebugger:
             if contextInfo is not None:
                 prefix += " (context: %s)" % contextInfo
             if len(failures) > 0:
-                log.error(f"{prefix}: pickling would result in failures due to: {failures}")
+                _log.error(f"{prefix}: pickling would result in failures due to: {failures}")
             else:
-                log.info(f"{prefix}: is picklable")
+                _log.info(f"{prefix}: is picklable")

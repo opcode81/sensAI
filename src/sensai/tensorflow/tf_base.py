@@ -9,7 +9,7 @@ import tensorflow as tf
 from .. import normalisation
 from ..vector_model import VectorRegressionModel
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class TensorFlowSession:
@@ -35,7 +35,7 @@ class TensorFlowSession:
         """
         if cls.session is None:
             if allowDefault:
-                log.info("No TensorFlow session was configured. Creating a new session with default values.")
+                _log.info("No TensorFlow session was configured. Creating a new session with default values.")
                 cls.configureSession()
             else:
                 raise Exception(f"The session has not yet been configured. Call {cls.__name__}.{cls.configureSession.__name__} beforehand")
@@ -49,6 +49,15 @@ class KerasVectorRegressionModel(VectorRegressionModel, ABC):
 
     def __init__(self, normalisationMode: normalisation.NormalisationMode, loss, metrics, optimiser,
             batchSize=64, epochs=1000, validationFraction=0.2):
+        """
+        :param normalisationMode:
+        :param loss:
+        :param metrics:
+        :param optimiser:
+        :param batchSize:
+        :param epochs:
+        :param validationFraction:
+        """
         super().__init__()
         self.normalisationMode = normalisationMode
         self.batchSize = batchSize

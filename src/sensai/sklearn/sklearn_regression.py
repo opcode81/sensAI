@@ -1,18 +1,15 @@
 import logging
-import pandas as pd
-from typing import Sequence
 
 import sklearn.ensemble
 import sklearn.linear_model
 import sklearn.neighbors
 import sklearn.neural_network
 import sklearn.svm
-import lightgbm
 
-from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel, InvertibleDataFrameTransformer, DataFrameTransformer
+from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
@@ -52,31 +49,6 @@ class SkLearnSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionMod
 class SkLearnLinearSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self, **modelArgs):
         super().__init__(sklearn.svm.LinearSVR, **modelArgs)
-
-
-class SkLearnLightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
-    log = log.getChild(__qualname__)
-
-    def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
-        """
-        :param categoricalFeatureNames: sequence of feature names in the input data that are categorical.
-            Columns that have dtype 'category' (as will be the case for categorical columns created via FeatureGenerators)
-            need not be specified (should be inferred automatically).
-            In general, passing categorical features is preferable to using one-hot encoding, for example.
-        :param random_state: the random seed to use
-        :param num_leaves: the maximum number of leaves in one tree (original lightgbm default is 31)
-        :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/Parameters.html
-        """
-        self.categoricalFeatureNames = categoricalFeatureNames
-        super().__init__(lightgbm.sklearn.LGBMRegressor, random_state=random_state, num_leaves=num_leaves, **modelArgs)
-
-    def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        if self.categoricalFeatureNames is not None:
-            cols = list(inputs.columns)
-            colIndices = [cols.index(f) for f in self.categoricalFeatureNames]
-            args = {"cat_column": colIndices}
-            self.log.info(f"Updating model parameters with {args}")
-            self.modelArgs.update(args)
 
 
 class SkLearnGradientBoostingVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):

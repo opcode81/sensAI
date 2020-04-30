@@ -9,8 +9,9 @@ import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 from .columngen import ColumnGenerator
+from .util.string import orRegexGroup
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class DataFrameTransformer(ABC):
@@ -62,6 +63,10 @@ class DataFrameTransformerChain:
                 transformer.fit(df)
             df = transformer.apply(df)
         return df
+
+    def fit(self, df: pd.DataFrame):
+        for transformer in self.dataFrameTransformers:
+            transformer.fit(df)
 
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
@@ -164,35 +169,47 @@ class DFTModifyColumnVectorized(DFTModifyColumn):
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
-    def __init__(self, columns: Sequence[str], categoriesList: List[np.ndarray] = None, inplace=False, ignoreUnknown=False):
+    def __init__(self, columns: Union[str, Sequence[str]], categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
-        :param columns: names of original columns that are to be replaced by a list one-hot encoded columns each
-        :param categoriesList: numpy arrays containing the possible values of each of the specified columns.
+
+        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each
+        :param categories: numpy arrays containing the possible values of each of the specified columns (for case where sequence is specified
+            in 'columns') or dictionary mapping column name to array of possible categories for the column name.
             If None, the possible values will be inferred from the columns
         :param ignoreUnknown: if True and an unknown category is encountered during transform, the resulting one-hot
             encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
         """
         self.oneHotEncoders = None
-        self.columnNamesToProcess = columns
+        if type(columns) == str:
+            self._columnNameRegex = columns
+            self._columnsToEncode = None
+        else:
+            self._columnNameRegex = orRegexGroup(columns)
+            self._columnsToEncode = columns
         self.inplace = inplace
         self.handleUnknown = "ignore" if ignoreUnknown else "error"
-        if categoriesList is not None:
-            if len(columns) != len(categoriesList):
-                raise ValueError(f"Length of categories is not the same as length of columnNamesToProcess")
-            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for categories in categoriesList]
+        if categories is not None:
+            if type(categories) == dict:
+                self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in categories.items()}
+            else:
+                if len(columns) != len(categories):
+                    raise ValueError(f"Given categories must have the same length as columns to process")
+                self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in zip(columns, categories)}
 
     def fit(self, df: pd.DataFrame):
+        if self._columnsToEncode is None:
+            self._columnsToEncode = [c for c in df.columns if re.fullmatch(self._columnNameRegex, c) is not None]
         if self.oneHotEncoders is None:
-            self.oneHotEncoders = [OneHotEncoder(categories=[np.sort(df[column].unique())], sparse=False, handle_unknown=self.handleUnknown) for column in self.columnNamesToProcess]
-        for encoder, columnName in zip(self.oneHotEncoders, self.columnNamesToProcess):
-            encoder.fit(df[[columnName]])
+            self.oneHotEncoders = {column: OneHotEncoder(categories=[np.sort(df[column].unique())], sparse=False, handle_unknown=self.handleUnknown) for column in self._columnsToEncode}
+        for columnName in self._columnsToEncode:
+            self.oneHotEncoders[columnName].fit(df[[columnName]])
 
     def apply(self, df: pd.DataFrame):
         if not self.inplace:
             df = df.copy()
-        for encoder, columnName in zip(self.oneHotEncoders, self.columnNamesToProcess):
-            encodedArray = encoder.transform(df[[columnName]])
+        for columnName in self._columnsToEncode:
+            encodedArray = self.oneHotEncoders[columnName].transform(df[[columnName]])
             df = df.drop(columns=columnName)
             for i in range(encodedArray.shape[1]):
                 df["%s_%d" % (columnName, i)] = encodedArray[:, i]
@@ -244,30 +261,62 @@ class DFTNormalisation(DataFrameTransformer):
     of all applicable columns)
     """
 
-    class Rule:
-        def __init__(self, regex: str, skip=False, unsupported=False, transformer=None):
+    class RuleTemplate:
+        def __init__(self, skip=False, unsupported=False, transformer: Callable = None):
             """
-            :param regex: a regular expression defining the column the rule applies to
-            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
-            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
-            If None the default transformer will be used.
+            :param skip: flag indicating whether no transformation shall be performed on all of the columns
+            :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to all of the columns.
+                If None, the default transformer will be used (as specified in DFTNormalisation instance).
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
-            self.regex = re.compile(regex)
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
 
+        def toRule(self, regex: Optional[str]):
+            """
+            Convert the template to a rule for all columns matching the regex
+
+            :param regex: a regular expression defining the column the rule applies to
+            :return: the resulting Rule
+            """
+            return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer)
+
+        def toPlaceholderRule(self):
+            return self.toRule(None)
+
+    class Rule:
+        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None):
+            """
+            :param regex: a regular expression defining the column(s) the rule applies to.
+                If None, the rule is a placeholder rule and the regex must be set later via setRegex or the rule will not be applicable.
+            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
+            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
+                If None the default transformer will be used.
+            """
+            if skip and transformer is not None:
+                raise ValueError("skip==True while transformer is not None")
+            self.regex = re.compile(regex) if regex is not None else None
+            self.skip = skip
+            self.unsupported = unsupported
+            self.transformer = transformer
+
+        def setRegex(self, regex: str):
+            self.regex = re.compile(regex)
+
         def matches(self, column: str):
+            if self.regex is None:
+                raise Exception("Attempted to apply a placeholder rule. Perhaps the feature generator from which the rule originated was never applied in order to have the rule instantiated.")
             return self.regex.fullmatch(column) is not None
 
         def matchingColumns(self, columns: Sequence[str]):
             return [col for col in columns if self.matches(col)]
 
         def __str__(self):
-            return f"{self.__class__.__name__}[regex='{self.regex}', unsupported={self.unsupported}, skip={self.skip}, transformer={self.transformer}]"
+            return f"{self.__class__.__name__}[regex='{self.regex.pattern}', unsupported={self.unsupported}, skip={self.skip}, transformer={self.transformer}]"
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
@@ -306,11 +355,11 @@ class DFTNormalisation(DataFrameTransformer):
                     flatValues = applicableDF.values.flatten()
                     rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
             else:
-                log.log(logging.DEBUG-1, f"{rule} matched no columns")
+                _log.log(logging.DEBUG - 1, f"{rule} matched no columns")
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            r = "|".join([re.escape(colName) for colName in matchingColumns])
+            r = orRegexGroup(matchingColumns)
             try:
                 specialisedRule.regex = re.compile(r)
             except Exception as e:
@@ -412,3 +461,11 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
 
     def applyInverse(self, df):
         return self._apply(df, True)
+
+
+class DFTSortColumns(RuleBasedDataFrameTransformer):
+    """
+    Sorts a data frame's columns in ascending order
+    """
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df[sorted(df.columns)]

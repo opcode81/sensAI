@@ -10,13 +10,15 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
-log = logging.getLogger(__name__)
+from .util.plot import plotMatrix
+
+_log = logging.getLogger(__name__)
 
 
 class EvalStats(ABC):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
-                 y_true: Union[list, pd.Series, pd.DataFrame] = None):
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+                 y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
         self.y_true = []
         self.y_predicted = []
         self.y_true_multidim = None
@@ -87,8 +89,8 @@ class EvalStats(ABC):
 
 
 class ClassificationEvalStats(EvalStats):
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame] = None,
-            y_true: Union[list, pd.Series, pd.DataFrame] = None,
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
             y_predictedClassProbabilities: pd.DataFrame = None,
             labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
         """
@@ -142,18 +144,25 @@ class ClassificationEvalStats(EvalStats):
             d["GeoMeanTrueClassProb"] = self.getGeoMeanTrueClassProbability()
         return d
 
-    def plotConfusionMatrix(self, normalize=True):
+    def plotConfusionMatrix(self, normalize=True, titleAdd: str = None):
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         confusionMatrix = self.getConfusionMatrix()
-        return confusionMatrix.plot(normalize=normalize)
+        return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
+
 
 class RegressionEvalStats(EvalStats):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
 
     def getAll(self):
         """Gets a dictionary with all metrics"""
-        return dict(RRSE=self.getRRSE(), R2=self.getR2(), PCC=self.getCorrelationCoeff(), MAE=self.getMAE(),
+        return dict(RRSE=self.getRRSE(), R2=self.getR2(), PCC=self.getCorrelationCoeff(), MSE=self.getMSE(), MAE=self.getMAE(),
                     StdDevAE=self.getStdDevAE(), RMSE=self.getRMSE())
+
+    def getMSE(self):
+        y_predicted = np.array(self.y_predicted)
+        y_true = np.array(self.y_true)
+        residuals = y_predicted - y_true
+        return np.sum(residuals * residuals) / len(residuals)
 
     def getRRSE(self):
         """Gets the root relative squared error"""
@@ -224,14 +233,14 @@ class RegressionEvalStats(EvalStats):
         if titleAdd is not None:
             title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
+            fig = plt.figure(title.replace("\n", " "))
         sns.distplot(errors, bins=bins)
         plt.title(title)
         plt.xlabel("error (prediction - ground truth)")
         plt.ylabel("probability density")
         return fig
 
-    def plotScatterGroundTruthPredictions(self, figure=True, **kwargs):
+    def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs):
         """
         :param figure: whether to plot in a separate figure
         :param kwargs: will be passed to plt.scatter()
@@ -240,8 +249,10 @@ class RegressionEvalStats(EvalStats):
         """
         fig = None
         title = "Scatter Plot of Ground Truth vs. Predicted Values"
+        if titleAdd is not None:
+            title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
+            fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
         plt.scatter(self.y_true, self.y_predicted, **kwargs)
         plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
@@ -265,10 +276,10 @@ class RegressionEvalStats(EvalStats):
         if titleAdd:
             title += "\n" + titleAdd
         if figure:
-            fig = plt.figure(title)
-        y_range = [min(self.y_true), max(self.y_true)]
+            fig = plt.figure(title.replace("\n", " "))
+        y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
         plt.plot(y_range, y_range, 'k-', lw=0.75, label="_not in legend", color="green", zorder=2)
-        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, bins=bins)
+        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
             cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
@@ -350,6 +361,17 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
 class ClassificationEvalStatsCollection(EvalStatsCollection):
     def __init__(self, evalStatsList: List[ClassificationEvalStats]):
         super().__init__(evalStatsList)
+        self.globalStats = None
+
+    def getGlobalStats(self) -> ClassificationEvalStats:
+        """
+        Gets an evaluation statistics object that combines the data from all contained eval stats objects
+        """
+        if self.globalStats is None:
+            y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
+            y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
+            self.globalStats = ClassificationEvalStats(y_predicted, y_true)
+        return self.globalStats
 
 
 class ConfusionMatrix:
@@ -357,38 +379,7 @@ class ConfusionMatrix:
         self.labels = sklearn.utils.multiclass.unique_labels(y_true, y_predicted)
         self.confusionMatrix = confusion_matrix(y_true, y_predicted, labels=self.labels)
 
-    def plot(self, normalize=True):
-        confusionMatrix = self.confusionMatrix
-        if normalize:
-            title = 'Normalized Confusion Matrix'
-            confusionMatrix = confusionMatrix.astype('float') / confusionMatrix.sum()
-        else:
-            title = 'Confusion Matrix (Counts)'
-        confusionMatrix = np.transpose(confusionMatrix)
-        fig, ax = plt.subplots()
-        fig.canvas.set_window_title(title)
-        # We want to show all ticks...
-        ax.set(xticks=np.arange(confusionMatrix.shape[1]),
-            yticks=np.arange(confusionMatrix.shape[0]),
-            # ... and label them with the respective list entries
-            xticklabels=self.labels, yticklabels=self.labels,
-            title=title,
-            xlabel='true class',
-            ylabel='predicted class')
-        im = ax.imshow(confusionMatrix, interpolation='nearest', cmap=plt.cm.Blues)
-        ax.figure.colorbar(im, ax=ax)
-
-        # Rotate the tick labels and set their alignment.
-        plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-            rotation_mode="anchor")
-
-        # Loop over data dimensions and create text annotations.
-        fmt = '.2f' if normalize else 'd'
-        thresh = confusionMatrix.max() / 2.
-        for i in range(confusionMatrix.shape[0]):
-            for j in range(confusionMatrix.shape[1]):
-                ax.text(j, i, format(confusionMatrix[i, j], fmt),
-                    ha="center", va="center",
-                    color="white" if confusionMatrix[i, j] > thresh else "black")
-        fig.tight_layout()
-        return ax
+    def plot(self, normalize=True, titleAdd: str = None):
+        title = 'Normalized Confusion Matrix' if normalize else 'Confusion Matrix (Counts)'
+        return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize,
+            titleAdd=titleAdd)

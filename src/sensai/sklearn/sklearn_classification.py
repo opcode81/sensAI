@@ -1,16 +1,14 @@
 import logging
-from typing import Sequence
 
-import lightgbm
 import sklearn.ensemble
 import sklearn.naive_bayes
 import sklearn.neural_network
 import sklearn.tree
 
-from .sklearn_base import AbstractSkLearnVectorClassificationModel, DataFrameTransformer
+from .sklearn_base import AbstractSkLearnVectorClassificationModel
 
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
@@ -35,7 +33,6 @@ class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassif
         super().__init__(sklearn.naive_bayes.MultinomialNB, **modelArgs)
 
 
-class SkLearnLightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    def __init__(self, random_state=42, num_leaves=31, **modelArgs):
-        super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves, **modelArgs)
-
+class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, random_state=42, **modelArgs):
+        super().__init__(sklearn.svm.SVC, random_state=random_state, **modelArgs)

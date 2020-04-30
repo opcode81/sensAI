@@ -1,6 +1,5 @@
 import logging
 import os
-import typing
 from abc import ABC
 from abc import abstractmethod
 from concurrent.futures import ProcessPoolExecutor
@@ -15,7 +14,7 @@ from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperi
 from .vector_model import VectorModel
 from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def iterParamCombinations(hyperParamValues: Dict[str, Sequence[Any]]) -> Generator[Dict[str, Any], None, None]:
@@ -128,7 +127,7 @@ class ParametersMetricsCollection:
             # check sort column and move it to the front
             if self.sortColumnName is not None:
                 if self.sortColumnName not in self.cols:
-                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
+                    _log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
                 else:
                     self.cols.remove(self.sortColumnName)
                     self.cols.insert(0, self.sortColumnName)
@@ -164,7 +163,7 @@ class ParametersMetricsCollection:
 
 
 class GridSearch(TrackedExperimentDataProvider):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
             numProcesses=1, csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
@@ -196,7 +195,7 @@ class GridSearch(TrackedExperimentDataProvider):
             for options in parameterOptions.values():
                 n *= len(options)
             self.numCombinations += n
-        log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
+        _log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
         self._trackedExperiment = None
@@ -205,9 +204,9 @@ class GridSearch(TrackedExperimentDataProvider):
     def _evalParams(cls, modelFactory, evaluatorOrValidator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
-                cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
+                cls._log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
                 return None
-        cls.log.info(f"Evaluating {params}")
+        cls._log.info(f"Evaluating {params}")
         model = modelFactory(**params)
         values = computeEvaluationMetricsDict(model, evaluatorOrValidator)
         values["str(model)"] = str(model)
@@ -235,7 +234,7 @@ class GridSearch(TrackedExperimentDataProvider):
             if loggingCallback is not None:
                 loggingCallback(values)
             paramsMetricsCollection.addValues(values)
-            log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
+            _log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
 
         if self.numProcesses == 1:
             for parameterOptions in self.parameterOptionsList:
@@ -255,7 +254,7 @@ class GridSearch(TrackedExperimentDataProvider):
 
 
 class SAHyperOpt(TrackedExperimentDataProvider):
-    log = log.getChild(__qualname__)
+    _log = _log.getChild(__qualname__)
 
     class State(SAState):
         def __init__(self, params, randomState: Random, results: Dict, computeMetric: Callable[[Dict[str, Any]], float]):
@@ -348,13 +347,13 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
         if metrics is not None:
-            cls.log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
+            cls._log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
             return metrics
         else:
-            cls.log.info(f"Evaluating parameter combination {params}")
+            cls._log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
             metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
-            cls.log.info(f"Got metrics {metrics} for {params}")
+            cls._log.info(f"Got metrics {metrics} for {params}")
             if trackedExperiment is not None:
                 values = dict(metrics)
                 values["str(model)"] = str(model)
@@ -362,7 +361,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
                 trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addModelParamsMetrics(model, params, metrics)
-                cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
+                cls._log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
             if parameterCombinationEquivalenceClassValueCache is not None:
                 parameterCombinationEquivalenceClassValueCache.set(params, metrics)
         return metrics

@@ -9,7 +9,7 @@ import scipy.stats
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
@@ -66,12 +66,22 @@ class PredictorModel(ABC):
     def isRegressionModel(self) -> bool:
         pass
 
+    @abstractmethod
+    def getName(self) -> str:
+        pass
+
 
 class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
-    def __init__(self):
+    def __init__(self, checkInputColumns=True):
+        """
+
+        :param checkInputColumns: Whether to check if the input column list (after feature generation) during inference coincides
+            with the input column list during fit. This should be disabled if feature generation is not performed by the model itself,
+            e.g. in ensemble models.
+        """
         self._featureGenerator: Optional["FeatureGenerator"] = None
         self._inputTransformerChain = DataFrameTransformerChain(())
         self._outputTransformerChain = DataFrameTransformerChain(())
@@ -80,6 +90,8 @@ class VectorModel(PredictorModel, ABC):
         self._modelOutputVariableNames = None
         self._targetTransformer = None
         self._name = None
+        self._isFitted = False
+        self.checkInputColumns = checkInputColumns
 
     @staticmethod
     def _flattened(l: Sequence[Union[T, List[T]]]) -> List[T]:
@@ -161,7 +173,7 @@ class VectorModel(PredictorModel, ABC):
         pass
 
     def isFitted(self):
-        return self.getPredictedVariableNames() is not None
+        return self._isFitted
 
     def _computeInputs(self, x: pd.DataFrame, y=None) -> pd.DataFrame:
         fit = y is not None
@@ -174,7 +186,7 @@ class VectorModel(PredictorModel, ABC):
         if not fit:
             if not self.isFitted():
                 raise Exception(f"Model has not been fitted")
-            if list(x.columns) != self._modelInputVariableNames:
+            if self.checkInputColumns and list(x.columns) != self._modelInputVariableNames:
                 raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(x.columns)}")
         return x
 
@@ -204,7 +216,7 @@ class VectorModel(PredictorModel, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
-        log.info(f"Training {self.__class__.__name__}")
+        _log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
@@ -212,8 +224,9 @@ class VectorModel(PredictorModel, ABC):
             Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
-        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]={self._modelInputVariableNames}")
+        _log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
+        self._isFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -244,7 +257,7 @@ class VectorModel(PredictorModel, ABC):
 
     def getName(self):
         if self._name is None:
-            return "unnamed-%x" % id(self)
+            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
         return self._name
 
     def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
@@ -256,6 +269,8 @@ class VectorModel(PredictorModel, ABC):
 
 class VectorRegressionModel(VectorModel, ABC):
     def __init__(self):
+        """
+        """
         super().__init__()
 
     def isRegressionModel(self) -> bool:
@@ -265,6 +280,8 @@ class VectorRegressionModel(VectorModel, ABC):
 class VectorClassificationModel(VectorModel, ABC):
 
     def __init__(self):
+        """
+        """
         self._labels = None
         super().__init__()
 
@@ -317,7 +334,7 @@ class VectorClassificationModel(VectorModel, ABC):
         for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
             s = valueSeries.sum()
             if abs(s-1.0) > 0.01:
-                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+                _log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
         return result
 
