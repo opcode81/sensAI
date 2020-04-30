@@ -168,7 +168,7 @@ class ParametersMetricsCollection:
 
 class GridSearch(TrackedExperimentDataProvider):
     """
-    Instances of this class can be used for evaluating clustering models with different user-provided parametrizations
+    Instances of this class can be used for evaluating models with different user-provided parametrizations
     over the same data and persisting the results
     """
     _log = _log.getChild(__qualname__)
