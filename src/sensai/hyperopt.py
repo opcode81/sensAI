@@ -109,6 +109,9 @@ class ParameterCombinationEquivalenceClassValueCache(ABC):
 
 
 class ParametersMetricsCollection:
+    """
+    Utility class for holding and persisting evaluation results
+    """
     def __init__(self, csvPath=None, sortColumnName=None):
         """
         :param csvPath: path to save the data frame to upon every update
@@ -121,6 +124,13 @@ class ParametersMetricsCollection:
         self._currentRow = 0
 
     def addValues(self, values: Dict[str, Any]):
+        """
+        Adds the provided values as a new row to the collection.
+        If csvPath was provided in the constructor, saves the updated collection to that file.
+
+        :param values: Dict holding the evaluation results and parameters
+        :return:
+        """
         if self.df is None:
             self.cols = list(values.keys())
 
@@ -152,17 +162,15 @@ class ParametersMetricsCollection:
                 os.makedirs(dirname, exist_ok=True)
             self.df.to_csv(self.csvPath, index=False)
 
-    def addModelParamsMetrics(self, model, params, metrics):
-        values = dict(metrics)
-        values.update(params)
-        values["str(model)"] = str(model)
-        self.addValues(values)
-
     def getDataFrame(self) -> pd.DataFrame:
         return self.df
 
 
 class GridSearch(TrackedExperimentDataProvider):
+    """
+    Instances of this class can be used for evaluating models with different user-provided parametrizations
+    over the same data and persisting the results
+    """
     _log = _log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
@@ -220,6 +228,9 @@ class GridSearch(TrackedExperimentDataProvider):
 
     def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator], sortColumnName=None) -> pd.DataFrame:
         """
+        Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
+        to that file directly after being computed
+
         :param evaluatorOrValidator: the evaluator or cross-validator with which to evaluate models
         :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
             Note that the column names that are generated depend on the evaluator/validator being applied.
@@ -238,16 +249,16 @@ class GridSearch(TrackedExperimentDataProvider):
 
         if self.numProcesses == 1:
             for parameterOptions in self.parameterOptionsList:
-                for i, paramsDict in enumerate(iterParamCombinations(parameterOptions)):
+                for paramsDict in iterParamCombinations(parameterOptions):
                     collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
             futures = []
             for parameterOptions in self.parameterOptionsList:
-                for i, paramsDict in enumerate(iterParamCombinations(parameterOptions)):
+                for paramsDict in iterParamCombinations(parameterOptions):
                     futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
                         **paramsDict))
-            for i, future in enumerate(futures):
+            for future in futures:
                 collectResult(future.result())
 
         return paramsMetricsCollection.getDataFrame()
@@ -354,13 +365,14 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             model = modelFactory(**params)
             metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
             cls._log.info(f"Got metrics {metrics} for {params}")
+
+            values = dict(metrics)
+            values["str(model)"] = str(model)
+            values.update(**params)
             if trackedExperiment is not None:
-                values = dict(metrics)
-                values["str(model)"] = str(model)
-                values.update(**params)
                 trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
-                parametersMetricsCollection.addModelParamsMetrics(model, params, metrics)
+                parametersMetricsCollection.addValues(values)
                 cls._log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
             if parameterCombinationEquivalenceClassValueCache is not None:
                 parameterCombinationEquivalenceClassValueCache.set(params, metrics)

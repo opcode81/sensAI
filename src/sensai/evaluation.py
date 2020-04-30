@@ -13,19 +13,20 @@ import matplotlib.pyplot as plt
 
 from .util.io import ResultWriter
 from .util.typing import PandasNamedTuple
-from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel, VectorRegressionModel
+from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel, VectorRegressionModel, \
+    VectorModel
 from .eval_stats import RegressionEvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
-    ClassificationEvalStatsCollection
+    ClassificationEvalStatsCollection, EvalStats, EvalStatsCollection
 
 
 _log = logging.getLogger(__name__)
 
-TModel = TypeVar("TModel", VectorRegressionModel, VectorClassificationModel)
-TEvalStats = TypeVar("TEvalStats", RegressionEvalStats, ClassificationEvalStats)
-TEvalStatsCollection = TypeVar("TEvalStatsCollection", RegressionEvalStatsCollection, ClassificationEvalStatsCollection)
-TEvaluator = TypeVar("TEvaluator", "VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator")
-TEvalData = TypeVar("TEvalData", "VectorRegressionModelEvaluationData", "VectorClassificationModelEvaluationData")
-TCrossValData = TypeVar("TCrossValData", "VectorClassificationModelCrossValidationData", "VectorRegressionModelCrossValidationData")
+TModel = TypeVar("TModel", bound=VectorModel)
+TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
+TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
+TEvaluator = TypeVar("TEvaluator", bound="VectorModelEvaluator")
+TEvalData = TypeVar("TEvalData", bound="VectorModelEvaluationData")
+TCrossValData = TypeVar("TCrossValData", bound="VectorModelCrossValidationData")
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
