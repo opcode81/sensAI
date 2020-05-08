@@ -33,6 +33,7 @@ class TorchModel(ABC):
         self.outputScaler: Optional[TensorScaler] = None
         self.inputScaler: Optional[TensorScaler] = None
         self.bestEpoch = None
+        self._gpu = None
 
     def setTorchModule(self, module: torch.nn.Module):
         self.module = module
@@ -58,14 +59,29 @@ class TorchModel(ABC):
     def _loadModel(self, modelFile):
         try:
             self.module = torch.load(modelFile)
+            self._gpu = self._getGPUFromModelParameterDevice()
         except:
             if self._isCudaEnabled():
-                self.log.warning("Loading of CUDA model failed, trying without CUDA...")
+                if torch.cuda.device_count() > 0:
+                    newDevice = "cuda:0"
+                else:
+                    newDevice = "cpu"
+                self.log.warning(f"Loading of CUDA model failed, trying to map model to device {newDevice}...")
                 if type(modelFile) != str:
                     modelFile.seek(0)
-                self.module = torch.load(modelFile, map_location='cpu')
-                self._setCudaEnabled(False)
-                self.log.info("Model successfully loaded to CPU")
+                try:
+                    self.module = torch.load(modelFile, map_location=newDevice)
+                except:
+                    self.log.warning(f"Failure to map model to device {newDevice}, trying CPU...")
+                    if newDevice != "cpu":
+                        newDevice = "cpu"
+                        self.module = torch.load(modelFile, map_location=newDevice)
+                if newDevice == "cpu":
+                    self._setCudaEnabled(False)
+                    self._gpu = None
+                else:
+                    self._gpu = 0
+                self.log.info(f"Model successfully loaded to {newDevice}")
             else:
                 raise
 
@@ -125,6 +141,7 @@ class TorchModel(ABC):
             X = torch.from_numpy(X).float()
 
         if self._isCudaEnabled():
+            torch.cuda.set_device(self._gpu)
             X = X.cuda()
         if scaleInput:
             X = self.inputScaler.normalise(X)
@@ -168,6 +185,13 @@ class TorchModel(ABC):
         optimiser = NNOptimiser(**nnOptimiserParams)
         optimiser.fit(self, data)
         self.bestEpoch = optimiser.getBestEpoch()
+        self._gpu = self._getGPUFromModelParameterDevice()
+
+    def _getGPUFromModelParameterDevice(self) -> Optional[int]:
+        try:
+            return next(self.module.parameters()).get_device()
+        except:
+            return None
 
 
 class VectorTorchModel(TorchModel, ABC):

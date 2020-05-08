@@ -68,6 +68,20 @@ class FeatureGenerator(ABC):
                 self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex, unsupported=True))
                 self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex + r"_\d+", skip=True))  # rule for one-hot transformation
 
+        self._name = None
+
+    def getName(self) -> str:
+        """
+        :return: the name of this feature generator, which may be a default name if the name has not been set. Note that feature generators created
+            by a FeatureGeneratorFactory always get the name with which the generator factory was registered.
+        """
+        if self._name is None:
+            return f"{self.__class__.__name__}-{id(self)}"
+        return self._name
+
+    def setName(self, name):
+        self._name = name
+
     def getNormalisationRules(self, includeGeneratedCategoricalRules=True) -> List[data_transformation.DFTNormalisation.Rule]:
         if includeGeneratedCategoricalRules:
             return self._normalisationRules + self._categoricalFeatureRules
@@ -223,6 +237,12 @@ class MultiFeatureGenerator(FeatureGenerator):
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
         for fg in self.featureGenerators:
             fg.fit(X, Y)
+
+    def getNames(self) -> List[str]:
+        """
+        :return: the list of names of all contained feature generators
+        """
+        return [fg.name for fg in self.featureGenerators]
 
 
 class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
@@ -516,10 +536,15 @@ class FeatureGeneratorRegistry:
         1    2
         2    3
     """
-    def __init__(self):
+    def __init__(self, useSingletons=False):
+        """
+        :param useSingletons: if True, internally maintain feature generator singletons, such that there is at most one
+            instance for each name
+        """
         # Important: Don't set public members in init. Since we override setattr this would lead to undesired consequences
-        self._featureGeneratorFactories = {}
-        self._featureGeneratorSingletons = {}
+        self._featureGeneratorFactories: Dict[str, Callable[[], FeatureGenerator]] = {}
+        self._featureGeneratorSingletons: Dict[str, Callable[[], FeatureGenerator]] = {}
+        self._useSingletons = useSingletons
 
     def __setattr__(self, name: str, value):
         if not name.startswith("_"):
@@ -547,12 +572,13 @@ class FeatureGeneratorRegistry:
         super().__setattr__(name, factory)
         self._featureGeneratorFactories[name] = factory
 
-    def getFeatureGenerator(self, name):
+    def getFeatureGenerator(self, name) -> FeatureGenerator:
         """
-        Creates a feature generator from a name, which must
+        Creates a feature generator from a name, which must have been previously registered.
+        The name of the returned feature generator (as returned by getName()) is set to name.
 
         :param name: the name of the generator
-        :return: a new feature generator instance
+        :return: a new feature generator instance (or existing instance for the case where useSingletons is enabled)
         """
         generator = self._featureGeneratorSingletons.get(name)
         if generator is None:
@@ -560,7 +586,9 @@ class FeatureGeneratorRegistry:
             if factory is None:
                 raise ValueError(f"No factory registered for name '{name}': known names: {list(self._featureGeneratorFactories.keys())}. Use registerFeatureGeneratorFactory to register a new feature generator factory.")
             generator = factory()
-            self._featureGeneratorSingletons[name] = generator
+            generator.setName(name)
+            if self._useSingletons:
+                self._featureGeneratorSingletons[name] = generator
         return generator
 
 
