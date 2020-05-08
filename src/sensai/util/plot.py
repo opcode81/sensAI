@@ -60,8 +60,14 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
 
 
 class Plot:
-    def __init__(self, draw: Callable[[], plt.Axes]):
-        self.fig: matplotlib.figure.Figure = plt.figure()
+    def __init__(self, draw: Callable[[], plt.Axes] = None, name=None):
+        """
+        :param draw: function which returns a matplotlib.Axes object to show
+        :param name: name/number of the figure, which determines the window caption; it should be unique, as any plot
+            with the same name will have its contents rendered in the same window. By default, figures are number
+            sequentially.
+        """
+        self.fig: matplotlib.figure.Figure = plt.figure(name)
         self.ax = draw()
 
     def xlabel(self, label):

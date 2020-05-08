@@ -78,6 +78,35 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
+class DataSplitter(ABC):
+    @abstractmethod
+    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
+        pass
+
+
+class DataSplitterFractional(DataSplitter):
+    def __init__(self, fractionalSizeOfFirstSet, shuffle=True, randomSeed: int = 42):
+        if not 0 <= fractionalSizeOfFirstSet <= 1:
+            raise Exception(f"invalid fraction: {fractionalSizeOfFirstSet}")
+        self.fractionalSizeOfFirstSet = fractionalSizeOfFirstSet
+        self.shuffle = shuffle
+        self.randomSeed = randomSeed
+
+    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
+        numDataPoints = len(data)
+        splitIndex = int(numDataPoints * self.fractionalSizeOfFirstSet)
+        rand = np.random.RandomState(self.randomSeed)
+        if self.shuffle:
+            indices = rand.permutation(numDataPoints)
+        else:
+            indices = range(numDataPoints)
+        indicesA = indices[:splitIndex]
+        indicesB = indices[splitIndex:]
+        A = data.filterIndices(list(indicesA))
+        B = data.filterIndices(list(indicesB))
+        return A, B
+
+
 class VectorModelEvaluator(ABC):
     @staticmethod
     def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
@@ -90,37 +119,27 @@ class VectorModelEvaluator(ABC):
         else:
             return VectorClassificationModelEvaluator(data, **kwargs)
 
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, shuffle=True):
+    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
+            testFraction=None, randomSeed=42, shuffle=True):
         """
         Constructs an evaluator with test and training data.
-        Exactly one of the parameters {testFraction, testData} must be given
+        Exactly one of the parameters {testFraction, testData, } must be given
 
         :param data: the full data set, or, if testData is given, the training data
-        :param testFraction: the fraction of the data to use for testing/evaluation
-        :param testData: the data to use for testing/evaluation
-        :param randomSeed: the random seed to use for splits of the data
-        :param shuffle: whether to randomly (based on randomSeed) shuffle the dataset when splitting it
+        :param testData: the data to use for testing/evaluation; if None, must specify either dataSplitter testFraction or dataSplitter
+        :param dataSplitter: [if testData is None] a splitter to use in order to obtain; if None, must specify either testData or testFraction
+        :param testFraction: [if testData is None, dataSplitter is None] the fraction of the data to use for testing/evaluation;
+            if None, must specify either testData or dataSplitter
+        :param randomSeed: [if data is None, dataSplitter is None] the random seed to use for the fractional split of the data
+        :param shuffle: [if data is None, dataSplitter is None] whether to randomly (based on randomSeed) shuffle the dataset before
+            splitting it
         """
-        self.testFraction = testFraction
-
-        if self.testFraction is None and testData is None:
-            raise Exception("Either testFraction or testData must be provided")
-        if self.testFraction is not None and testData is not None:
-            raise Exception("Cannot provide both testFraction and testData")
-
-        if self.testFraction is not None:
-            if not 0 <= self.testFraction <= 1:
-                raise Exception(f"invalid testFraction: {testFraction}")
-            numDataPoints = len(data)
-            splitIndex = int(numDataPoints * self.testFraction)
-            if shuffle:
-                indices = np.random.RandomState(randomSeed).permutation(numDataPoints)
-            else:
-                indices = range(numDataPoints)
-            trainingIndices = indices[splitIndex:]
-            testIndices = indices[:splitIndex]
-            self.trainingData = data.filterIndices(list(trainingIndices))
-            self.testData = data.filterIndices(list(testIndices))
+        if (testData, dataSplitter, testFraction).count(None) != 2:
+            raise ValueError("Exactly one of {testData, dataSplitter, testFraction} must be given")
+        if testData is None:
+            if dataSplitter is None:
+                dataSplitter = DataSplitterFractional(1 - testFraction, shuffle=shuffle, randomSeed=randomSeed)
+            self.trainingData, self.testData = dataSplitter.split(data)
         else:
             self.trainingData = data
             self.testData = testData
@@ -144,8 +163,8 @@ class VectorModelEvaluator(ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None, randomSeed=42, shuffle=True):
-        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
+    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True):
+        super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
 
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
@@ -185,9 +204,9 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testFraction=None, testData: InputOutputData = None,
+    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
             randomSeed=42, computeProbabilities=False, shuffle=True):
-        super().__init__(data=data, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
+        super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities
 
     def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:

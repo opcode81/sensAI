@@ -11,7 +11,7 @@ from sklearn.preprocessing import OneHotEncoder
 from .columngen import ColumnGenerator
 from .util.string import orRegexGroup
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class DataFrameTransformer(ABC):
@@ -169,11 +169,12 @@ class DFTModifyColumnVectorized(DFTModifyColumn):
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
-    def __init__(self, columns: Union[str, Sequence[str]], categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
+    def __init__(self, columns: Optional[Union[str, Sequence[str]]], categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
 
-        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each
+        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each;
+            If None, then no columns are actually to be one-hot-encoded
         :param categories: numpy arrays containing the possible values of each of the specified columns (for case where sequence is specified
             in 'columns') or dictionary mapping column name to array of possible categories for the column name.
             If None, the possible values will be inferred from the columns
@@ -181,7 +182,10 @@ class DFTOneHotEncoder(DataFrameTransformer):
             encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
         """
         self.oneHotEncoders = None
-        if type(columns) == str:
+        if columns is None:
+            self._columnsToEncode = []
+            self._columnNameRegex = "$"
+        elif type(columns) == str:
             self._columnNameRegex = columns
             self._columnsToEncode = None
         else:
@@ -200,12 +204,17 @@ class DFTOneHotEncoder(DataFrameTransformer):
     def fit(self, df: pd.DataFrame):
         if self._columnsToEncode is None:
             self._columnsToEncode = [c for c in df.columns if re.fullmatch(self._columnNameRegex, c) is not None]
+            if len(self._columnsToEncode) == 0:
+                log.warning(f"{self} does not apply to any columns, transformer has no effect; regex='{self._columnNameRegex}'")
         if self.oneHotEncoders is None:
             self.oneHotEncoders = {column: OneHotEncoder(categories=[np.sort(df[column].unique())], sparse=False, handle_unknown=self.handleUnknown) for column in self._columnsToEncode}
         for columnName in self._columnsToEncode:
             self.oneHotEncoders[columnName].fit(df[[columnName]])
 
     def apply(self, df: pd.DataFrame):
+        if len(self._columnsToEncode) == 0:
+            return df
+
         if not self.inplace:
             df = df.copy()
         for columnName in self._columnsToEncode:
@@ -355,7 +364,7 @@ class DFTNormalisation(DataFrameTransformer):
                     flatValues = applicableDF.values.flatten()
                     rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
             else:
-                _log.log(logging.DEBUG - 1, f"{rule} matched no columns")
+                log.log(logging.DEBUG - 1, f"{rule} matched no columns")
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)

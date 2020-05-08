@@ -107,3 +107,27 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
 
     def valueSlice(self, lowestKey, highestKey) -> Optional[Sequence[TValue]]:
         return self._valueSlice(self.ceilIndex(lowestKey), self.floorIndex(highestKey))
+
+    def slice(self, lowerBoundKey=None, upperBoundKey=None, inner=True) -> "SortedKeyValuePairs":
+        """
+        :param lowerBoundKey: the key defining the start of the slice (depending on inner);
+            if None, the first included entry will be the very first entry
+        :param upperBoundKey: the key defining the end of the slice (depending on inner);
+            if None, the last included entry will be the very last entry
+        :param inner: if True, the returned slice will be within the bounds; if False, the the returned
+            slice is extended by one entry in both directions such that it contains the bounds (where possible)
+        :return:
+        """
+        if lowerBoundKey is not None:
+            fromIndex = self.ceilIndex(lowerBoundKey) if inner else self.floorIndex(lowerBoundKey)
+            if fromIndex is None:
+                fromIndex = 0
+        else:
+            fromIndex = 0
+        if upperBoundKey is not None:
+            toIndex = self.floorIndex(upperBoundKey) if inner else self.ceilIndex(upperBoundKey)
+            if toIndex is None:
+                toIndex = len(self.entries)
+        else:
+            toIndex = len(self.entries)
+        return SortedKeyValuePairs(self.entries[fromIndex:toIndex])
