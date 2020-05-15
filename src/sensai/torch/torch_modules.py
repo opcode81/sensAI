@@ -93,7 +93,7 @@ class MultiLayerPerceptron(MCDropoutCapableNNModule):
 
     def __str__(self):
         return objectRepr(self, dict(inputDim=self.inputDim, outputDim=self.outputDim, hiddenDims=self.hiddenDims,
-            hidActivationFn=self.hidActivationFn.__name__, outputActivationFn=self.outputActivationFn.__name__,
+            hidActivationFn=self.hidActivationFn.__name__ if self.hidActivationFn is not None else None, outputActivationFn=self.outputActivationFn.__name__ if self.outputActivationFn is not None else None,
             pDropout=self.pDropout))
 
     def forward(self, x):

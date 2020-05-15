@@ -395,7 +395,7 @@ class NNOptimiser:
             f"optimiserArgs={self.optimiserArgs}]"
 
     def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
-        self.log.info(f"Learning parameters of {model} via {self}")
+        self.log.info(f"Preparing parameter learning of {model} via {self}")
 
         def toDataSetProvider(d) -> TorchDataSetProvider:
             if isinstance(d, TorchDataSetProvider):
@@ -445,6 +445,7 @@ class NNOptimiser:
         model.setTorchModule(torchModel)
 
         nParams = sum([p.nelement() for p in torchModel.parameters()])
+        self.log.info(f"Learning parameters of {model} via {self}")
         trainingLog('Number of parameters: %d' % nParams)
 
         criterion = self.lossEvaluator.getTrainingCriterion()
