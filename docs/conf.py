@@ -80,7 +80,7 @@ def findLineFromObjectName(sourceFile, objectName):
 
 
 autodoc_mock_imports = ["torch", "torchtext", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml",
-                        "sqlite3", "azureml", "mlflow", "MySQLdb"]
+                        "sqlite3", "azureml", "mlflow", "MySQLdb", "catboost"]
 
 # Render docu of __init__ methods
 # autoclass_content = 'both'

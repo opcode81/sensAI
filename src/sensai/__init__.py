@@ -19,3 +19,4 @@ from .ensemble import AveragingVectorRegressionModel
 # tensorflow
 # torch
 # lightgbm
+# catboost
