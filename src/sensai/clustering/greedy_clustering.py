@@ -2,6 +2,7 @@
 import logging
 import math
 import queue
+from abc import ABC, abstractmethod
 
 log = logging.getLogger(__name__)
          
@@ -14,19 +15,21 @@ class GreedyAgglomerativeClustering(object):
     """
     log = log.getChild(__qualname__)
 
-    class Cluster(object):
+    class Cluster(ABC):
         """
         Base class for clusters that can be merged via GreedyAgglomerativeClustering
         """
 
+        @abstractmethod
         def mergeCost(self, other):
             """Computes the cost of merging the clusters other and self; if a merge is admissible, returns math.inf"""
-            raise Exception("Not implemented")
-        
+            pass
+
+        @abstractmethod
         def merge(self, other):
             """Merges the given cluster into this cluster"""
-            raise Exception("Not implemented")
-        
+            pass
+
     def __init__(self, clusters):
         """
         Parameters:
@@ -45,13 +48,13 @@ class GreedyAgglomerativeClustering(object):
         # compute all possible merges, adding them to the queue
         self.log.info("Computing initial merges")
         for idx, wc in enumerate(self.wrappedClusters):
-            self.log.info("Computing potential merges for cluster index %d" % idx)
+            self.log.debug("Computing potential merges for cluster index %d" % idx)
             wc.computeMerges(False)
         
         # perform greedy agglomerative clustering
         steps = 0
         while not self.prioritisedMerges.empty():
-            self.log.info("Clustering step %d" % (steps+1))
+            self.log.debug("Clustering step %d" % (steps+1))
             haveMerge = False
             while not haveMerge and not self.prioritisedMerges.empty():
                 merge = self.prioritisedMerges.get()
@@ -112,12 +115,12 @@ class GreedyAgglomerativeClustering(object):
 
         def apply(self):
             c1, c2 = self.c1, self.c2
-            self.log.info("Merging %s into %s..." % (str(c1), str(c2)))
+            self.log.debug("Merging %s into %s..." % (str(c1), str(c2)))
             c1.cluster.merge(c2.cluster)
             c2.isMerged = True
             c1.removeMerges()
             c2.removeMerges()
-            self.log.info("Computing new merge costs for %s..." % str(c1))
+            self.log.debug("Computing new merge costs for %s..." % str(c1))
             c1.computeMerges(True)
         
         def __lt__(self, other):

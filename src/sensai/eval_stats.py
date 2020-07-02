@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Union, List
+from typing import Union, List, TypeVar, Generic, Dict, Sequence
 
 import numpy as np
 import pandas as pd
@@ -8,25 +8,43 @@ import seaborn as sns
 import sklearn.utils.multiclass
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 from .util.plot import plotMatrix
 
 _log = logging.getLogger(__name__)
 
 
-class EvalStats(ABC):
+TEvalStats = TypeVar("TEvalStats", bound="EvalStats")
+TMetric = TypeVar("TMetric", bound="Metric")
+
+
+class Metric(Generic[TEvalStats], ABC):
+    def __init__(self, name):
+        self.name = name
+
+    @abstractmethod
+    def computeValueForEvalStats(self, evalStats: TEvalStats):
+        pass
+
+
+class EvalStats(Generic[TMetric], ABC):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
     def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-                 y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
+            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            metrics: List[TMetric] = None):
         self.y_true = []
         self.y_predicted = []
         self.y_true_multidim = None
         self.y_predicted_multidim = None
         self.name = None
 
+        if metrics is None:
+            raise ValueError("No metrics provided")
+        self.metrics = metrics
+
         if y_predicted is not None:
-            self.addAll(y_predicted, y_true)
+            self._addAll(y_predicted, y_true)
 
     def __str__(self):
         d = self.getAll()
@@ -35,11 +53,20 @@ class EvalStats(ABC):
     def setName(self, name):
         self.name = name
 
-    @abstractmethod
-    def getAll(self):
-        pass
+    def addMetric(self, metric: TMetric):
+        self.metrics.append(metric)
 
-    def add(self, y_predicted, y_true):
+    def computeMetricValue(self, metric: TMetric):
+        return metric.computeValueForEvalStats(self)
+
+    def getAll(self):
+        """Gets a dictionary with all metrics"""
+        d = {}
+        for metric in self.metrics:
+            d[metric.name] = self.computeMetricValue(metric)
+        return d
+
+    def _add(self, y_predicted, y_true):
         """
         Adds a single pair of values to the evaluation
 
@@ -50,13 +77,13 @@ class EvalStats(ABC):
         self.y_true.append(y_true)
         self.y_predicted.append(y_predicted)
 
-    def addAll(self, y_predicted, y_true):
+    def _addAll(self, y_predicted, y_true):
         """
         Adds multiple predicted values and the corresponding ground truth values to the evaluation
 
         Parameters:
-            y_predicted: pandas.Series or list of predicted values or, in the case of multi-dimensional models,
-                        a pandas DataFrame (multiple series) containing predicted value
+            y_predicted: pandas.Series, array or list of predicted values or, in the case of multi-dimensional models,
+                        a pandas DataFrame (multiple series) containing predicted values
             y_true: an object of the same type/shape as y_predicted containing the corresponding ground truth values
         """
         if (isinstance(y_predicted, pd.Series) or isinstance(y_predicted, list) or isinstance(y_predicted, np.ndarray)) \
@@ -88,60 +115,112 @@ class EvalStats(ABC):
         self.y_predicted.extend(y_predicted)
 
 
-class ClassificationEvalStats(EvalStats):
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
+    def __init__(self, name, requiresProbabilities=False):
+        super().__init__(name)
+        self.requiresProbabilities = requiresProbabilities
+
+    def computeValueForEvalStats(self, evalStats: "ClassificationEvalStats"):
+        return self.computeValue(evalStats.y_true, evalStats.y_predicted, evalStats.y_predictedClassProbabilities)
+
+    def computeValue(self, y_true, y_predicted, y_predictedClassProbabilities=None):
+        if self.requiresProbabilities and y_predictedClassProbabilities is None:
+            raise ValueError(f"{self} requires class probabilities")
+        return self._computeValue(y_true, y_predicted, y_predictedClassProbabilities)
+
+    @abstractmethod
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        pass
+
+
+class ClassificationMetricAccuracy(ClassificationMetric):
+    def __init__(self):
+        super().__init__("ACC")
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        return accuracy_score(y_true=y_true, y_pred=y_predicted)
+
+
+class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetric):
+    def __init__(self):
+        super().__init__("GeoMeanTrueClassProb", requiresProbabilities=True)
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        y_predicted_proba_true_class = np.zeros(len(y_true))
+        for i in range(len(y_true)):
+            trueClass = y_true[i]
+            if trueClass not in y_predictedClassProbabilities.columns:
+                y_predicted_proba_true_class[i] = 0
+            else:
+                y_predicted_proba_true_class[i] = y_predictedClassProbabilities[trueClass].iloc[i]
+        # the 1e-3 below prevents lp = -inf due to single entries with y_predicted_proba_true_class=0
+        lp = np.log(np.maximum(1e-3, y_predicted_proba_true_class))
+        return np.exp(lp.sum() / len(lp))
+
+
+class ClassificationMetricTopNAccuracy(ClassificationMetric):
+    def __init__(self, n: int):
+        super().__init__(f"Top{n}Accuracy", requiresProbabilities=True)
+        self.n = n
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        labels = y_predictedClassProbabilities.columns
+        cnt = 0
+        for i, rowValues in enumerate(y_predictedClassProbabilities.values.tolist()):
+            pairs = sorted(zip(labels, rowValues), key=lambda x: x[1], reverse=True)
+            if y_true[i] in (x[0] for x in pairs[:self.n]):
+                cnt += 1
+        return cnt / len(y_true)
+
+
+class ClassificationEvalStats(EvalStats[ClassificationMetric]):
+    def __init__(self, y_predicted: Union[list, pd.Series, np.ndarray] = None,
             y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
             y_predictedClassProbabilities: pd.DataFrame = None,
-            labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None):
+            labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            metrics: Sequence[ClassificationMetric] = None,
+            additionalMetrics: Sequence[ClassificationMetric] = None):
         """
         :param y_predicted: the predicted class labels
         :param y_true: the true class labels
         :param y_predictedClassProbabilities: a data frame whose columns are the class labels and whose values are probabilities
         :param labels: the list of class labels
+        :param metrics: the metrics to compute for evaluation; if None, use default metrics
+        :param additionalMetrics: the metrics to additionally compute
         """
-        super().__init__(y_predicted=y_predicted, y_true=y_true)
         self.labels = labels
-        self.y_predicted_proba = y_predictedClassProbabilities
+        self.y_predictedClassProbabilities = y_predictedClassProbabilities
         self._probabilitiesAvailable = y_predictedClassProbabilities is not None
-
         if self._probabilitiesAvailable:
-            self.y_predicted_proba_true_class = self._computeProbabilitiesOfTrueClass()
+            colSet = set(y_predictedClassProbabilities.columns)
+            if colSet != set(labels):
+                raise ValueError(f"Set of columns in class probabilities data frame ({colSet}) does not correspond to labels ({labels}")
+            if len(y_predictedClassProbabilities) != len(y_true):
+                raise ValueError("Row count in class probabilities data frame does not match ground truth")
 
-    def _computeProbabilitiesOfTrueClass(self):
-        result = []
-        for i in range(len(self.y_true)):
-            trueClass = self.y_true[i]
-            probTrueClass = self.y_predicted_proba[trueClass].iloc[i]
-            result.append(probTrueClass)
-        return np.array(result)
+        if metrics is None:
+            metrics = [ClassificationMetricAccuracy(), ClassificationMetricGeometricMeanOfTrueClassProbability()]
+        metrics = list(metrics)
+        if additionalMetrics is not None:
+            for m in additionalMetrics:
+                if not self._probabilitiesAvailable and m.requiresProbabilities:
+                    raise ValueError(f"Additional metric {m} not supported, as class probabilities were not provided")
+            metrics.extend(additionalMetrics)
+
+        super().__init__(y_predicted=y_predicted, y_true=y_true, metrics=metrics)
 
     def getConfusionMatrix(self) -> "ConfusionMatrix":
         return ConfusionMatrix(self.y_true, self.y_predicted)
 
     def getAccuracy(self):
-        return accuracy_score(y_true=self.y_true, y_pred=self.y_predicted)
-
-    def getAveragedPrecision(self):
-        return precision_score(y_true=self.y_true, y_pred=self.y_predicted, average='weighted')
-
-    def getAveragedRecall(self):
-        return recall_score(y_true=self.y_true, y_pred=self.y_predicted, average='weighted')
-
-    def getAveragedF1(self):
-        return f1_score(y_true=self.y_true, y_pred=self.y_predicted, average='weighted')
-
-    def getGeoMeanTrueClassProbability(self):
-        if not self._probabilitiesAvailable:
-            return None
-        # the 1e-3 below prevents lp = -inf due to single entries with y_predicted_proba_true_class=0
-        lp = np.log(np.maximum(1e-3, self.y_predicted_proba_true_class))
-        return np.exp(lp.sum() / len(lp))
+        return self.computeMetricValue(ClassificationMetricAccuracy())
 
     def getAll(self):
         """Gets a dictionary with all metrics"""
-        d = dict(ACC=self.getAccuracy())
-        if self._probabilitiesAvailable:
-            d["GeoMeanTrueClassProb"] = self.getGeoMeanTrueClassProbability()
+        d = {}
+        for metric in self.metrics:
+            if not metric.requiresProbabilities or self._probabilitiesAvailable:
+                d[metric.name] = self.computeMetricValue(metric)
         return d
 
     def plotConfusionMatrix(self, normalize=True, titleAdd: str = None):
@@ -150,59 +229,148 @@ class ClassificationEvalStats(EvalStats):
         return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
 
 
-class RegressionEvalStats(EvalStats):
-    """Collects data for the evaluation of a model and computes corresponding metrics"""
+class RegressionMetric(Metric["RegressionEvalStats"], ABC):
+    def __init__(self, name):
+        super().__init__(name)
 
-    def getAll(self):
-        """Gets a dictionary with all metrics"""
-        return dict(RRSE=self.getRRSE(), R2=self.getR2(), PCC=self.getCorrelationCoeff(), MSE=self.getMSE(), MAE=self.getMAE(),
-                    StdDevAE=self.getStdDevAE(), RMSE=self.getRMSE())
+    def computeValueForEvalStats(self, evalStats: "RegressionEvalStats"):
+        return self.computeValue(np.array(evalStats.y_true), np.array(evalStats.y_predicted))
 
-    def getMSE(self):
-        y_predicted = np.array(self.y_predicted)
-        y_true = np.array(self.y_true)
+    @classmethod
+    @abstractmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        pass
+
+    @classmethod
+    def computeErrors(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        return y_predicted - y_true
+
+    @classmethod
+    def computeAbsErrors(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        return np.abs(cls.computeErrors(y_true, y_predicted))
+
+
+class RegressionMetricMAE(RegressionMetric):
+    def __init__(self):
+        super().__init__("MAE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        return cls.computeAbsErrors(y_true, y_predicted)
+
+
+class RegressionMetricMSE(RegressionMetric):
+    def __init__(self):
+        super().__init__("MSE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
         residuals = y_predicted - y_true
         return np.sum(residuals * residuals) / len(residuals)
 
-    def getRRSE(self):
-        """Gets the root relative squared error"""
-        y_predicted = np.array(self.y_predicted)
-        y_true = np.array(self.y_true)
+
+class RegressionMetricRMSE(RegressionMetric):
+    def __init__(self):
+        super().__init__("MSE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        errors = cls.computeErrors(y_true, y_predicted)
+        return np.sqrt(np.mean(errors * errors))
+
+
+class RegressionMetricRRSE(RegressionMetric):
+    def __init__(self):
+        super().__init__("RRSE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
         mean_y = np.mean(y_true)
         residuals = y_predicted - y_true
         mean_deviation = y_true - mean_y
         return np.sqrt(np.sum(residuals * residuals) / np.sum(mean_deviation * mean_deviation))
 
+
+class RegressionMetricR2(RegressionMetric):
+    def __init__(self):
+        super().__init__("R2")
+
+    def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
+        rrse = RegressionMetricRRSE.computeValue(y_true, y_predicted)
+        return 1.0 - rrse*rrse
+
+
+class RegressionMetricPCC(RegressionMetric):
+    def __init__(self):
+        super().__init__("PCC")
+
+    def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
+        cov = np.cov([y_true, y_predicted])
+        return cov[0][1] / np.sqrt(cov[0][0] * cov[1][1])
+
+
+class RegressionMetricStdDevAE(RegressionMetric):
+    def __init__(self):
+        super().__init__("StdDevAE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        return np.std(cls.computeAbsErrors(y_true, y_predicted))
+
+
+class RegressionMetricMedianAE(RegressionMetric):
+    def __init__(self):
+        super().__init__("MedianAE")
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+        return np.median(cls.computeAbsErrors(y_true, y_predicted))
+
+
+class RegressionEvalStats(EvalStats[RegressionMetric]):
+    """Collects data for the evaluation of a model and computes corresponding metrics"""
+
+    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
+            metrics: Sequence[RegressionMetric] = None,
+            additionalMetrics: Sequence[RegressionMetric] = None):
+
+        if metrics is None:
+            metrics = [RegressionMetricRRSE(), RegressionMetricR2(), RegressionMetricPCC(),
+                       RegressionMetricMAE(), RegressionMetricMSE(), RegressionMetricRMSE(),
+                       RegressionMetricStdDevAE()]
+        metrics = list(metrics)
+        if additionalMetrics is not None:
+            metrics.extend(additionalMetrics)
+
+        super().__init__(y_predicted=y_predicted, y_true=y_true, metrics=metrics)
+
+    def getMSE(self):
+        return self.computeMetricValue(RegressionMetricMSE())
+
+    def getRRSE(self):
+        """Gets the root relative squared error"""
+        return self.computeMetricValue(RegressionMetricRRSE())
+
     def getCorrelationCoeff(self):
         """Gets the Pearson correlation coefficient (PCC)"""
-        cov = np.cov([self.y_true, self.y_predicted])
-        return cov[0][1] / np.sqrt(cov[0][0] * cov[1][1])
+        return self.computeMetricValue(RegressionMetricPCC())
 
     def getR2(self):
         """Gets the R^2 score"""
-        rrse = self.getRRSE()
-        return 1.0 - rrse*rrse
-
-    def _getErrors(self):
-        y_predicted = np.array(self.y_predicted)
-        y_true = np.array(self.y_true)
-        return y_predicted - y_true
-
-    def _getAbsErrors(self):
-        return np.abs(self._getErrors())
+        return self.computeMetricValue(RegressionMetricR2())
 
     def getMAE(self):
         """Gets the mean absolute error"""
-        return np.mean(self._getAbsErrors())
+        return self.computeMetricValue(RegressionMetricMAE())
 
     def getRMSE(self):
         """Gets the root mean squared error"""
-        errors = self._getErrors()
-        return np.sqrt(np.mean(errors * errors))
+        return self.computeMetricValue(RegressionMetricRMSE())
 
     def getStdDevAE(self):
         """Gets the standard deviation of the absolute error"""
-        return np.std(self._getAbsErrors())
+        return self.computeMetricValue(RegressionMetricStdDevAE())
 
     def getEvalStatsCollection(self):
         """
@@ -214,8 +382,7 @@ class RegressionEvalStats(EvalStats):
         dim = len(self.y_true_multidim)
         statsList = []
         for i in range(dim):
-            stats = RegressionEvalStats()
-            stats.addAll(self.y_predicted_multidim[i], self.y_true_multidim[i])
+            stats = RegressionEvalStats(self.y_predicted_multidim[i], self.y_true_multidim[i])
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
@@ -227,7 +394,7 @@ class RegressionEvalStats(EvalStats):
 
         :return: the resulting figure object or None
         """
-        errors = self._getErrors()
+        errors = np.array(self.y_predicted) - np.array(self.y_true)
         fig = None
         title = "Prediction Error Distribution"
         if titleAdd is not None:

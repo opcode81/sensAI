@@ -326,7 +326,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
         # check for correct columns
         if list(result.columns) != self._labels:
-            raise Exception(f"_predictClassProbabilities returned DataFrame with incorrect columns: expected {self._labels}, got {result.columns}")
+            raise Exception(f"{self} _predictClassProbabilities returned DataFrame with incorrect columns: expected {self._labels}, got {result.columns}")
 
         # check for normalisation
         maxRowsToCheck = 5

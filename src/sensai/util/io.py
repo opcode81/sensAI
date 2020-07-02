@@ -18,7 +18,7 @@ class ResultWriter:
         os.makedirs(resultDir, exist_ok=True)
         self.filenamePrefix = filenamePrefix
 
-    def childWithAddedPrefix(self, prefix) -> "ResultWriter":
+    def childWithAddedPrefix(self, prefix: str) -> "ResultWriter":
         """
         Creates a derived result writer with an added prefix, i.e. the given prefix is appended to this
         result writer's prefix
@@ -27,6 +27,11 @@ class ResultWriter:
         :return: a new writer instance
         """
         return ResultWriter(self.resultDir, filenamePrefix=self.filenamePrefix + prefix)
+
+    def childForSubdirectory(self, dirName: str):
+        resultDir = os.path.join(self.resultDir, dirName)
+        os.makedirs(resultDir, exist_ok=True)
+        return ResultWriter(resultDir, filenamePrefix=self.filenamePrefix)
 
     def path(self, filenameSuffix: str, extensionToAdd=None, validOtherExtensions: Optional[Sequence[str]] = None):
         """

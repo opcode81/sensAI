@@ -16,8 +16,7 @@ from .util.typing import PandasNamedTuple
 from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel, VectorRegressionModel, \
     VectorModel
 from .eval_stats import RegressionEvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
-    ClassificationEvalStatsCollection, EvalStats, EvalStatsCollection
-
+    ClassificationEvalStatsCollection, EvalStats, EvalStatsCollection, ClassificationMetric
 
 _log = logging.getLogger(__name__)
 
@@ -163,8 +162,10 @@ class VectorModelEvaluator(ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
-    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True):
+    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
+            additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
+        self.additionalMetrics = additionalMetrics
 
     def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
@@ -173,7 +174,8 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         inputOutputData = self.trainingData if onTrainingData else self.testData
         predictions, groundTruth = self._computeOutputs(model, inputOutputData)
         for predictedVarName in model.getPredictedVariableNames():
-            evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName])
+            evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
+                additionalMetrics=self.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
         return VectorRegressionModelEvaluationData(evalStatsByVarName, inputOutputData.inputs, model)
 
@@ -205,16 +207,18 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
-            randomSeed=42, computeProbabilities=False, shuffle=True):
+            randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities
+        self.additionalMetrics = additionalMetrics
 
     def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
         inputOutputData = self.trainingData if onTrainingData else self.testData
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, inputOutputData)
-        evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth, labels=model.getClassLabels())
+        evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
+            labels=model.getClassLabels(), additionalMetrics=self.additionalMetrics)
         predictedVarName = model.getPredictedVariableNames()[0]
         return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs, model)
 
@@ -290,15 +294,17 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
         else:
             return VectorClassificationModelCrossValidator(data, folds=folds, **kwargs)
 
-    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False):
+    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None):
         """
         :param data: the data set
         :param folds: the number of folds
         :param randomSeed: the random seed to use
         :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
             (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
+        :param evaluatorParams: keyword parameters with which to instantiate model evaluators
         """
         self.returnTrainedModels = returnTrainedModels
+        self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
         numDataPoints = len(data)
         permutedIndices = np.random.RandomState(randomSeed).permutation(numDataPoints)
         numTestPoints = numDataPoints // folds
@@ -342,7 +348,7 @@ class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[Ve
 
 class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegressionModelCrossValidationData]):
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData) -> VectorRegressionModelEvaluator:
-        return VectorRegressionModelEvaluator(trainingData, testData=testData)
+        return VectorRegressionModelEvaluator(trainingData, testData=testData, **self.evaluatorParams)
 
     def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorRegressionModelCrossValidationData:
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
@@ -355,7 +361,7 @@ class VectorClassificationModelCrossValidationData(VectorModelCrossValidationDat
 
 class VectorClassificationModelCrossValidator(VectorModelCrossValidator[VectorClassificationModelCrossValidationData]):
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
-        return VectorClassificationModelEvaluator(trainingData, testData=testData)
+        return VectorClassificationModelEvaluator(trainingData, testData=testData, **self.evaluatorParams)
 
     def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorClassificationModelCrossValidationData:
         return VectorClassificationModelCrossValidationData(trainedModels, evalDataList, predictedVarNames)
@@ -601,12 +607,17 @@ class MultiDataEvaluationUtil:
         self.keyName = keyName
 
     def compareModelsCrossValidation(self, isRegression, modelFactories: Sequence[Callable[[], VectorModel]],
-            resultWriter: Optional[ResultWriter] = None, crossValidatorParams: Optional[Dict[str, Any]] = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
+            resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
+            crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         :param isRegression: flag indicating whether the models to evaluate are regression models
         :param modelFactories: a sequence of factory functions for the creation of models to evaluate
         :param resultWriter: a writer with which to store results
+        :param writePerDatasetResults: whether to use resultWriter (if not None) in order to generate detailed results for each
+            dataset in a subdirectory named according to the name of the dataset
         :param crossValidatorParams: parameters to use for the instantiation of cross-validators
+        :param columnNameForModelRanking: column name to use for ranking models
+        :param rankMax: if true, use max for ranking, else min
         :return: a pair of data frames (allDF, meanDF) where allDF contains all the individual cross-validation results
             for every dataset and meanDF contains one row for each model with results averaged across datasets
         """
@@ -615,9 +626,18 @@ class MultiDataEvaluationUtil:
             _log.info(f"Evaluating models for {key}")
             ev = EvaluationUtil.forModelType(isRegression, inputOutputData, crossValidatorParams=crossValidatorParams)
             models = [f() for f in modelFactories]
-            df = ev.compareModelsCrossValidation(models)
+            childResultWriter = resultWriter.childForSubdirectory(key) if writePerDatasetResults else None
+            df = ev.compareModelsCrossValidation(models, resultWriter=childResultWriter)
             df[self.keyName] = key
             df["modelName"] = df.index
+            if columnNameForModelRanking is not None:
+                if columnNameForModelRanking not in df.columns:
+                    raise ValueError(f"Rank metric {columnNameForModelRanking} not contained in columns {df.columns}")
+                df["bestModel"] = 0
+                if rankMax:
+                    df["bestModel"].loc[df[columnNameForModelRanking].idxmax()] = 1
+                else:
+                    df["bestModel"].loc[df[columnNameForModelRanking].idxmin()] = 1
             df = df.reset_index(drop=True)
             allResults = pd.concat((allResults, df))
         strAllResults = f"All results:\n{allResults.to_string()}"
