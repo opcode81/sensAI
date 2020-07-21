@@ -242,7 +242,7 @@ class MultiFeatureGenerator(FeatureGenerator):
         """
         :return: the list of names of all contained feature generators
         """
-        return [fg.name for fg in self.featureGenerators]
+        return [fg.getName() for fg in self.featureGenerators]
 
 
 class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
