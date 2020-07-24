@@ -13,7 +13,7 @@ class PickleFailureDebugger:
     A collection of methods for testing whether objects can be pickled and logging useful infos in case they cannot
     """
 
-    enabled = False  # global flag controlling the behaviour of debugFailureIfEnabled
+    enabled = False  # global flag controlling the behaviour of logFailureIfEnabled
 
     @classmethod
     def _debugFailure(cls, obj, path, failures, handledObjectIds):

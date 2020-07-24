@@ -141,7 +141,7 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         gdf.plot(column="color", **kwargs)
 
     # the overriding of the following methods is only necessary for getting the type annotations right
-    # if the mypy ever permits annotating nested classes correctly, these methods can be removed
+    # if mypy ever permits annotating nested classes correctly, these methods can be removed
     def getCluster(self, clusterId: int) -> Cluster:
         return super().getCluster(clusterId)
 

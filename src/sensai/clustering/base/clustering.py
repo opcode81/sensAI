@@ -129,8 +129,8 @@ class ClusteringModel(PickleSerializingMixin, ABC):
         labels = self._getLabels()
         # Relabel clusters that do not fulfill size bounds as noise
         if self.minClusterSize != -np.inf or self.maxClusterSize != np.inf:
-            for clusterId, cluster_size in zip(*np.unique(labels, return_counts=True)):
-                if not self.minClusterSize <= cluster_size <= self.maxClusterSize:
+            for clusterId, clusterSize in zip(*np.unique(labels, return_counts=True)):
+                if not self.minClusterSize <= clusterSize <= self.maxClusterSize:
                     labels[labels == clusterId] = self.noiseLabel
         return labels
 
