@@ -1,4 +1,6 @@
 pandas==0.25.3
+geopandas==0.7.0
+Shapely~=1.7.0
 scipy==1.4.1
 numpy==1.18.1
 scikit-learn==0.22.1
@@ -6,3 +8,4 @@ seaborn==0.9.0
 PyQt5==5.14.1
 psutil==5.6.7
 pyyaml==5.3
+typing-extensions==3.7.4.2

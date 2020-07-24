@@ -5,8 +5,9 @@ import queue
 from abc import ABC, abstractmethod
 
 log = logging.getLogger(__name__)
-         
 
+
+# TODO: inherit from ClusteringModel once we have agreed on the interface
 class GreedyAgglomerativeClustering(object):
     """
     An implementation of greedy agglomerative clustering which avoids unnecessary 
