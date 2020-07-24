@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Union, Set, Dict, Callable, Iterable, Generic, TypeVar
+from typing import Union, Set, Callable, Iterable
 from typing_extensions import Protocol
 
 import numpy as np
@@ -15,9 +15,12 @@ log = logging.getLogger(__name__)
 # TODO or not TODO: at the moment we do not implement predict for clustering models although certain algorithms allow that
 class ClusteringModel(PickleSerializingMixin, ABC):
     """
-    Base class for all clustering algorithms
+    Base class for all clustering algorithms. Supports noise clusters and relabelling of identified clusters as noise
+    based on their size.
 
     :param noiseLabel: label that is associated with the noise cluster or None
+    :param minClusterSize: if not None, clusters below this size will be labeled as noise
+    :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
     def __init__(self, noiseLabel=-1, minClusterSize: int = None, maxClusterSize: int = None):
         self._datapoints = None
@@ -89,7 +92,7 @@ class ClusteringModel(PickleSerializingMixin, ABC):
 
     def noiseCluster(self):
         if self.noiseLabel is None:
-            return NotImplementedError(f"The algorithm {self} does not provide a noise cluster")
+            raise NotImplementedError(f"The algorithm {self} does not provide a noise cluster")
         return self.getCluster(self.noiseLabel)
 
     def summaryDF(self, condition=None):
@@ -174,6 +177,8 @@ class SKLearnClusteringModel(ClusteringModel):
 
     :param clusterer: a clusterer object compatible the sklearn API
     :param noiseLabel: label that is associated with the noise cluster or None
+    :param minClusterSize: if not None, clusters below this size will be labeled as noise
+    :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
 
     @staticmethod

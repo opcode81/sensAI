@@ -1,12 +1,9 @@
 import logging
-from abc import ABC
-from typing import Callable, Union
+from typing import Callable, Union, Iterable
 
 import geopandas as gp
 import numpy as np
-from scipy.spatial import distance_matrix
 from shapely.geometry import MultiPoint
-from sklearn.cluster import DBSCAN
 
 from .base.clustering import ClusteringModel, SKLearnTypeClusterer, SKLearnClusteringModel
 from ..base.interfaces import GeoDataFrameWrapper, LoadSaveInterface
@@ -19,7 +16,10 @@ log = logging.getLogger(__name__)
 
 class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
     """
-    Wrapper around a clustering model with additional, geospatial-specific extensions
+    Wrapper around a clustering model. This class adds additional, geospatial-specific features to the provided
+    clusterer
+
+    :param clusterer: an instance of ClusteringModel
     """
     def __init__(self, clusterer: ClusteringModel):
         self.clusterer = clusterer
@@ -40,8 +40,11 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
 
         def toGeoDF(self, crs='epsg:3857'):
             """
+            Export the cluster as a GeoDataFrame of length 1 with the cluster as an instance of
+            MultiPoint and the identifier as index.
+
             :param crs: projection. By default pseudo-mercator
-            :return: GeoDataFrame of length 1 with the cluster as MultiPoint instance and the identifier as index.
+            :return: GeoDataFrame
             """
             gdf = gp.GeoDataFrame({"geometry": [self.asMultipoint()]}, index=[self.identifier])
             gdf.index.name = "identifier"
@@ -57,7 +60,8 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         @classmethod
         def load(cls, path):
             """
-            Instantiate from a geopandas readable file containing a single row with an identifier and a MultiPoint object
+            Instantiate from a geopandas readable file containing a single row with an identifier and an instance
+            of MultiPoint
 
             :param path:
             :return: instance of CoordinateCluster
@@ -136,16 +140,30 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
             gdf.loc[self.noiseLabel, "color"] = 0
         gdf.plot(column="color", **kwargs)
 
-    # this is only necessary for getting the type annotations right
+    # the overriding of the following methods is only necessary for getting the type annotations right
+    # if the mypy ever permits annotating nested classes correctly, these methods can be removed
     def getCluster(self, clusterId: int) -> Cluster:
         return super().getCluster(clusterId)
 
+    def noiseCluster(self) -> Cluster:
+        return super().noiseCluster()
 
+    def clusters(self, condition: Callable[[Cluster], bool] = None) -> Iterable[Cluster]:
+        return super().clusters()
 
 
 class SKLearnCoordinateClustering(CoordinateClusteringModel):
+    """
+    Wrapper around a sklearn clusterer. This class adds additional features like relabelling and convenient methods
+    for handling geospatial data
+
+    :param clusterer: a clusterer object compatible the sklearn API
+    :param noiseLabel: label that is associated with the noise cluster or None
+    :param minClusterSize: if not None, clusters below this size will be labeled as noise
+    :param maxClusterSize: if not None, clusters above this size will be labeled as noise
+    """
     def __init__(self, clusterer: SKLearnTypeClusterer, noiseLabel=-1,
             minClusterSize: int = None, maxClusterSize: int = None):
         clusterer = SKLearnClusteringModel(clusterer, noiseLabel=noiseLabel,
-                                           minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
+                           minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
         super().__init__(clusterer)
