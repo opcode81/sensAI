@@ -95,7 +95,7 @@ class ClusteringModel(PickleSerializingMixin, ABC):
             raise NotImplementedError(f"The algorithm {self} does not provide a noise cluster")
         return self.getCluster(self.noiseLabel)
 
-    def summaryDF(self, condition=None):
+    def summaryDF(self, condition: Callable[[Cluster], bool] = None):
         """
         Data frame containing coarse information about the clusters
 
@@ -180,10 +180,6 @@ class SKLearnClusteringModel(ClusteringModel):
     :param minClusterSize: if not None, clusters below this size will be labeled as noise
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
-
-    @staticmethod
-    def _validateInput(data_points: np.ndarray) -> bool:
-        pass
 
     def __init__(self, clusterer: SKLearnTypeClusterer, noiseLabel=-1,
              minClusterSize: int = None, maxClusterSize: int = None):
