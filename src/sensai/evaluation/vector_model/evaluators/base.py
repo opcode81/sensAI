@@ -2,21 +2,19 @@ import copy
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Generic, List, Generator, Tuple, Any, TypeVar
+from typing import Generic, TypeVar
 
 import numpy as np
 
-from ..eval_stats.base import VectorModelEvaluationData, VectorModelEvalStats, VectorModelEvalStatsCollection
+from ..eval_stats.base import VectorModelEvalStatsCollection, VectorModelEvaluationData
 from ...evaluators import ModelEvaluator
 from ....data_ingest import InputOutputData, DataSplitter, DataSplitterFractional
 from ....models.vector_model import VectorModel
-from ....util.typing import PandasNamedTuple
 
 log = logging.getLogger(__name__)
 TCrossValData = TypeVar("TCrossValData", bound="VectorModelCrossValidationData")
 TModel = TypeVar("TModel", bound=VectorModel)
-TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
-TEvalStats = TypeVar("TEvalStats", bound=VectorModelEvalStats)
+TEvalData = TypeVar("TEvalData", bound="VectorModelEvaluationData")
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=VectorModelEvalStatsCollection)
 
 
@@ -62,37 +60,6 @@ class VectorModelEvaluator(ModelEvaluator, ABC):
         :return: the evaluation result
         """
         pass
-
-
-class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):
-    def __init__(self, trainedModels: List[TModel], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
-        self.predictedVarNames = predictedVarNames
-        self.trainedModels = trainedModels
-        self.evalDataList = evalDataList
-        self.testIndicesList = testIndicesList
-
-    @property
-    def modelName(self):
-        return self.evalDataList[0].modelName
-
-    @abstractmethod
-    def _createEvalStatsCollection(self, l: List[TEvalStats]) -> TEvalStatsCollection:
-        pass
-
-    def getEvalStatsCollection(self, predictedVarName=None) -> TEvalStatsCollection:
-        if predictedVarName is None:
-            if len(self.predictedVarNames) != 1:
-                raise Exception("Must provide name of predicted variable")
-            else:
-                predictedVarName = self.predictedVarNames[0]
-        evalStatsList = [evalData.getEvalStats(predictedVarName) for evalData in self.evalDataList]
-        return self._createEvalStatsCollection(evalStatsList)
-
-    def iterInputOutputGroundTruthTuples(self, predictedVarName=None) -> Generator[Tuple[PandasNamedTuple, Any, Any], None, None]:
-        for evalData in self.evalDataList:
-            evalStats = evalData.getEvalStats(predictedVarName)
-            for i, namedTuple in enumerate(evalData.inputData.itertuples()):
-                yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
 class VectorModelCrossValidator(ABC, Generic[TCrossValData]):

@@ -7,8 +7,8 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
 
-from .base import VectorModelEvaluationData, VectorModelEvalStats, VectorModelEvalStatsCollection
-from ..evaluators.base import VectorModelCrossValidationData
+from .base import VectorModelEvalStats, VectorModelEvalStatsCollection, VectorModelEvaluationData, \
+    VectorModelCrossValidationData
 from ...eval_stats import Metric
 from ....models.vector_model import VectorRegressionModel
 

@@ -1,16 +1,18 @@
-from abc import ABC
-from typing import List, Dict, Generator, Tuple, Any, Union, TypeVar
+from abc import ABC, abstractmethod
+from typing import List, Union, TypeVar, Dict, Generator, Tuple, Any, Generic
 
 import numpy as np
 import pandas as pd
 
-from ...eval_stats import EvalStats, TMetric, ModelEvaluationData, EvalStatsCollection
-from ....models.vector_model import VectorModel
-from ....util.typing import PandasNamedTuple
+from sensai.models.vector_model import VectorModel
+from sensai.util.typing import PandasNamedTuple
+from ...eval_stats import EvalStatsCollection, ModelEvaluationData, ModelCrossValidationData, EvalStats, TMetric
 
 PredictionArray = Union[np.ndarray, pd.Series, pd.DataFrame, list]
-TEvalStats = TypeVar("TEvalStats", bound="VectorModelEvalStats")
 TVectorModelEvalStats = TypeVar("TVectorModelEvalStats", bound="VectorModelEvalStats")
+TVectorModelEvalData = TypeVar("TVectorModelEvalData", bound="VectorModelEvaluationData")
+TVectorModel = TypeVar("TVectorModel", bound=VectorModel)
+TVectorModelEvalStatsCollection = TypeVar("TVectorModelEvalStatsCollection", bound="VectorModelEvalStatsCollection")
 
 
 class VectorModelEvalStats(EvalStats[TMetric], ABC):
@@ -74,8 +76,12 @@ class VectorModelEvalStats(EvalStats[TMetric], ABC):
         self.y_predicted.extend(y_predicted)
 
 
-class VectorModelEvaluationData(ModelEvaluationData[TEvalStats], ABC):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: VectorModel):
+class VectorModelEvalStatsCollection(EvalStatsCollection[TVectorModelEvalStats], ABC):
+    pass
+
+
+class VectorModelEvaluationData(ModelEvaluationData[TVectorModelEvalStats], ABC):
+    def __init__(self, statsDict: Dict[str, TVectorModelEvalStats], inputData: pd.DataFrame, model: VectorModel):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
         :param inputData: the input data that was used to produce the results
@@ -85,7 +91,7 @@ class VectorModelEvaluationData(ModelEvaluationData[TEvalStats], ABC):
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
         super().__init__(inputData, model)
 
-    def getEvalStats(self, predictedVarName=None) -> TEvalStats:
+    def getEvalStats(self, predictedVarName=None) -> TVectorModelEvalStats:
         if predictedVarName is None:
             if len(self.evalStatsByVarName) != 1:
                 raise Exception(f"Must provide name of predicted variable name, as multiple variables were predicted {list(self.evalStatsByVarName.keys())}")
@@ -117,5 +123,33 @@ class VectorModelEvaluationData(ModelEvaluationData[TEvalStats], ABC):
             yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-class VectorModelEvalStatsCollection(EvalStatsCollection[TVectorModelEvalStats]):
-    pass
+class VectorModelCrossValidationData(ModelCrossValidationData[TVectorModel, TVectorModelEvalStatsCollection, TVectorModelEvalData],
+                                     Generic[TVectorModel, TVectorModelEvalStatsCollection, TVectorModelEvalData, TVectorModelEvalStats]):
+    def __init__(self, trainedModels: List[TVectorModel], evalDataList: List[TVectorModelEvalStats],
+             predictedVarNames: List[str], testIndicesList=None):
+        super().__init__(trainedModels, evalDataList)
+        self.predictedVarNames = predictedVarNames
+        self.testIndicesList = testIndicesList
+
+    @property
+    def modelName(self):
+        return self.evalDataList[0].modelName
+
+    @abstractmethod
+    def _createEvalStatsCollection(self, l: List[TVectorModelEvalStats]) -> TVectorModelEvalStatsCollection:
+        pass
+
+    def getEvalStatsCollection(self, predictedVarName=None) -> TVectorModelEvalStatsCollection:
+        if predictedVarName is None:
+            if len(self.predictedVarNames) != 1:
+                raise Exception("Must provide name of predicted variable")
+            else:
+                predictedVarName = self.predictedVarNames[0]
+        evalStatsList = [evalData.getEvalStats(predictedVarName) for evalData in self.evalDataList]
+        return self._createEvalStatsCollection(evalStatsList)
+
+    def iterInputOutputGroundTruthTuples(self, predictedVarName=None) -> Generator[Tuple[PandasNamedTuple, Any, Any], None, None]:
+        for evalData in self.evalDataList:
+            evalStats = evalData.getEvalStats(predictedVarName)
+            for i, namedTuple in enumerate(evalData.inputData.itertuples()):
+                yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]

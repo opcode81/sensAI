@@ -9,7 +9,11 @@ from matplotlib import pyplot as plt
 from ..models.base import FitterModel, PredictorModel
 
 TEvalStats = TypeVar("TEvalStats", bound='EvalStats')
+TEvalData = TypeVar("TEvalData", bound="ModelEvaluationData")
+TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound='EvalStatsCollection')
 TMetric = TypeVar("TMetric", bound="Metric")
+ModelType = Union[FitterModel, PredictorModel]
+TModel = TypeVar("TModel", bound=ModelType)
 
 
 # TODO or not TODO: the inheritance structure here creates a circular dependency of eval stats and metrics.
@@ -50,28 +54,6 @@ class EvalStats(Generic[TMetric]):
     def __str__(self):
         d = self.getAll()
         return "EvalStats[%s]" % ", ".join([f"{k}={v:4f}" for (k, v) in d.items()])
-
-
-class ModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, inputData: pd.DataFrame, model: Union[FitterModel, PredictorModel]):
-        """
-        :param inputData: the input data that was used to produce the results
-        :param model: the model that was used to produce predictions
-        """
-        self.inputData = inputData
-        self.modelName = model.getName()
-
-    @abstractmethod
-    def getEvalStats(self, *kwargs) -> TEvalStats:
-        pass
-
-    def getDataFrame(self) -> pd.DataFrame:
-        """
-        Returns an DataFrame with all evaluation metrics (one row per output variable)
-
-        :return: a DataFrame containing evaluation metrics
-        """
-        pass
 
 
 class EvalStatsCollection(Generic[TEvalStats], ABC):
@@ -120,3 +102,39 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
     def __str__(self):
         return f"{self.__class__.__name__}[" + \
                ", ".join([f"{key}={self.aggStats()[key]:.4f}" for key in self.metrics]) + "]"
+
+
+class ModelEvaluationData(ABC, Generic[TEvalStats]):
+    def __init__(self, inputData: pd.DataFrame, model: ModelType):
+        """
+        :param inputData: the input data that was used to produce the results
+        :param model: the model that was used to produce predictions
+        """
+        self.inputData = inputData
+        self.modelName = model.getName()
+
+    @abstractmethod
+    def getEvalStats(self, *kwargs) -> TEvalStats:
+        pass
+
+    def getDataFrame(self) -> pd.DataFrame:
+        """
+        Returns an DataFrame with all evaluation metrics (one row per output variable)
+
+        :return: a DataFrame containing evaluation metrics
+        """
+        pass
+
+
+class ModelCrossValidationData(ABC, Generic[TModel, TEvalStatsCollection, TEvalData]):
+    def __init__(self, trainedModels: List[TModel], evalDataList: List[TEvalData]):
+        self.trainedModels = trainedModels
+        self.evalDataList = evalDataList
+
+    @property
+    def modelName(self):
+        return self.evalDataList[0].modelName
+
+    @abstractmethod
+    def getEvalStatsCollection(self, *kwargs) -> TEvalStatsCollection:
+        pass

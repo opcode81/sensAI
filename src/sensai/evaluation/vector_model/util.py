@@ -8,12 +8,12 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 from sensai.util.io import ResultWriter
-from .eval_stats.base import VectorModelEvaluationData, VectorModelEvalStats
+from .eval_stats.base import VectorModelEvalStats, VectorModelEvaluationData, VectorModelCrossValidationData
 from .eval_stats.classification import VectorClassificationModelEvaluationData, ClassificationEvalStats, \
     VectorClassificationModelCrossValidationData
 from .eval_stats.regression import VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, \
     RegressionEvalStats
-from .evaluators.base import VectorModelEvaluator, VectorModelCrossValidationData
+from .evaluators.base import VectorModelEvaluator
 from .evaluators.classification import VectorClassificationModelEvaluator, VectorClassificationModelCrossValidator
 from .evaluators.regression import VectorRegressionModelEvaluator, VectorRegressionModelCrossValidator
 from ...data_ingest import InputOutputData

@@ -7,8 +7,8 @@ import sklearn
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 from sensai.util.plot import plotMatrix
-from .base import VectorModelEvaluationData, VectorModelEvalStats, PredictionArray, VectorModelEvalStatsCollection
-from ..evaluators.base import VectorModelCrossValidationData
+from .base import VectorModelEvalStats, PredictionArray, VectorModelEvalStatsCollection, VectorModelEvaluationData, \
+    VectorModelCrossValidationData
 from ...eval_stats import Metric
 from ....models.vector_model import VectorClassificationModel
 
