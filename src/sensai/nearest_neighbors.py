@@ -1,8 +1,7 @@
 import collections
-import typing
-
 import datetime
 import logging
+import typing
 from abc import ABC, abstractmethod
 from typing import Callable, List, Iterable
 
@@ -10,9 +9,9 @@ import numpy as np
 import pandas as pd
 
 from . import distance_metric, util, data_transformation
-from .vector_model import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
 from .featuregen import FeatureGeneratorFromNamedTuples
+from .models.vector_model import VectorClassificationModel, VectorRegressionModel
 from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
 

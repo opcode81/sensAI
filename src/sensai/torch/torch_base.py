@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ..normalisation import NormalisationMode
-from ..util.dtype import toFloatArray
-from ..vector_model import VectorRegressionModel, VectorClassificationModel
-from ..util.string import objectRepr
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification
+from ..models.vector_model import VectorRegressionModel, VectorClassificationModel
+from ..normalisation import NormalisationMode
+from ..util.dtype import toFloatArray
+from ..util.string import objectRepr
 
 log = logging.getLogger(__name__)
 

@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 from sklearn import compose
 
-from ..vector_model import VectorRegressionModel, VectorClassificationModel
+from ..models.vector_model import VectorRegressionModel, VectorClassificationModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def createSkLearnModel(modelConstructor, modelArgs, outputTransformer=None):
@@ -22,7 +22,7 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
     """
     Base class for models built upon scikit-learn's model implementations
     """
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, modelConstructor, **modelArgs):
         """
@@ -110,7 +110,7 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         for predictedVarName in outputs.columns:
-            _log.info(f"Fitting model for output variable '{predictedVarName}'")
+            log.info(f"Fitting model for output variable '{predictedVarName}'")
             model = createSkLearnModel(self.modelConstructor,
                     self.modelArgs,
                     outputTransformer=copy.deepcopy(self.sklearnOutputTransformer))
@@ -141,7 +141,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         if len(outputs.columns) > 1:
-            _log.info(f"Fitting a single multi-dimensional model for all {len(outputs.columns)} output dimensions")
+            log.info(f"Fitting a single multi-dimensional model for all {len(outputs.columns)} output dimensions")
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, outputTransformer=self.sklearnOutputTransformer)
         outputValues = outputs.values
         if outputValues.shape[1] == 1:  # for 1D output, shape must be (numSamples,) rather than (numSamples, 1)
@@ -202,7 +202,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         inputValues = self._transformInput(inputs, fit=True)
         self._updateModelArgs(inputs, outputs)
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
-        _log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
+        log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         self.model.fit(inputValues, np.ravel(outputs.values))
 
     def _transformInput(self, inputs: pd.DataFrame, fit=False) -> np.ndarray:

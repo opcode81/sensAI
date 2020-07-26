@@ -1,10 +1,10 @@
 from typing import Sequence, List
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from .ensemble_base import EnsembleRegressionVectorModel
-from ..vector_model import VectorRegressionModel
+from ..models.vector_model import VectorRegressionModel
 
 
 class AveragingVectorRegressionModel(EnsembleRegressionVectorModel):

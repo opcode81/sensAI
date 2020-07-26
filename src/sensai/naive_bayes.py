@@ -4,7 +4,7 @@ from math import log, exp
 import numpy as np
 import pandas as pd
 
-from .vector_model import VectorClassificationModel
+from .models.vector_model import VectorClassificationModel
 
 
 class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):

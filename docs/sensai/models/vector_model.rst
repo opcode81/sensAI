@@ -1,6 +1,6 @@
 vector\_model
 =============
 
-.. automodule:: sensai.vector_model
+.. automodule:: sensai.models.vector_model
    :members:
    :undoc-members:

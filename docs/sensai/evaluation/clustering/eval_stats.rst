@@ -1,6 +1,6 @@
 eval\_stats
 ===========
 
-.. automodule:: sensai.eval_stats
+.. automodule:: sensai.evaluation.clustering.eval_stats
    :members:
    :undoc-members:

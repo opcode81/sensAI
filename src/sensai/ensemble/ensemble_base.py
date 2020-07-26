@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from concurrent.futures.process import ProcessPoolExecutor
-from typing import Sequence, List
 from inspect import currentframe, getframeinfo
+from typing import Sequence, List
 
 import pandas as pd
 
-from ..vector_model import VectorModel
+from ..models.vector_model import VectorModel
 from ..util.multiprocessing import VectorModelWithSeparateFeatureGeneration
 from ..util.pickle import PickleFailureDebugger
 

@@ -1,10 +1,12 @@
 from abc import ABC
 from typing import Union, Dict, Any
+
 from azureml.core import Experiment, Workspace
 
-from .. import VectorModel, evaluation
-from ..evaluation import VectorModelEvaluator, VectorModelCrossValidator
 from .tracking_base import TrackedExperiment
+from ..evaluation.util import computeEvaluationMetricsDict
+from ..evaluation.vector_model import VectorModelEvaluator, VectorModelCrossValidator
+from ..models.vector_model import VectorModel
 
 
 class TrackedAzureMLEvaluation(ABC):
@@ -24,7 +26,7 @@ class TrackedAzureMLEvaluation(ABC):
 
     def evalModel(self, model: VectorModel, additionalLoggingValuesDict: dict = None):
         with self.experiment.start_logging() as run:
-            valuesDict = evaluation.computeEvaluationMetricsDict(model, self.evaluator)
+            valuesDict = computeEvaluationMetricsDict(model, self.evaluator)
             valuesDict['str(model)'] = str(model)
             if additionalLoggingValuesDict is not None:
                 valuesDict.update(additionalLoggingValuesDict)

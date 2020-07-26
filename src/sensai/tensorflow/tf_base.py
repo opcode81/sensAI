@@ -1,13 +1,13 @@
-from abc import ABC, abstractmethod
 import logging
 import os
 import tempfile
+from abc import ABC, abstractmethod
 
 import pandas as pd
 import tensorflow as tf
 
 from .. import normalisation
-from ..vector_model import VectorRegressionModel
+from ..models.vector_model import VectorRegressionModel
 
 _log = logging.getLogger(__name__)
 

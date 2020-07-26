@@ -4,51 +4,15 @@ from typing import Sequence, List, Any, Optional, Union, TypeVar
 
 import numpy as np
 import pandas as pd
-import scipy.stats
 
-from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
-from .featuregen import FeatureGenerator, FeatureCollector
-from .models.base import FitPredictModel
+from .base import FitPredictModel
+from ..data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
+from ..featuregen import FeatureGenerator, FeatureCollector
 
 log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
-
-
-class InputOutputData:
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        if len(inputs) != len(outputs):
-            raise ValueError("Lengths do not match")
-        self.inputs = inputs
-        self.outputs = outputs
-
-    def __len__(self):
-        return len(self.inputs)
-
-    @property
-    def inputDim(self):
-        return self.inputs.shape[1]
-
-    @property
-    def outputDim(self):
-        return self.outputs.shape[1]
-
-    def filterIndices(self, indices: Sequence[int]) -> 'InputOutputData':
-        inputs = self.inputs.iloc[indices]
-        outputs = self.outputs.iloc[indices]
-        return InputOutputData(inputs, outputs)
-
-    def computeInputOutputCorrelation(self):
-        correlations = {}
-        for outputCol in self.outputs.columns:
-            correlations[outputCol] = {}
-            outputSeries = self.outputs[outputCol]
-            for inputCol in self.inputs.columns:
-                inputSeries = self.inputs[inputCol]
-                pcc, pvalue = scipy.stats.pearsonr(inputSeries, outputSeries)
-                correlations[outputCol][inputCol] = pcc
-        return correlations
 
 
 class VectorModel(FitPredictModel, ABC):

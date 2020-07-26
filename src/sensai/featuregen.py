@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from . import util, data_transformation
-from .util.string import orRegexGroup
 from .columngen import ColumnGenerator
+from .util.string import orRegexGroup
 
 if TYPE_CHECKING:
-    from .vector_model import VectorModel
+    from .models.vector_model import VectorModel
 
 log = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ class MultiFeatureGenerator(FeatureGenerator):
         """
         :return: the list of names of all contained feature generators
         """
-        return [fg.name for fg in self.featureGenerators]
+        return [fg.getName() for fg in self.featureGenerators]
 
 
 class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):

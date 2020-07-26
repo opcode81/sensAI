@@ -1,11 +1,11 @@
-evaluation
+clustering
 ==========
 
-.. automodule:: sensai.evaluation
+.. automodule:: sensai.clustering
    :members:
    :undoc-members:
 
 .. toctree::
    :glob:
 
-   evaluation/*
+   clustering/*
