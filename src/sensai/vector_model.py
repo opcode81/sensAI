@@ -8,8 +8,9 @@ import scipy.stats
 
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
+from .models.base import FitPredictModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
@@ -50,28 +51,7 @@ class InputOutputData:
         return correlations
 
 
-class PredictorModel(ABC):
-    """
-    Base class for models that map vectors to predictions
-    """
-    @abstractmethod
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
-    def getPredictedVariableNames(self):
-        pass
-
-    @abstractmethod
-    def isRegressionModel(self) -> bool:
-        pass
-
-    @abstractmethod
-    def getName(self) -> str:
-        pass
-
-
-class VectorModel(PredictorModel, ABC):
+class VectorModel(FitPredictModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
@@ -216,7 +196,7 @@ class VectorModel(PredictorModel, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
-        _log.info(f"Training {self.__class__.__name__}")
+        log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
@@ -224,7 +204,7 @@ class VectorModel(PredictorModel, ABC):
             Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
-        _log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
+        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
         self._isFitted = True
 
@@ -334,7 +314,7 @@ class VectorClassificationModel(VectorModel, ABC):
         for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
             s = valueSeries.sum()
             if abs(s-1.0) > 0.01:
-                _log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
         return result
 
