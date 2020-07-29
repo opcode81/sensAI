@@ -35,6 +35,7 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         self.minClusterSize = minClusterSize if minClusterSize is not None else -np.inf
 
         self._clusterDict = {}
+        self._numClusters: Optional[int] = None
 
     class Cluster:
         def __init__(self, datapoints: np.ndarray, identifier: Union[int, str]):
@@ -163,7 +164,9 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
 
     @property
     def numClusters(self) -> int:
-        return len(self.clusterIdentifiers.difference({self.noiseLabel}))
+        if self._numClusters is None:
+            self._numClusters = len(self.clusterIdentifiers.difference({self.noiseLabel}))
+        return self._numClusters
 
     @abstractmethod
     def _computeLabels(self, x: np.ndarray) -> np.ndarray:
