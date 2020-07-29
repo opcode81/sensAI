@@ -155,9 +155,11 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
     def getCluster(self, clusterId: int) -> Cluster:
         if clusterId not in self.labels:
             raise KeyError(f"no cluster for id {clusterId}")
-        if clusterId not in self._clusterDict:
-            self._clusterDict[clusterId] = self.Cluster(self.datapoints[self.labels == clusterId], identifier=clusterId)
-        return self._clusterDict[clusterId]
+        result = self._clusterDict.get(clusterId)
+        if result is None:
+            result = self.Cluster(self.datapoints[self.labels == clusterId], identifier=clusterId)
+            self._clusterDict[clusterId] = result
+        return result
 
     @property
     def numClusters(self) -> int:
