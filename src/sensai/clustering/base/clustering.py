@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Union, Set, Callable, Iterable
+from typing import Union, Set, Callable, Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -34,10 +34,14 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         self.maxClusterSize = maxClusterSize if maxClusterSize is not None else np.inf
         self.minClusterSize = minClusterSize if minClusterSize is not None else -np.inf
 
+        self._clusterDict = {}
+
     class Cluster:
         def __init__(self, datapoints: np.ndarray, identifier: Union[int, str]):
             self.datapoints = datapoints
             self.identifier = identifier
+            self._radius: Optional[float] = None
+            self._centroid: Optional[np.ndarray] = None
 
         def __len__(self):
             return len(self.datapoints)
@@ -50,11 +54,21 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
                 return self.identifier == other.identifier and np.array_equal(self.datapoints, other.datapoints)
             return False
 
-        def centroid(self):
+        def _computeRadius(self):
+            return np.max(distance_matrix([self.centroid()], self.datapoints))
+
+        def _computeCentroid(self):
             return np.mean(self.datapoints, axis=0)
 
+        def centroid(self):
+            if self._centroid is None:
+                self._centroid = self._computeCentroid()
+            return self._centroid
+
         def radius(self):
-            return np.max(distance_matrix([self.centroid()], self.datapoints))
+            if self._radius is None:
+                self._radius = self._computeRadius()
+            return self._radius
 
         def summaryDict(self):
             """
@@ -141,7 +155,9 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
     def getCluster(self, clusterId: int) -> Cluster:
         if clusterId not in self.labels:
             raise KeyError(f"no cluster for id {clusterId}")
-        return self.Cluster(self.datapoints[self.labels == clusterId], identifier=clusterId)
+        if clusterId not in self._clusterDict:
+            self._clusterDict[clusterId] = self.Cluster(self.datapoints[self.labels == clusterId], identifier=clusterId)
+        return self._clusterDict[clusterId]
 
     @property
     def numClusters(self) -> int:
