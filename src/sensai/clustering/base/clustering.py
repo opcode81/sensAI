@@ -23,9 +23,10 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
     def __init__(self, noiseLabel=-1, minClusterSize: int = None, maxClusterSize: int = None):
-        self._datapoints = None
-        self._labels = None
-        self._clusterIdentifiers = None
+        self._datapoints: Optional[np.ndarray] = None
+        self._labels: Optional[np.ndarray] = None
+        self._clusterIdentifiers: Optional[Set[int]] = None
+        self._nonNoiseClusterIdentifiers: Optional[Set[int]] = None
 
         if minClusterSize is not None or maxClusterSize is not None:
             if noiseLabel is None:
@@ -92,7 +93,7 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         :return: generator of clusters
         """
         percentageToLog = 0
-        for i, clusterId in enumerate(self.clusterIdentifiers.difference({self.noiseLabel})):
+        for i, clusterId in enumerate(self._nonNoiseClusterIdentifiers):
             # logging process through the loop
             percentageGenerated = int(100 * i / self.numClusters)
             if percentageGenerated == percentageToLog:
@@ -130,6 +131,8 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         self._datapoints = data
         self._clusterIdentifiers = set(labels)
         self._labels = labels
+        if self.noiseLabel is not None:
+            self._nonNoiseClusterIdentifiers = self._clusterIdentifiers.difference({self.noiseLabel})
         log.info(f"{self} found {self.numClusters} clusters")
 
     @property
@@ -164,14 +167,12 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
 
     @property
     def numClusters(self) -> int:
-        if self._numClusters is None:
-            self._numClusters = len(self.clusterIdentifiers.difference({self.noiseLabel}))
-        return self._numClusters
+        return len(self._nonNoiseClusterIdentifiers)
 
     @abstractmethod
     def _computeLabels(self, x: np.ndarray) -> np.ndarray:
         """
-        Fit the clustering model and return an array of cluster labels
+        Fit the clustering model and return an array of integer cluster labels
 
         :param x: the datapoints
         :return: list of the same length as the input datapoints; it represents the mapping coordinate -> cluster_id
