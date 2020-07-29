@@ -596,7 +596,7 @@ class LoadSaveInterface(ABC):
         pass
 
 
-class PickleSerializingMixin(LoadSaveInterface):
+class PickleLoadSaveMixin(LoadSaveInterface):
     def save(self, path: str, backend="pickle"):
         """
         Saves the instance as pickle

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 log = logging.getLogger(__name__)
 
 
-# TODO: inherit from ClusteringModel once we have agreed on the interface
+# TODO: implement an adapter or wrapper such that we get a GreedyAgglomerativeClusteringModel class
 class GreedyAgglomerativeClustering(object):
     """
     An implementation of greedy agglomerative clustering which avoids unnecessary 
