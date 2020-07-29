@@ -6,8 +6,9 @@ from abc import ABC, abstractmethod
 from typing import List, Sequence
 
 log = logging.getLogger(__name__)
-         
 
+
+# TODO: implement an adapter or wrapper such that we get a GreedyAgglomerativeClusteringModel class
 class GreedyAgglomerativeClustering(object):
     """
     An implementation of greedy agglomerative clustering which avoids unnecessary 
