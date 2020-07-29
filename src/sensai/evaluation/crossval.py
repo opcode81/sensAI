@@ -10,12 +10,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from .data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
-from .eval_stats import RegressionEvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
+from sensai.data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
+from sensai.evaluation.eval_stats.eval_stats import RegressionEvalStats, ClassificationEvalStats, \
+    RegressionEvalStatsCollection, \
     ClassificationEvalStatsCollection, EvalStats, EvalStatsCollection, ClassificationMetric
-from .util.io import ResultWriter
-from .util.typing import PandasNamedTuple
-from .vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
+from sensai.util.io import ResultWriter
+from sensai.util.typing import PandasNamedTuple
+from sensai.vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
 
 _log = logging.getLogger(__name__)
 

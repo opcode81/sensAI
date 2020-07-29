@@ -1,6 +1,5 @@
 from . import columngen
 from . import data_transformation
-from . import eval_stats
 from . import featuregen
 from . import hyperopt
 from . import local_search
@@ -11,10 +10,7 @@ from . import util
 from .data_ingest import InputOutputData
 from .data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer
 from .ensemble import AveragingVectorRegressionModel
-from .evaluation import VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, \
-    VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, \
-    VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, \
-    VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData
+from .evaluation.eval_stats import eval_stats
 from .normalisation import NormalisationMode
 from .vector_model import VectorModel, VectorRegressionModel, VectorClassificationModel
 

@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Union, List, TypeVar, Generic, Dict, Sequence
+from typing import Union, List, TypeVar, Generic, Sequence
 
 import numpy as np
 import pandas as pd
@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import accuracy_score, confusion_matrix
 
-from .util.plot import plotMatrix
+from sensai.util.plot import plotMatrix
 
 _log = logging.getLogger(__name__)
 
