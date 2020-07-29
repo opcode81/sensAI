@@ -1,13 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import Union, Set, Callable, Iterable
-from typing_extensions import Protocol
 
 import numpy as np
 import pandas as pd
 from scipy.spatial import distance_matrix
+from typing_extensions import Protocol
 
-from ...util.pickle import PickleSerializingMixin
+from ...util.cache import PickleSerializingMixin
 
 log = logging.getLogger(__name__)
 

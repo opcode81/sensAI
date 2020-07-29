@@ -6,10 +6,10 @@ import numpy as np
 from shapely.geometry import MultiPoint
 
 from .base.clustering import ClusteringModel, SKLearnTypeClusterer, SKLearnClusteringModel
-from ..base.interfaces import GeoDataFrameWrapper, LoadSaveInterface
+from ..base.interfaces import GeoDataFrameWrapper
+from ..util.cache import LoadSaveInterface
 from ..util.coordinates import validateCoordinates, coordinatesFromGeoDF
 from ..util.tracking import timeit
-
 
 log = logging.getLogger(__name__)
 

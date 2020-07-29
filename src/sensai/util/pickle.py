@@ -1,9 +1,6 @@
 import logging
-import os
 import pickle
 from typing import List
-
-from ..base.interfaces import LoadSaveInterface
 
 log = logging.getLogger(__name__)
 
@@ -85,30 +82,3 @@ class PickleFailureDebugger:
                 log.error(f"{prefix}: pickling would result in failures due to: {failures}")
             else:
                 log.info(f"{prefix}: is picklable")
-
-
-# Todo or not todo: Use this in vector model
-class PickleSerializingMixin(LoadSaveInterface):
-    def save(self, path: str):
-        """
-        Saves the instance as pickle
-        """
-        basedir = os.path.dirname(path)
-        os.makedirs(basedir, exist_ok=True)
-        log.info(f"Saving instance of {self.__class__.__name__} to {path}")
-        with open(path, "wb") as f:
-            pickle.dump(self, f)
-
-    @classmethod
-    def load(cls, path):
-        """
-        Loads a class instance from pickle
-        :param path:
-        :return: instance of the present class
-        """
-        log.info(f"Loading instance of {cls} from {path}")
-        with open(path, 'rb') as f:
-            result = pickle.load(f)
-        if not isinstance(result, cls):
-            raise Exception(f"Excepted instance of {cls}, instead got: {result.__class__.__name__}")
-        return result

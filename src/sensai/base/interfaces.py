@@ -10,17 +10,7 @@ import geopandas as gp
 T = TypeVar("T")
 
 
-class LoadSaveInterface(ABC):
-    @abstractmethod
-    def save(self, path: str) -> None:
-        pass
-
-    @classmethod
-    @abstractmethod
-    def load(cls: T, path: str) -> T:
-        pass
-
-
+# TODO: move this once more clustering-related stuff has been merged
 # Not a pure interface but this is still an appropriate place for it as the default plot method will often be overrode
 class GeoDataFrameWrapper(ABC):
     @abstractmethod

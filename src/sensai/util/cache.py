@@ -1,17 +1,17 @@
 import atexit
 import enum
 import glob
-import joblib
 import logging
 import os
 import pickle
 import re
+import sqlite3
 import threading
 import time
 from abc import abstractmethod, ABC
 from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
-import sqlite3
+import joblib
 
 from .pickle import PickleFailureDebugger
 
@@ -534,6 +534,7 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
     :param validityCheckFn: an optional function to call in order to check whether a cached result is still valid;
         the function shall return True if the res is still valid and false otherwise. If a cached result is invalid,
         the function fn is called to compute the result and the cached result is updated.
+    :param backend: pickle or joblib
     :return: the res (either obtained from the cache or the function)
     """
     if functionName is None:
@@ -558,6 +559,7 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
         return callFnAndCacheResult()
 
 
+# TODO: I think this class deserves some documentation on the intended usage
 class PickleCached(object):
     def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle"):
         """
@@ -576,8 +578,45 @@ class PickleCached(object):
         else:
             self.filenamePrefix += "-"
 
-    def __call__(self, fn, *args, **kwargs):
+    def __call__(self, fn: Callable, *args, **kwargs):
         if self.filename is None:
             self.filename = self.filenamePrefix + fn.__qualname__ + ".cache.pickle"
         picklePath = os.path.join(self.cacheBasePath,  self.filename)
         return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend)
+
+
+class LoadSaveInterface(ABC):
+    @abstractmethod
+    def save(self, path: str) -> None:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def load(cls: T, path: str) -> T:
+        pass
+
+
+class PickleSerializingMixin(LoadSaveInterface):
+    def save(self, path: str, backend="pickle"):
+        """
+        Saves the instance as pickle
+
+        :param path:
+        :param backend: pickle or joblib
+        """
+        dumpPickle(self, path, backend=backend)
+
+    @classmethod
+    def load(cls, path, backend="pickle"):
+        """
+        Loads a class instance from pickle
+
+        :param path:
+        :param backend: pickle or joblib
+        :return: instance of the present class
+        """
+        _log.info(f"Loading instance of {cls} from {path}")
+        result = loadPickle(path, backend=backend)
+        if not isinstance(result, cls):
+            raise Exception(f"Excepted instance of {cls}, instead got: {result.__class__.__name__}")
+        return result
