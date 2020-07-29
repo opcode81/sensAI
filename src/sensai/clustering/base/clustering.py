@@ -51,11 +51,6 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         def __str__(self):
             return f"{self.__class__.__name__}_{self.identifier}"
 
-        def __eq__(self, other):
-            if isinstance(other, self.__class__):
-                return self.identifier == other.identifier and np.array_equal(self.datapoints, other.datapoints)
-            return False
-
         def _computeRadius(self):
             return np.max(distance_matrix([self.centroid()], self.datapoints))
 
