@@ -8,6 +8,7 @@ import scipy.stats
 
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
+from .util.cache import PickleSerializingMixin
 
 _log = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class PredictorModel(ABC):
         pass
 
 
-class VectorModel(PredictorModel, ABC):
+class VectorModel(PredictorModel, PickleSerializingMixin, ABC):
     """
     Base class for models that map vectors to vectors
     """
