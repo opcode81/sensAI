@@ -4,51 +4,15 @@ from typing import Sequence, List, Any, Optional, Union, TypeVar
 
 import numpy as np
 import pandas as pd
-import scipy.stats
 
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleSerializingMixin
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
-
-
-class InputOutputData:
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        if len(inputs) != len(outputs):
-            raise ValueError("Lengths do not match")
-        self.inputs = inputs
-        self.outputs = outputs
-
-    def __len__(self):
-        return len(self.inputs)
-
-    @property
-    def inputDim(self):
-        return self.inputs.shape[1]
-
-    @property
-    def outputDim(self):
-        return self.outputs.shape[1]
-
-    def filterIndices(self, indices: Sequence[int]) -> 'InputOutputData':
-        inputs = self.inputs.iloc[indices]
-        outputs = self.outputs.iloc[indices]
-        return InputOutputData(inputs, outputs)
-
-    def computeInputOutputCorrelation(self):
-        correlations = {}
-        for outputCol in self.outputs.columns:
-            correlations[outputCol] = {}
-            outputSeries = self.outputs[outputCol]
-            for inputCol in self.inputs.columns:
-                inputSeries = self.inputs[inputCol]
-                pcc, pvalue = scipy.stats.pearsonr(inputSeries, outputSeries)
-                correlations[outputCol][inputCol] = pcc
-        return correlations
 
 
 class PredictorModel(ABC):
@@ -72,7 +36,7 @@ class PredictorModel(ABC):
         pass
 
 
-class VectorModel(PredictorModel, PickleSerializingMixin, ABC):
+class VectorModel(PredictorModel, ABC):
     """
     Base class for models that map vectors to vectors
     """
@@ -217,7 +181,7 @@ class VectorModel(PredictorModel, PickleSerializingMixin, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
-        _log.info(f"Training {self.__class__.__name__}")
+        log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
@@ -225,7 +189,7 @@ class VectorModel(PredictorModel, PickleSerializingMixin, ABC):
             Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
-        _log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
+        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
         self._isFitted = True
 
@@ -335,7 +299,7 @@ class VectorClassificationModel(VectorModel, ABC):
         for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
             s = valueSeries.sum()
             if abs(s-1.0) > 0.01:
-                _log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
         return result
 

@@ -1,22 +1,21 @@
 import copy
 import logging
 import time
-
-import matplotlib.figure
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any, Union, Generator, Generic, TypeVar, List, Optional, Sequence, Callable
 
+import matplotlib.figure
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
 
-from .util.io import ResultWriter
-from .util.typing import PandasNamedTuple
-from .vector_model import InputOutputData, VectorModel, PredictorModel, VectorClassificationModel, VectorRegressionModel, \
-    VectorModel
+from .data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
 from .eval_stats import RegressionEvalStats, ClassificationEvalStats, RegressionEvalStatsCollection, \
     ClassificationEvalStatsCollection, EvalStats, EvalStatsCollection, ClassificationMetric
+from .util.io import ResultWriter
+from .util.typing import PandasNamedTuple
+from .vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
 
 _log = logging.getLogger(__name__)
 
@@ -75,35 +74,6 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
 class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEvalStats]):
     def getEvalStatsCollection(self):
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
-
-
-class DataSplitter(ABC):
-    @abstractmethod
-    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
-        pass
-
-
-class DataSplitterFractional(DataSplitter):
-    def __init__(self, fractionalSizeOfFirstSet, shuffle=True, randomSeed: int = 42):
-        if not 0 <= fractionalSizeOfFirstSet <= 1:
-            raise Exception(f"invalid fraction: {fractionalSizeOfFirstSet}")
-        self.fractionalSizeOfFirstSet = fractionalSizeOfFirstSet
-        self.shuffle = shuffle
-        self.randomSeed = randomSeed
-
-    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
-        numDataPoints = len(data)
-        splitIndex = int(numDataPoints * self.fractionalSizeOfFirstSet)
-        rand = np.random.RandomState(self.randomSeed)
-        if self.shuffle:
-            indices = rand.permutation(numDataPoints)
-        else:
-            indices = range(numDataPoints)
-        indicesA = indices[:splitIndex]
-        indicesB = indices[splitIndex:]
-        A = data.filterIndices(list(indicesA))
-        B = data.filterIndices(list(indicesB))
-        return A, B
 
 
 class VectorModelEvaluator(ABC):
