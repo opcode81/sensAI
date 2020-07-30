@@ -4,7 +4,7 @@ import math
 import random
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Callable, Type, Sequence
+from typing import Optional, Tuple, Callable, Type, Sequence, TypeVar, Generic
 
 import numpy as np
 import pandas as pd
@@ -321,13 +321,16 @@ class SAState(ABC):
         pass
 
 
-class SAOperator:
+TSAState = TypeVar("TSAState", bound=SAState)
+
+
+class SAOperator(Generic[TSAState]):
     """
     An operator which, when applied with appropriately chosen parameters, can transform a state into another
     state during simulated annealing
     """
 
-    def __init__(self, state: SAState):
+    def __init__(self, state: TSAState):
         """
         :param state: the state to which the operator is applied
         """
