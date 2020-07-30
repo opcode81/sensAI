@@ -1,232 +1,16 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Union, List, TypeVar, Generic, Sequence
+from typing import Union, List, Sequence
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import sklearn.utils.multiclass
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from sklearn.metrics import accuracy_score, confusion_matrix
 
-from sensai.util.plot import plotMatrix
+from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection
 
-_log = logging.getLogger(__name__)
-
-
-TEvalStats = TypeVar("TEvalStats", bound="EvalStats")
-TMetric = TypeVar("TMetric", bound="Metric")
-
-
-class Metric(Generic[TEvalStats], ABC):
-    def __init__(self, name):
-        self.name = name
-
-    @abstractmethod
-    def computeValueForEvalStats(self, evalStats: TEvalStats):
-        pass
-
-
-class EvalStats(Generic[TMetric], ABC):
-    """Collects data for the evaluation of a model and computes corresponding metrics"""
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            metrics: List[TMetric] = None):
-        self.y_true = []
-        self.y_predicted = []
-        self.y_true_multidim = None
-        self.y_predicted_multidim = None
-        self.name = None
-
-        if metrics is None:
-            raise ValueError("No metrics provided")
-        self.metrics = metrics
-
-        if y_predicted is not None:
-            self._addAll(y_predicted, y_true)
-
-    def __str__(self):
-        d = self.getAll()
-        return "EvalStats[%s]" % ", ".join(["%s=%.4f" % (k, v) for (k, v) in d.items()])
-
-    def setName(self, name):
-        self.name = name
-
-    def addMetric(self, metric: TMetric):
-        self.metrics.append(metric)
-
-    def computeMetricValue(self, metric: TMetric):
-        return metric.computeValueForEvalStats(self)
-
-    def getAll(self):
-        """Gets a dictionary with all metrics"""
-        d = {}
-        for metric in self.metrics:
-            d[metric.name] = self.computeMetricValue(metric)
-        return d
-
-    def _add(self, y_predicted, y_true):
-        """
-        Adds a single pair of values to the evaluation
-
-        Parameters:
-            y_predicted: the value predicted by the model
-            y_true: the true value
-        """
-        self.y_true.append(y_true)
-        self.y_predicted.append(y_predicted)
-
-    def _addAll(self, y_predicted, y_true):
-        """
-        Adds multiple predicted values and the corresponding ground truth values to the evaluation
-
-        Parameters:
-            y_predicted: pandas.Series, array or list of predicted values or, in the case of multi-dimensional models,
-                        a pandas DataFrame (multiple series) containing predicted values
-            y_true: an object of the same type/shape as y_predicted containing the corresponding ground truth values
-        """
-        if (isinstance(y_predicted, pd.Series) or isinstance(y_predicted, list) or isinstance(y_predicted, np.ndarray)) \
-                and (isinstance(y_true, pd.Series) or isinstance(y_true, list) or isinstance(y_true, np.ndarray)):
-            a, b = len(y_predicted), len(y_true)
-            if a != b:
-                raise Exception("Lengths differ (predicted %d, truth %d)" % (a, b))
-        elif isinstance(y_predicted, pd.DataFrame) and isinstance(y_true, pd.DataFrame):  # multiple time series
-            # keep track of multidimensional data (to be used later in getEvalStatsCollection)
-            y_predicted_multidim = y_predicted.values
-            y_true_multidim = y_true.values
-            dim = y_predicted_multidim.shape[1]
-            if dim != y_true_multidim.shape[1]:
-                raise Exception("Dimension mismatch")
-            if self.y_true_multidim is None:
-                self.y_predicted_multidim = [[] for _ in range(dim)]
-                self.y_true_multidim = [[] for _ in range(dim)]
-            if len(self.y_predicted_multidim) != dim:
-                raise Exception("Dimension mismatch")
-            for i in range(dim):
-                self.y_predicted_multidim[i].extend(y_predicted_multidim[:, i])
-                self.y_true_multidim[i].extend(y_true_multidim[:, i])
-            # convert to flat data for this stats object
-            y_predicted = y_predicted_multidim.reshape(-1)
-            y_true = y_true_multidim.reshape(-1)
-        else:
-            raise Exception("Unhandled data types: %s, %s" % (str(type(y_predicted)), str(type(y_true))))
-        self.y_true.extend(y_true)
-        self.y_predicted.extend(y_predicted)
-
-
-class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
-    def __init__(self, name, requiresProbabilities=False):
-        super().__init__(name)
-        self.requiresProbabilities = requiresProbabilities
-
-    def computeValueForEvalStats(self, evalStats: "ClassificationEvalStats"):
-        return self.computeValue(evalStats.y_true, evalStats.y_predicted, evalStats.y_predictedClassProbabilities)
-
-    def computeValue(self, y_true, y_predicted, y_predictedClassProbabilities=None):
-        if self.requiresProbabilities and y_predictedClassProbabilities is None:
-            raise ValueError(f"{self} requires class probabilities")
-        return self._computeValue(y_true, y_predicted, y_predictedClassProbabilities)
-
-    @abstractmethod
-    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
-        pass
-
-
-class ClassificationMetricAccuracy(ClassificationMetric):
-    def __init__(self):
-        super().__init__("ACC")
-
-    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
-        return accuracy_score(y_true=y_true, y_pred=y_predicted)
-
-
-class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetric):
-    def __init__(self):
-        super().__init__("GeoMeanTrueClassProb", requiresProbabilities=True)
-
-    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
-        y_predicted_proba_true_class = np.zeros(len(y_true))
-        for i in range(len(y_true)):
-            trueClass = y_true[i]
-            if trueClass not in y_predictedClassProbabilities.columns:
-                y_predicted_proba_true_class[i] = 0
-            else:
-                y_predicted_proba_true_class[i] = y_predictedClassProbabilities[trueClass].iloc[i]
-        # the 1e-3 below prevents lp = -inf due to single entries with y_predicted_proba_true_class=0
-        lp = np.log(np.maximum(1e-3, y_predicted_proba_true_class))
-        return np.exp(lp.sum() / len(lp))
-
-
-class ClassificationMetricTopNAccuracy(ClassificationMetric):
-    def __init__(self, n: int):
-        super().__init__(f"Top{n}Accuracy", requiresProbabilities=True)
-        self.n = n
-
-    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
-        labels = y_predictedClassProbabilities.columns
-        cnt = 0
-        for i, rowValues in enumerate(y_predictedClassProbabilities.values.tolist()):
-            pairs = sorted(zip(labels, rowValues), key=lambda x: x[1], reverse=True)
-            if y_true[i] in (x[0] for x in pairs[:self.n]):
-                cnt += 1
-        return cnt / len(y_true)
-
-
-class ClassificationEvalStats(EvalStats[ClassificationMetric]):
-    def __init__(self, y_predicted: Union[list, pd.Series, np.ndarray] = None,
-            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            y_predictedClassProbabilities: pd.DataFrame = None,
-            labels: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            metrics: Sequence[ClassificationMetric] = None,
-            additionalMetrics: Sequence[ClassificationMetric] = None):
-        """
-        :param y_predicted: the predicted class labels
-        :param y_true: the true class labels
-        :param y_predictedClassProbabilities: a data frame whose columns are the class labels and whose values are probabilities
-        :param labels: the list of class labels
-        :param metrics: the metrics to compute for evaluation; if None, use default metrics
-        :param additionalMetrics: the metrics to additionally compute
-        """
-        self.labels = labels
-        self.y_predictedClassProbabilities = y_predictedClassProbabilities
-        self._probabilitiesAvailable = y_predictedClassProbabilities is not None
-        if self._probabilitiesAvailable:
-            colSet = set(y_predictedClassProbabilities.columns)
-            if colSet != set(labels):
-                raise ValueError(f"Set of columns in class probabilities data frame ({colSet}) does not correspond to labels ({labels}")
-            if len(y_predictedClassProbabilities) != len(y_true):
-                raise ValueError("Row count in class probabilities data frame does not match ground truth")
-
-        if metrics is None:
-            metrics = [ClassificationMetricAccuracy(), ClassificationMetricGeometricMeanOfTrueClassProbability()]
-        metrics = list(metrics)
-        if additionalMetrics is not None:
-            for m in additionalMetrics:
-                if not self._probabilitiesAvailable and m.requiresProbabilities:
-                    raise ValueError(f"Additional metric {m} not supported, as class probabilities were not provided")
-            metrics.extend(additionalMetrics)
-
-        super().__init__(y_predicted=y_predicted, y_true=y_true, metrics=metrics)
-
-    def getConfusionMatrix(self) -> "ConfusionMatrix":
-        return ConfusionMatrix(self.y_true, self.y_predicted)
-
-    def getAccuracy(self):
-        return self.computeMetricValue(ClassificationMetricAccuracy())
-
-    def getAll(self):
-        """Gets a dictionary with all metrics"""
-        d = {}
-        for metric in self.metrics:
-            if not metric.requiresProbabilities or self._probabilitiesAvailable:
-                d[metric.name] = self.computeMetricValue(metric)
-        return d
-
-    def plotConfusionMatrix(self, normalize=True, titleAdd: str = None):
-        # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
-        confusionMatrix = self.getConfusionMatrix()
-        return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
+log = logging.getLogger(__name__)
 
 
 class RegressionMetric(Metric["RegressionEvalStats"], ABC):
@@ -327,13 +111,13 @@ class RegressionMetricMedianAE(RegressionMetric):
         return np.median(cls.computeAbsErrors(y_true, y_predicted))
 
 
-class RegressionEvalStats(EvalStats[RegressionMetric]):
+class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     """Collects data for the evaluation of a model and computes corresponding metrics"""
 
     def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
             y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            metrics: Sequence[RegressionMetric] = None,
-            additionalMetrics: Sequence[RegressionMetric] = None):
+            metrics: Sequence["RegressionMetric"] = None,
+            additionalMetrics: Sequence["RegressionMetric"] = None):
 
         if metrics is None:
             metrics = [RegressionMetricRRSE(), RegressionMetricR2(), RegressionMetricPCC(),
@@ -458,57 +242,6 @@ class RegressionEvalStats(EvalStats[RegressionMetric]):
         return fig
 
 
-def meanStats(evalStatsList):
-    """Returns, for a list of EvalStats objects, the mean values of all metrics in a dictionary"""
-    dicts = [s.getAll() for s in evalStatsList]
-    metrics = dicts[0].keys()
-    return {m: np.mean([d[m] for d in dicts]) for m in metrics}
-
-
-class EvalStatsCollection(ABC):
-    def __init__(self, evalStatsList: List[EvalStats]):
-        self.statsList = evalStatsList
-        metricsList = [es.getAll() for es in evalStatsList]
-        metricNames = sorted(metricsList[0].keys())
-        self.metrics = {metric: [d[metric] for d in metricsList] for metric in metricNames}
-
-    def getValues(self, metric):
-        return self.metrics[metric]
-
-    def aggStats(self):
-        agg = {}
-        for metric, values in self.metrics.items():
-            agg[f"mean[{metric}]"] = np.mean(values)
-            agg[f"std[{metric}]"] = np.std(values)
-        return agg
-
-    def meanStats(self):
-        metrics = {metric: np.mean(values) for (metric, values) in self.metrics.items()}
-        metrics.update({"StdDev[%s]" % metric: np.std(values) for (metric, values) in self.metrics.items()})
-        return metrics
-
-    def plotDistribution(self, metric):
-        values = self.metrics[metric]
-        plt.figure()
-        plt.title(metric)
-        sns.distplot(values)
-
-    def toDataFrame(self) -> pd.DataFrame:
-        """
-        :return: a DataFrame with the evaluation metrics from all contained EvalStats objects;
-            the EvalStats' name field being used as the index if it is set
-        """
-        data = dict(self.metrics)
-        index = [stats.name for stats in self.statsList]
-        if len([n for n in index if n is not None]) == 0:
-            index = None
-        return pd.DataFrame(data, index=index)
-
-    def __str__(self):
-        return f"{self.__class__.__name__}[" + ", ".join(["%s=%.4f" % (key, self.aggStats()[key])
-                                                          for key in self.metrics]) + "]"
-
-
 class RegressionEvalStatsCollection(EvalStatsCollection):
     def __init__(self, evalStatsList: List[RegressionEvalStats]):
         super().__init__(evalStatsList)
@@ -523,30 +256,3 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
             self.globalStats = RegressionEvalStats(y_predicted, y_true)
         return self.globalStats
-
-
-class ClassificationEvalStatsCollection(EvalStatsCollection):
-    def __init__(self, evalStatsList: List[ClassificationEvalStats]):
-        super().__init__(evalStatsList)
-        self.globalStats = None
-
-    def getGlobalStats(self) -> ClassificationEvalStats:
-        """
-        Gets an evaluation statistics object that combines the data from all contained eval stats objects
-        """
-        if self.globalStats is None:
-            y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
-            y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
-            self.globalStats = ClassificationEvalStats(y_predicted, y_true)
-        return self.globalStats
-
-
-class ConfusionMatrix:
-    def __init__(self, y_true, y_predicted):
-        self.labels = sklearn.utils.multiclass.unique_labels(y_true, y_predicted)
-        self.confusionMatrix = confusion_matrix(y_true, y_predicted, labels=self.labels)
-
-    def plot(self, normalize=True, titleAdd: str = None):
-        title = 'Normalized Confusion Matrix' if normalize else 'Confusion Matrix (Counts)'
-        return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize,
-            titleAdd=titleAdd)

@@ -1,27 +1,23 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, List, Union, Dict
+from typing import Generic, TypeVar, List, Union, Dict, Sequence
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sensai import VectorModel
 
-TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
-TMetric = TypeVar("TMetric", bound=Metric)
-TVectorModelEvalStats = TypeVar("TVectorModelEvalStats", bound=VectorModelEvalStats)
+from ...vector_model import VectorModel
+
+# Note: in the 2020.2 version of PyCharm passing strings to bound is highlighted as error
+# It does not cause runtime errors and the static type checker ignores the bound anyway, so it does not matter for now.
+# However, this might cause problems with type checking in the future. Therefore, I moved the definition of TEvalStats
+# below the definition of EvalStats. Unfortunately, the dependency in generics between EvalStats and Metric
+# does not allow to define both, TMetric and TEvalStats, properly. For now we have to leave it with the bound as string
+# and hope for the best in the future
+TMetric = TypeVar("TMetric", bound="Metric")
 TVectorModel = TypeVar("TVectorModel", bound=VectorModel)
 
 PredictionArray = Union[np.ndarray, pd.Series, pd.DataFrame, list]
-
-
-class Metric(Generic[TEvalStats], ABC):
-    def __init__(self, name):
-        self.name = name
-
-    @abstractmethod
-    def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
-        pass
 
 
 class EvalStats(Generic[TMetric]):
@@ -53,6 +49,15 @@ class EvalStats(Generic[TMetric]):
 
 
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
+
+
+class Metric(Generic[TEvalStats], ABC):
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
+        pass
 
 
 class EvalStatsCollection(Generic[TEvalStats], ABC):
@@ -103,9 +108,15 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
                ", ".join([f"{key}={self.aggStats()[key]:.4f}" for key in self.metrics]) + "]"
 
 
-class VectorModelEvalStats(EvalStats[TMetric], ABC):
+class PredictionEvalStats(EvalStats[TMetric], ABC):
     """
-    Collects data for the evaluation of a model and computes corresponding metrics
+    Collects data for the evaluation of predicted labels (including multi-dimensional predictions)
+    and computes corresponding metrics
+
+    :param y_predicted: sequence of predicted labels. In case of multi-dimensional predictions, a data frame with
+        one column per dimension should be passed
+    :param y_true: sequence of ground truth labels of same shape as y_predicted
+    :param metrics: list of metrics to be computed on the provided data
     """
     def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray, metrics: List[TMetric]):
         self.y_true = []
@@ -161,3 +172,13 @@ class VectorModelEvalStats(EvalStats[TMetric], ABC):
             raise Exception(f"Unhandled data types: {type(y_predicted)}, {type(y_true)}")
         self.y_true.extend(y_true)
         self.y_predicted.extend(y_predicted)
+
+
+def meanStats(evalStatsList: Sequence[EvalStats]) -> Dict[str, float]:
+    """
+    For a list of EvalStats objects compute the mean values of all metrics in a dictionary.
+    Assumes that all provided EvalStats have the same metrics
+    """
+    dicts = [s.getAll() for s in evalStatsList]
+    metrics = dicts[0].keys()
+    return {m: np.mean([d[m] for d in dicts]) for m in metrics}

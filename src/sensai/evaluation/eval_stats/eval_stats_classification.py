@@ -6,7 +6,7 @@ import pandas as pd
 import sklearn
 from sklearn.metrics import confusion_matrix, accuracy_score
 
-from .eval_stats_base import PredictionArray, VectorModelEvalStats, VectorModelEvalStatsCollection, Metric
+from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric
 from ...util.plot import plotMatrix
 
 
@@ -68,7 +68,9 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
         return cnt / len(y_true)
 
 
-class ClassificationEvalStats(VectorModelEvalStats["ClassificationMetric"]):
+# TODO: make some kwargs to args, infer y_predicted when classProbabilities are passed. We can also infer labels
+#  (though not reliably) if they are not passed
+class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def __init__(self, y_predicted: PredictionArray = None,
                  y_true: PredictionArray = None,
                  y_predictedClassProbabilities: pd.DataFrame = None,
@@ -124,12 +126,12 @@ class ClassificationEvalStats(VectorModelEvalStats["ClassificationMetric"]):
         return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
 
 
-class ClassificationEvalStatsCollection(VectorModelEvalStatsCollection[ClassificationEvalStats]):
+class ClassificationEvalStatsCollection(EvalStatsCollection[ClassificationEvalStats]):
     def __init__(self, evalStatsList: List[ClassificationEvalStats]):
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    # TODO: move to base class and use the new get_args method (importing from future) to infer the generic type at runtime
+    # TODO once we moved to python 3.8: move to base class and use the new get_args method to infer the generic type at runtime
     #  https://docs.python.org/3/library/typing.html#typing.get_args
     def getGlobalStats(self) -> ClassificationEvalStats:
         """
