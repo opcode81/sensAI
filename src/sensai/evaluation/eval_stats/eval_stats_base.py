@@ -112,13 +112,14 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
     """
     Collects data for the evaluation of predicted labels (including multi-dimensional predictions)
     and computes corresponding metrics
-
-    :param y_predicted: sequence of predicted labels. In case of multi-dimensional predictions, a data frame with
-        one column per dimension should be passed
-    :param y_true: sequence of ground truth labels of same shape as y_predicted
-    :param metrics: list of metrics to be computed on the provided data
     """
     def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray, metrics: List[TMetric]):
+        """
+        :param y_predicted: sequence of predicted labels. In case of multi-dimensional predictions, a data frame with
+            one column per dimension should be passed
+        :param y_true: sequence of ground truth labels of same shape as y_predicted
+        :param metrics: list of metrics to be computed on the provided data
+        """
         self.y_true = []
         self.y_predicted = []
         self.y_true_multidim = None

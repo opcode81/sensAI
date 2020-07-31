@@ -19,7 +19,7 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class MetricsDictsProvider(ABC):
+class MetricsDictProvider(ABC):
     @abstractmethod
     def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
@@ -74,7 +74,7 @@ class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[Regressio
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
-class VectorModelEvaluator(MetricsDictsProvider, ABC):
+class VectorModelEvaluator(MetricsDictProvider, ABC):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
             testFraction=None, randomSeed=42, shuffle=True):
         """

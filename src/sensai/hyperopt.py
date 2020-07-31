@@ -8,7 +8,7 @@ from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List,
 
 import pandas as pd
 
-from .evaluation.evaluator import MetricsDictsProvider
+from .evaluation.evaluator import MetricsDictProvider
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
 from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
@@ -209,7 +209,7 @@ class GridSearch(TrackedExperimentDataProvider):
         self._trackedExperiment = None
 
     @classmethod
-    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictsProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
                 cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
@@ -227,7 +227,7 @@ class GridSearch(TrackedExperimentDataProvider):
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
-    def run(self, metricsEvaluator: MetricsDictsProvider, sortColumnName=None) -> pd.DataFrame:
+    def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None) -> pd.DataFrame:
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
         to that file directly after being computed
@@ -308,7 +308,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
 
     def __init__(self, modelFactory: Callable[..., VectorModel],
                  opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
-                 initialParameters: Dict[str, Any], metricsEvaluator: MetricsDictsProvider,
+                 initialParameters: Dict[str, Any], metricsEvaluator: MetricsDictProvider,
                  metricToOptimise, minimiseMetric=False,
                  collectDataFrame=True, csvResultsPath: Optional[str] = None,
                  parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
@@ -352,7 +352,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self._trackedExperiment = trackedExperiment
 
     @classmethod
-    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictsProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
                     parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
