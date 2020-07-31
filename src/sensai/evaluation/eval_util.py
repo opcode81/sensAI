@@ -1,3 +1,11 @@
+"""
+This module contains methods and classes that facilitate evaluation of different types of models. The suggested
+workflow for evaluation is to use these higher-level functionalities instead of instantiating
+the evaluation classes directly.
+"""
+# TODO: provide a notebook (and possibly an rst file) that illustrates standard evaluation scenarios and at the same
+#  time serves as an integration test
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable
@@ -7,12 +15,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from .crossval import VectorModelCrossValidationData, VectorModelCrossValidator, \
-    VectorRegressionModelCrossValidationData, VectorClassificationModelCrossValidationData
+from .crossval import PredictorModelCrossValidationData, VectorModelCrossValidator, \
+    VectorRegressionModelCrossValidationData, VectorClassificationModelCrossValidationData, \
+    VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
-from .evaluation import VectorModelEvaluator, VectorModelEvaluationData, VectorRegressionModelEvaluator, \
+from .evaluation import VectorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
 from ..data_ingest import InputOutputData
 from ..util.io import ResultWriter
@@ -24,8 +33,40 @@ TModel = TypeVar("TModel", bound=VectorModel)
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 TEvaluator = TypeVar("TEvaluator", bound=VectorModelEvaluator)
-TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
-TCrossValData = TypeVar("TCrossValData", bound=VectorModelCrossValidationData)
+TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
+TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
+
+
+def _isRegression(model: Optional[VectorModel], isRegression: Optional[bool]) -> bool:
+    if model is None and isRegression is None or (model is not None and isRegression is not None):
+        raise ValueError("One of the two parameters have to be passed: model or isRegression")
+
+    if isRegression is None:
+        model: VectorModel
+        return model.isRegressionModel()
+    return isRegression
+
+
+def createVectorModelEvaluator(data: InputOutputData, model: VectorModel = None,
+        isRegression: bool = None, **kwargs) \
+            -> Union[VectorRegressionModelEvaluator, VectorClassificationModelEvaluator]:
+    cons = VectorRegressionModelEvaluator if _isRegression(model, isRegression) else VectorClassificationModelEvaluator
+    return cons(data, **kwargs)
+
+
+def createVectorModelCrossValidator(data: InputOutputData, model: VectorModel = None,
+        isRegression: bool = None, folds=5, **kwargs) \
+            -> Union[VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator]:
+    cons = VectorRegressionModelCrossValidator if _isRegression(model, isRegression) else VectorClassificationModelCrossValidator
+    return cons(data, folds=folds, **kwargs)
+
+
+def createEvaluationUtil(data: InputOutputData, model: VectorModel = None,
+        isRegression: bool = None, evaluatorParams: Optional[Dict[str, Any]] = None,
+        crossValidatorParams: Optional[Dict[str, Any]] = None) \
+            -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
+    cons = RegressionEvaluationUtil if _isRegression(model, isRegression) else ClassificationEvaluationUtil
+    return cons(data, evaluatorParams=evaluatorParams, crossValidatorParams=crossValidatorParams)
 
 
 def computeEvaluationMetricsDict(model, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]) -> Dict[str, float]:
@@ -79,7 +120,7 @@ def evalModelViaEvaluator(model: TModel, inputOutputData: InputOutputData, testF
         evaluatorParams = dict(testFraction=testFraction, randomSeed=randomSeed)
     else:
         evaluatorParams = dict(testFraction=testFraction, computeProbabilities=computeProbabilities, randomSeed=randomSeed)
-    ev = EvaluationUtil.forModelType(model.isRegressionModel(), inputOutputData, evaluatorParams=evaluatorParams)
+    ev = createEvaluationUtil(inputOutputData, model=model, evaluatorParams=evaluatorParams)
     return ev.performSimpleEvaluation(model, showPlots=True, logResults=True)
 
 
@@ -102,12 +143,6 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         self.crossValidatorParams = crossValidatorParams
         self.inputOutputData = inputOutputData
 
-    @staticmethod
-    def forModelType(isRegression, inputOutputData: InputOutputData, evaluatorParams: Optional[Dict[str, Any]] = None,
-            crossValidatorParams: Optional[Dict[str, Any]] = None) -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
-        cons = RegressionEvaluationUtil if isRegression else ClassificationEvaluationUtil
-        return cons(inputOutputData, evaluatorParams=evaluatorParams, crossValidatorParams=crossValidatorParams)
-
     class ResultCollector:
         def __init__(self, showPlots: bool = True, resultWriter: Optional[ResultWriter] = None):
             self.showPlots = showPlots
@@ -129,7 +164,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         :param model: the model for which to create an evaluator
         :return: an evaluator
         """
-        return VectorModelEvaluator.forModel(model, self.inputOutputData, **self.evaluatorParams)
+        return createVectorModelEvaluator(self.inputOutputData, model=model, **self.evaluatorParams)
 
     def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False) -> TEvalData:
@@ -173,7 +208,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         :return: cross-validation result data
         """
         resultWriter = self._resultWriterForModel(resultWriter, model)
-        crossValidator = VectorModelCrossValidator.forModel(model, self.inputOutputData, **self.crossValidatorParams)
+        crossValidator = createVectorModelCrossValidator(self.inputOutputData, model=model, **self.crossValidatorParams)
         crossValidationData = crossValidator.evalModel(model)
         strEvalResults = str(crossValidationData.getEvalStatsCollection().aggStats())
         if logResults:
@@ -204,7 +239,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
             resultWriter.writeTextFile("model-comparison-results", strResults)
         return resultsDF
 
-    # TODO: a parameter predictedVarName seemed to have been present at some point but has now disappeared
+    # TODO: a parameter predictedVarName seemed to have been present at some point but has now disappeared,
     #   should we resuscitate it?
     def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None, subtitlePrefix: str = ""):
         """
@@ -223,9 +258,9 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
     def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector, subtitle=None):
 
         def createPlots(predVarName, rc, subt):
-            if isinstance(data, VectorModelCrossValidationData):
+            if isinstance(data, PredictorModelCrossValidationData):
                 evalStats = data.getEvalStatsCollection(predictedVarName=predVarName).getGlobalStats()
-            elif isinstance(data, VectorModelEvaluationData):
+            elif isinstance(data, PredictorModelEvaluationData):
                 evalStats = data.getEvalStats(predictedVarName=predVarName)
             else:
                 raise ValueError(f"Unexpected argument: data={data}")
@@ -287,7 +322,7 @@ class MultiDataEvaluationUtil:
         allResults = pd.DataFrame()
         for key, inputOutputData in self.inputOutputDataDict.items():
             log.info(f"Evaluating models for {key}")
-            ev = EvaluationUtil.forModelType(isRegression, inputOutputData, crossValidatorParams=crossValidatorParams)
+            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
             models = [f() for f in modelFactories]
             childResultWriter = resultWriter.childForSubdirectory(key) if writePerDatasetResults else None
             df = ev.compareModelsCrossValidation(models, resultWriter=childResultWriter)

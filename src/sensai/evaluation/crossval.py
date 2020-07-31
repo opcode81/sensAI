@@ -1,7 +1,8 @@
 import copy
 import logging
+import warnings
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Union, Generator, Generic, TypeVar, List
+from typing import Tuple, Any, Generator, Generic, TypeVar, List
 
 import numpy as np
 
@@ -9,25 +10,31 @@ from .eval_stats.eval_stats_base import PredictionEvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationEvalStatsCollection
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
 from .evaluation import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
-    VectorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator
+    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator
 from ..data_ingest import InputOutputData
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
+from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
 
 log = logging.getLogger(__name__)
 
-TModel = TypeVar("TModel", bound=VectorModel)
+TModel = TypeVar("TModel", bound=PredictorModel)
 TEvalStats = TypeVar("TEvalStats", bound=PredictionEvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
-TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
+TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
 
 
-class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):
-    def __init__(self, trainedModels: List[TModel], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
+class PredictorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):
+    def __init__(self, predictorModels: List[TModel], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
         self.predictedVarNames = predictedVarNames
-        self.trainedModels = trainedModels
+        self.predictorModels = predictorModels
         self.evalDataList = evalDataList
         self.testIndicesList = testIndicesList
+
+    @property
+    def trainedModels(self):
+        warnings.warn("Use predictorModels instead, the field trainedModels will be removed in a future release",
+                      DeprecationWarning)
+        return self.predictorModels
 
     @property
     def modelName(self):
@@ -53,21 +60,10 @@ class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats,
                 yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-TCrossValData = TypeVar("TCrossValData", bound=VectorModelCrossValidationData)
+TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
 
 
 class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
-    @staticmethod
-    def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) -> Union["VectorRegressionModelCrossValidator", "VectorClassificationModelCrossValidator"]:
-        return VectorModelCrossValidator.forModelType(model.isRegressionModel(), data, folds=folds, **kwargs)
-
-    @staticmethod
-    def forModelType(isRegression: bool, data: InputOutputData, folds=5, **kwargs) -> Union["VectorRegressionModelCrossValidator", "VectorClassificationModelCrossValidator"]:
-        if isRegression:
-            return VectorRegressionModelCrossValidator(data, folds=folds, **kwargs)
-        else:
-            return VectorClassificationModelCrossValidator(data, folds=folds, **kwargs)
-
     def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None):
         """
         :param data: the data set
@@ -115,7 +111,7 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
 
-class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
+class VectorRegressionModelCrossValidationData(PredictorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[RegressionEvalStats]) -> RegressionEvalStatsCollection:
         return RegressionEvalStatsCollection(l)
 
@@ -129,7 +125,7 @@ class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegres
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
 
 
-class VectorClassificationModelCrossValidationData(VectorModelCrossValidationData[VectorClassificationModel, VectorClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
+class VectorClassificationModelCrossValidationData(PredictorModelCrossValidationData[VectorClassificationModel, VectorClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[ClassificationEvalStats]) -> ClassificationEvalStatsCollection:
         return ClassificationEvalStatsCollection(l)
 

@@ -1,7 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Union, Generator, Generic, TypeVar, Sequence
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence
 
 import pandas as pd
 
@@ -12,14 +12,14 @@ from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 TModel = TypeVar("TModel", bound=VectorModel)
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
+class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
     def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: PredictorModel):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
@@ -63,23 +63,12 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
             yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEvalStats]):
+class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[RegressionEvalStats]):
     def getEvalStatsCollection(self):
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
 class VectorModelEvaluator(ABC):
-    @staticmethod
-    def forModel(model: VectorModel, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
-        return VectorModelEvaluator.forModelType(model.isRegressionModel(), data, **kwargs)
-
-    @staticmethod
-    def forModelType(isRegression: bool, data: InputOutputData, **kwargs) -> Union["VectorRegressionModelEvaluator", "VectorClassificationModelEvaluator"]:
-        if isRegression:
-            return VectorRegressionModelEvaluator(data, **kwargs)
-        else:
-            return VectorClassificationModelEvaluator(data, **kwargs)
-
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
             testFraction=None, randomSeed=42, shuffle=True):
         """
@@ -109,10 +98,10 @@ class VectorModelEvaluator(ABC):
         """Fits the given model's parameters using this evaluator's training data"""
         startTime = time.time()
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
-        _log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
+        log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
     @abstractmethod
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorModelEvaluationData:
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> PredictorModelEvaluationData:
         """
         Evaluates the given model
 
@@ -163,7 +152,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         return predictions, groundTruth
 
 
-class VectorClassificationModelEvaluationData(VectorModelEvaluationData[ClassificationEvalStats]):
+class VectorClassificationModelEvaluationData(PredictorModelEvaluationData[ClassificationEvalStats]):
     pass
 
 
