@@ -1,14 +1,13 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Union, List, Sequence
+from typing import List, Sequence
 
 import numpy as np
-import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection
+from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
 
 log = logging.getLogger(__name__)
 
@@ -112,12 +111,16 @@ class RegressionMetricMedianAE(RegressionMetric):
 
 
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
-    """Collects data for the evaluation of a model and computes corresponding metrics"""
+    """
+    Collects data for the evaluation of predicted continuous values and computes corresponding metrics
 
-    def __init__(self, y_predicted: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            y_true: Union[list, pd.Series, pd.DataFrame, np.ndarray] = None,
-            metrics: Sequence["RegressionMetric"] = None,
-            additionalMetrics: Sequence["RegressionMetric"] = None):
+    :param y_predicted: the predicted values
+    :param y_true: the true values
+    :param metrics: the metrics to compute for evaluation; if None, use default metrics
+    :param additionalMetrics: the metrics to additionally compute
+    """
+    def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray,
+            metrics: Sequence["RegressionMetric"] = None, additionalMetrics: Sequence["RegressionMetric"] = None):
 
         if metrics is None:
             metrics = [RegressionMetricRRSE(), RegressionMetricR2(), RegressionMetricPCC(),
@@ -127,7 +130,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if additionalMetrics is not None:
             metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted=y_predicted, y_true=y_true, metrics=metrics)
+        super().__init__(y_predicted, y_true, metrics)
 
     def getMSE(self):
         return self.computeMetricValue(RegressionMetricMSE())

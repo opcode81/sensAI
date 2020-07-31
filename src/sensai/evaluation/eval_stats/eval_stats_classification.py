@@ -104,7 +104,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
                     raise ValueError(f"Additional metric {m} not supported, as class probabilities were not provided")
             metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted=y_predicted, y_true=y_true, metrics=metrics)
+        super().__init__(y_predicted, y_true, metrics)
 
     def getConfusionMatrix(self) -> "ConfusionMatrix":
         return ConfusionMatrix(self.y_true, self.y_predicted)
