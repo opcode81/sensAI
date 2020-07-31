@@ -8,13 +8,13 @@ from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List,
 
 import pandas as pd
 
+from .evaluation.evaluator import MetricsDictsProvider
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
 from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
 from .vector_model import VectorModel
-from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def iterParamCombinations(hyperParamValues: Dict[str, Sequence[Any]]) -> Generator[Dict[str, Any], None, None]:
@@ -137,7 +137,7 @@ class ParametersMetricsCollection:
             # check sort column and move it to the front
             if self.sortColumnName is not None:
                 if self.sortColumnName not in self.cols:
-                    _log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
+                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
                 else:
                     self.cols.remove(self.sortColumnName)
                     self.cols.insert(0, self.sortColumnName)
@@ -171,7 +171,7 @@ class GridSearch(TrackedExperimentDataProvider):
     Instances of this class can be used for evaluating models with different user-provided parametrizations
     over the same data and persisting the results
     """
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
             numProcesses=1, csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
@@ -203,20 +203,21 @@ class GridSearch(TrackedExperimentDataProvider):
             for options in parameterOptions.values():
                 n *= len(options)
             self.numCombinations += n
-        _log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
+        log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
         self._trackedExperiment = None
 
     @classmethod
-    def _evalParams(cls, modelFactory, evaluatorOrValidator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictsProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
-                cls._log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
+                cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
                 return None
-        cls._log.info(f"Evaluating {params}")
+        cls.log.info(f"Evaluating {params}")
         model = modelFactory(**params)
-        values = computeEvaluationMetricsDict(model, evaluatorOrValidator)
+        # TODO or not TODO: for some evaluators additional kwargs can be passed, e.g. onTrainingData
+        values = metricsEvaluator.computeMetrics(model)
         values["str(model)"] = str(model)
         values.update(**params)
         if skipDecider is not None:
@@ -226,12 +227,12 @@ class GridSearch(TrackedExperimentDataProvider):
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
-    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator], sortColumnName=None) -> pd.DataFrame:
+    def run(self, metricsEvaluator: MetricsDictsProvider, sortColumnName=None) -> pd.DataFrame:
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
         to that file directly after being computed
 
-        :param evaluatorOrValidator: the evaluator or cross-validator with which to evaluate models
+        :param metricsEvaluator: the evaluator or cross-validator with which to evaluate models
         :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
             Note that the column names that are generated depend on the evaluator/validator being applied.
         :return: the data frame with all evaluation results
@@ -245,19 +246,19 @@ class GridSearch(TrackedExperimentDataProvider):
             if loggingCallback is not None:
                 loggingCallback(values)
             paramsMetricsCollection.addValues(values)
-            _log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
+            log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
 
         if self.numProcesses == 1:
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
-                    collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
+                    collectResult(self._evalParams(self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider, **paramsDict))
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
             futures = []
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
-                    futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
-                        **paramsDict))
+                    futures.append(executor.submit(self._evalParams, self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider,
+                                                   **paramsDict))
             for future in futures:
                 collectResult(future.result())
 
@@ -265,7 +266,7 @@ class GridSearch(TrackedExperimentDataProvider):
 
 
 class SAHyperOpt(TrackedExperimentDataProvider):
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     class State(SAState):
         def __init__(self, params, randomState: Random, results: Dict, computeMetric: Callable[[Dict[str, Any]], float]):
@@ -283,7 +284,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         def applyStateRepresentation(self, representation):
             self.results.update(representation)
 
-    class ParameterChangeOperator(SAOperator):
+    class ParameterChangeOperator(SAOperator[State]):
         def __init__(self, state: 'SAHyperOpt.State'):
             super().__init__(state)
 
@@ -291,34 +292,33 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             self.state.params.update(params)
 
         def costDelta(self, params) -> SACostValue:
-            state: SAHyperOpt.State = self.state
-            modelParams = dict(state.params)
+            modelParams = dict(self.state.params)
             modelParams.update(params)
-            return SACostValueNumeric(state.computeMetric(modelParams) - state.cost.value())
+            return SACostValueNumeric(self.state.computeMetric(modelParams) - self.state.cost.value())
 
         def chooseParams(self) -> Optional[Tuple[Tuple, Optional[SACostValue]]]:
             params = self._chooseChangedModelParameters()
             if params is None:
                 return None
-            return ((params, ), None)
+            return ((params, ), None) # TODO or not TODO: this always returns None in the second entry, is it a typo?
 
         @abstractmethod
         def _chooseChangedModelParameters(self) -> Dict[str, Any]:
             pass
 
     def __init__(self, modelFactory: Callable[..., VectorModel],
-            opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
-            initialParameters: Dict[str, Any], evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator],
-            metricToOptimise, minimiseMetric=False,
-            collectDataFrame=True, csvResultsPath: Optional[str] = None,
-            parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
-            p0=0.5, p1=0.0):
+                 opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
+                 initialParameters: Dict[str, Any], metricsEvaluator: MetricsDictsProvider,
+                 metricToOptimise, minimiseMetric=False,
+                 collectDataFrame=True, csvResultsPath: Optional[str] = None,
+                 parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
+                 p0=0.5, p1=0.0):
         """
         :param modelFactory: a factory for the generation of models which is called with the current parameter combination
             (all keyword arguments), initially initialParameters
         :param opsAndWeights: a sequence of tuples (operator factory, operator weight) for simulated annealing
         :param initialParameters: the initial parameter combination
-        :param evaluatorOrValidator: the evaluator/validator to use in order to evaluate models
+        :param metricsEvaluator: the evaluator/validator to use in order to evaluate models
         :param metricToOptimise: the name of the metric (as generated by the evaluator/validator) to optimise
         :param minimiseMetric: whether the metric is to be minimised; if False, maximise the metric
         :param collectDataFrame: whether to collect (and regularly log) the data frame of all parameter combinations and
@@ -333,7 +333,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             to the current state's (for the mean observed evaluation delta)
         """
         self.minimiseMetric = minimiseMetric
-        self.evaluatorOrValidator = evaluatorOrValidator
+        self.evaluatorOrValidator = metricsEvaluator
         self.metricToOptimise = metricToOptimise
         self.initialParameters = initialParameters
         self.opsAndWeights = opsAndWeights
@@ -352,19 +352,19 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self._trackedExperiment = trackedExperiment
 
     @classmethod
-    def _evalParams(cls, modelFactory, evaluatorOrValidator, parametersMetricsCollection: Optional[ParametersMetricsCollection],
-            parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictsProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
+                    parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
         if metrics is not None:
-            cls._log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
+            cls.log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
             return metrics
         else:
-            cls._log.info(f"Evaluating parameter combination {params}")
+            cls.log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
-            metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
-            cls._log.info(f"Got metrics {metrics} for {params}")
+            metrics = metricsEvaluator.computeMetrics(model)
+            cls.log.info(f"Got metrics {metrics} for {params}")
 
             values = dict(metrics)
             values["str(model)"] = str(model)
@@ -373,7 +373,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
                 trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addValues(values)
-                cls._log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
+                cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
             if parameterCombinationEquivalenceClassValueCache is not None:
                 parameterCombinationEquivalenceClassValueCache.set(params, metrics)
         return metrics

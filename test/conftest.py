@@ -1,10 +1,11 @@
 import logging
 
-import sklearn.datasets
 import pandas as pd
+import pytest
+import sklearn.datasets
 
-from sensai import InputOutputData, VectorClassificationModel, VectorClassificationModelEvaluator
-
+from sensai import InputOutputData, VectorClassificationModel
+from sensai.evaluation import VectorClassificationModelEvaluator
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,11 @@ class ClassificationTestCase:
         assert stats.getAccuracy() >= minAccuracy
 
 
-class IrisClassificationTestCase(ClassificationTestCase):
-    def __init__(self):
-        super().__init__(IrisDataSet.getInputOutputData())
+@pytest.fixture(scope="session")
+def irisDataSet():
+    return IrisDataSet()
+
+
+@pytest.fixture(scope="session")
+def irisClassificationTestCase(irisDataSet):
+    return ClassificationTestCase(irisDataSet.getInputOutputData())

@@ -1,15 +1,13 @@
 import sensai
-from ..classification import IrisClassificationTestCase
 
 
-def test_RandomForestClassifier():
+def test_RandomForestClassifier(irisClassificationTestCase):
     model = sensai.sklearn.classification.SkLearnRandomForestVectorClassificationModel()
-    IrisClassificationTestCase().testMinAccuracy(model, 0.9)
+    irisClassificationTestCase.testMinAccuracy(model, 0.9)
 
 
-def test_MLP():
-    testCase = IrisClassificationTestCase()
+def test_MLP(irisClassificationTestCase):
     mlpBFGS = sensai.sklearn.classification.SkLearnMLPVectorClassificationModel(solver="lbfgs").withName("skMLP-lbfgs")
-    testCase.testMinAccuracy(mlpBFGS, 0.9)
+    irisClassificationTestCase.testMinAccuracy(mlpBFGS, 0.9)
     mlpAdam = sensai.sklearn.classification.SkLearnMLPVectorClassificationModel(solver="adam").withName("skMLP-adam")
-    testCase.testMinAccuracy(mlpAdam, 0.9)
+    irisClassificationTestCase.testMinAccuracy(mlpAdam, 0.9)

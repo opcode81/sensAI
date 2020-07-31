@@ -1,17 +1,16 @@
 import collections
 import logging
+import math
 import random
 import time
 from abc import ABC, abstractmethod
-import math
-from typing import Optional, Tuple, Callable, Type, Sequence
+from typing import Optional, Tuple, Callable, Type, Sequence, TypeVar, Generic
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class SATemperatureSchedule(ABC):
@@ -322,24 +321,26 @@ class SAState(ABC):
         pass
 
 
-class SAOperator:
+TSAState = TypeVar("TSAState", bound=SAState)
+
+
+class SAOperator(Generic[TSAState]):
     """
     An operator which, when applied with appropriately chosen parameters, can transform a state into another
     state during simulated annealing
     """
 
-    def __init__(self, state: SAState):
+    def __init__(self, state: TSAState):
         """
         :param state: the state to which the operator is applied
         """
         self.state = state
 
-    def applyCostChange(self, costDelta: SACostValue, params):
+    def applyCostChange(self, costDelta: SACostValue):
         """
         Applies the cost change to the state given at construction
 
         :param costDelta: the cost change to apply
-        :param params: the operator parameters
         """
         self.state.cost = self.state.cost.add(costDelta)
 
@@ -362,7 +363,7 @@ class SAOperator:
         :param costDelta: the cost change that results from the application
         :return:
         """
-        self.applyCostChange(costDelta, params)
+        self.applyCostChange(costDelta)
         self.applyStateChange(*params)
 
     @abstractmethod
@@ -406,10 +407,10 @@ class RelativeFrequencyCounter:
 class SAChain:
     """Manages the progression of one state during simulated annealing"""
 
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, stateFactory: Callable[[random.Random], SAState], schedule: SATemperatureSchedule,
-            opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator]]], randomSeed, collectStats=False):
+            opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]], randomSeed, collectStats=False):
         self.schedule = schedule
         self.r = random.Random(randomSeed)
         self.state = stateFactory(self.r)
@@ -459,7 +460,7 @@ class SAChain:
                 costChangeValue = costChange.value()
                 p, T = self.schedule.probability(degreeOfCompletion, costChangeValue)
                 makeMove = r.random() <= p
-                self._log.debug(f'p: {p}, T: {T}, costDelta: {costChangeValue}, move: {makeMove}')
+                self.log.debug(f'p: {p}, T: {T}, costDelta: {costChangeValue}, move: {makeMove}')
                 if self.collectStats:
                     self.loggedSeries["temperatures"].append(T)
                     self.loggedSeries["probabilities"].append(p)
@@ -475,8 +476,8 @@ class SAChain:
 
         self.stepsTaken += 1
 
-        if self._log.isEnabledFor(logging.DEBUG):
-            self._log.debug(f"Step {self.stepsTaken}: cost={self.state.cost}; best cost={self.bestCost}")
+        if self.log.isEnabledFor(logging.DEBUG):
+            self.log.debug(f"Step {self.stepsTaken}: cost={self.state.cost}; best cost={self.bestCost}")
 
     def logStats(self):
         stats = {"useless moves total (None params)": f"{self.countNoneParams}/{self.stepsTaken}"}
@@ -485,15 +486,16 @@ class SAChain:
                 stats[f"useless moves of {op}"] = str(counter)
             loggedCostDeltas = self.loggedSeries["costDeltas"]
             if loggedCostDeltas:
-                stats["mean cost delta"] = "%.3f +- %.3f" % (np.mean(loggedCostDeltas), np.std(loggedCostDeltas))
+                stats["mean cost delta"] = f"{np.mean(loggedCostDeltas):.3f} +- { np.std(loggedCostDeltas):.3f}"
                 absCostDeltas = np.abs(loggedCostDeltas)
-                stats["mean absolute cost delta"] = "%.3f +- %.3f" % (np.mean(absCostDeltas), np.std(absCostDeltas))
+                stats["mean absolute cost delta"] = f"{np.mean(absCostDeltas):.3f} +- {np.std(absCostDeltas):.3f}"
                 positiveCostDeltas = [cd for cd in loggedCostDeltas if cd > 0]
                 if positiveCostDeltas:
-                    stats["positive cost delta"] = "mean=%.3f +- %.3f, max=%.3f" % (np.mean(positiveCostDeltas), np.std(positiveCostDeltas), np.max(positiveCostDeltas))
+                    stats["positive cost delta"] = f"mean={np.mean(positiveCostDeltas):.3f} +- {np.std(positiveCostDeltas):.3f}," \
+                                                   f" max={np.max(positiveCostDeltas):.3f}"
         statsJoin = "\n    " if self.collectStats else "; "
-        self._log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
-        self._log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
+        self.log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
+        self.log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
 
     def applyBestState(self):
         """Writes the best state found in this chain to the result object"""
@@ -523,13 +525,13 @@ class SAChain:
 
 
 class SimulatedAnnealing:
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     """
     The simulated annealing algorithm for discrete optimisation (cost minimisation)
     """
-    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]], maxSteps=None, duration=None,
-                 randomSeed=42, collectStats=False):
+    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]],
+            maxSteps: int = None, duration: float = None, randomSeed=42, collectStats=False):
         """
         :param scheduleFactory: a factory for the creation of the temperature schedule for the annealing process
         :param opsAndWeights: a list of operators with associated weights (which are to indicate the non-normalised probability of chosing the associated operator)
@@ -542,6 +544,8 @@ class SimulatedAnnealing:
             raise ValueError("The number of iterations should be greater than 0.")
         if maxSteps is None and duration is None or (maxSteps is not None and duration is not None):
             raise ValueError("Exactly one of {maxSteps, duration} must be specified.")
+        if duration is not None and duration <= 0:
+            raise ValueError("Duration must be greater than 0 if provided")
         self.scheduleFactory = scheduleFactory
         self.maxSteps = maxSteps
         self.duration = duration
@@ -559,7 +563,7 @@ class SimulatedAnnealing:
         :param stateFactory: the factory with which to create the (initial) state
         """
         chain = SAChain(stateFactory, self.scheduleFactory(), opsAndWeights=self.opsAndWeights, randomSeed=self.randomSeed, collectStats=self.collectStats)
-        self._log.info(f"Running simulated annealing with {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
+        self.log.info(f"Running simulated annealing with {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
         startTime = time.time()
         while True:
             timeElapsed = time.time() - startTime
@@ -570,7 +574,7 @@ class SimulatedAnnealing:
             else:
                 degreeOfCompletion = timeElapsed / self.duration
             chain.step(degreeOfCompletion)
-        self._log.info(f"Simulated annealing completed after {time.time() - startTime:.1f} seconds, {chain.stepsTaken} steps")
+        self.log.info(f"Simulated annealing completed after {time.time() - startTime:.1f} seconds, {chain.stepsTaken} steps")
         chain.logStats()
         chain.applyBestState()
         if self.collectStats:
@@ -586,14 +590,14 @@ class SimulatedAnnealing:
 
 
 class ParallelTempering:
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     """
     The parallel tempering algorithm for discrete optimisation (cost minimisation)
     """
     def __init__(self, numChains, opsAndWeights: Sequence[Tuple[Type[SAOperator], float]],
                  schedule: SATemperatureSchedule = None, probabilityFunction: SAProbabilityFunction = None,
-                 maxSteps=None, duration=None, randomSeed=42, logCostProgression=False):
+                 maxSteps: int = None, duration: float = None, randomSeed=42, logCostProgression=False):
         """
         Creates a parallel tempering optimiser with the given number of chains and operators for each chain.
         To determine the schedule to use for each chain, either schedule or probabilityFunction must be provided.
@@ -612,6 +616,8 @@ class ParallelTempering:
             raise ValueError("The number of iterations should be greater than 0.")
         if (maxSteps is None and duration is None) or (maxSteps is not None and duration is not None):
             raise ValueError("Exactly one of {maxSteps, duration} must be specified.")
+        if duration is not None and duration <= 0:
+            raise ValueError("duration should be greater than 0 if provided.")
         if numChains < 2:
             raise ValueError("Number of chains must be at least 2.")
         if (schedule is None and probabilityFunction is None) or (schedule is not None and probabilityFunction is not None):
@@ -652,13 +658,13 @@ class ParallelTempering:
 
         :param stateFactory: the factory with which to create the states for all chains
         """
-        self._log.info(f"Running parallel tempering with {self.numChains} chains, {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
+        self.log.info(f"Running parallel tempering with {self.numChains} chains, {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
 
         r = random.Random(self.randomSeed)
         chains = []
         costProgressions = []
         for i, schedule in enumerate(self._createSchedules(), start=1):
-            self._log.info(f"Chain {i} uses {schedule}")
+            self.log.info(f"Chain {i} uses {schedule}")
             chains.append(SAChain(stateFactory, schedule, opsAndWeights=self.opsAndWeights, randomSeed=r.randint(0, 1000)))
             costProgressions.append([])
 
@@ -694,11 +700,11 @@ class ParallelTempering:
 
             step += 1
 
-        self._log.info(f"Number of chain swaps: {numChainSwaps}")
+        self.log.info(f"Number of chain swaps: {numChainSwaps}")
         if self.logCostProgression: self._costProgressions = costProgressions
 
         # apply best solution
-        bestChainIdx = np.argmin([chain.bestCost.value() for chain in chains])
+        bestChainIdx = int(np.argmin([chain.bestCost.value() for chain in chains]))
         chains[bestChainIdx].applyBestState()
 
     def plotCostProgression(self):

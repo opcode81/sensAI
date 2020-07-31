@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sensai.featuregen import FeatureGeneratorFlattenColumns, FeatureGeneratorTakeColumns, getFlattenedFeatureGenerator
+from sensai.featuregen import FeatureGeneratorFlattenColumns, FeatureGeneratorTakeColumns, flattenedFeatureGenerator
 
 
 def test_take_columns():
@@ -34,5 +34,5 @@ def test_flatten_columns():
 
 def test_getFlattenedFeatureGenerator():
     inputDf = pd.DataFrame({"a": [np.array([1, 2])], "b": [np.array([5, 6])]})
-    fgen1 = getFlattenedFeatureGenerator(FeatureGeneratorTakeColumns("a"))
+    fgen1 = flattenedFeatureGenerator(FeatureGeneratorTakeColumns("a"))
     assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": [1], "a_1": [2]}))

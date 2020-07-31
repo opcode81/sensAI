@@ -15,3 +15,5 @@ dist
 /build
 /git-split.sh
 /.pytest_cache
+data
+.coverage
