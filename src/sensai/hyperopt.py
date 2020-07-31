@@ -8,7 +8,7 @@ from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List,
 
 import pandas as pd
 
-from .evaluation import VectorModelEvaluator, VectorModelCrossValidator, computeEvaluationMetricsDict
+from .evaluation.evaluation import MetricsEvaluator
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
 from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
@@ -209,14 +209,15 @@ class GridSearch(TrackedExperimentDataProvider):
         self._trackedExperiment = None
 
     @classmethod
-    def _evalParams(cls, modelFactory, evaluatorOrValidator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsEvaluator, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
                 cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
                 return None
         cls.log.info(f"Evaluating {params}")
         model = modelFactory(**params)
-        values = computeEvaluationMetricsDict(model, evaluatorOrValidator)
+        # TODO or not TODO: for some evaluators additional kwargs can be passed, e.g. onTrainingData
+        values = metricsEvaluator.computeMetrics(model)
         values["str(model)"] = str(model)
         values.update(**params)
         if skipDecider is not None:
@@ -226,12 +227,12 @@ class GridSearch(TrackedExperimentDataProvider):
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
-    def run(self, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator], sortColumnName=None) -> pd.DataFrame:
+    def run(self, metricsEvaluator: MetricsEvaluator, sortColumnName=None) -> pd.DataFrame:
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
         to that file directly after being computed
 
-        :param evaluatorOrValidator: the evaluator or cross-validator with which to evaluate models
+        :param metricsEvaluator: the evaluator or cross-validator with which to evaluate models
         :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
             Note that the column names that are generated depend on the evaluator/validator being applied.
         :return: the data frame with all evaluation results
@@ -250,14 +251,14 @@ class GridSearch(TrackedExperimentDataProvider):
         if self.numProcesses == 1:
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
-                    collectResult(self._evalParams(self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider, **paramsDict))
+                    collectResult(self._evalParams(self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider, **paramsDict))
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
             futures = []
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
-                    futures.append(executor.submit(self._evalParams, self.modelFactory, evaluatorOrValidator, self.parameterCombinationSkipDecider,
-                        **paramsDict))
+                    futures.append(executor.submit(self._evalParams, self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider,
+                                                   **paramsDict))
             for future in futures:
                 collectResult(future.result())
 
@@ -299,25 +300,25 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             params = self._chooseChangedModelParameters()
             if params is None:
                 return None
-            return ((params, ), None)
+            return ((params, ), None) # TODO or not TODO: this always returns None in the second entry, is it a typo?
 
         @abstractmethod
         def _chooseChangedModelParameters(self) -> Dict[str, Any]:
             pass
 
     def __init__(self, modelFactory: Callable[..., VectorModel],
-            opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
-            initialParameters: Dict[str, Any], evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator],
-            metricToOptimise, minimiseMetric=False,
-            collectDataFrame=True, csvResultsPath: Optional[str] = None,
-            parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
-            p0=0.5, p1=0.0):
+                 opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
+                 initialParameters: Dict[str, Any], metricsEvaluator: MetricsEvaluator,
+                 metricToOptimise, minimiseMetric=False,
+                 collectDataFrame=True, csvResultsPath: Optional[str] = None,
+                 parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
+                 p0=0.5, p1=0.0):
         """
         :param modelFactory: a factory for the generation of models which is called with the current parameter combination
             (all keyword arguments), initially initialParameters
         :param opsAndWeights: a sequence of tuples (operator factory, operator weight) for simulated annealing
         :param initialParameters: the initial parameter combination
-        :param evaluatorOrValidator: the evaluator/validator to use in order to evaluate models
+        :param metricsEvaluator: the evaluator/validator to use in order to evaluate models
         :param metricToOptimise: the name of the metric (as generated by the evaluator/validator) to optimise
         :param minimiseMetric: whether the metric is to be minimised; if False, maximise the metric
         :param collectDataFrame: whether to collect (and regularly log) the data frame of all parameter combinations and
@@ -332,7 +333,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             to the current state's (for the mean observed evaluation delta)
         """
         self.minimiseMetric = minimiseMetric
-        self.evaluatorOrValidator = evaluatorOrValidator
+        self.evaluatorOrValidator = metricsEvaluator
         self.metricToOptimise = metricToOptimise
         self.initialParameters = initialParameters
         self.opsAndWeights = opsAndWeights
@@ -351,7 +352,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self._trackedExperiment = trackedExperiment
 
     @classmethod
-    def _evalParams(cls, modelFactory, evaluatorOrValidator, parametersMetricsCollection: Optional[ParametersMetricsCollection],
+    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsEvaluator, parametersMetricsCollection: Optional[ParametersMetricsCollection],
             parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
@@ -362,7 +363,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         else:
             cls.log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
-            metrics = computeEvaluationMetricsDict(model, evaluatorOrValidator)
+            metrics = metricsEvaluator.computeMetrics(model)
             cls.log.info(f"Got metrics {metrics} for {params}")
 
             values = dict(metrics)

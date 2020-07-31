@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from .crossval import PredictorModelCrossValidationData, VectorModelCrossValidator, \
-    VectorRegressionModelCrossValidationData, VectorClassificationModelCrossValidationData, \
+from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCrossValidationData, \
+    VectorClassificationModelCrossValidationData, \
     VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
@@ -67,20 +67,6 @@ def createEvaluationUtil(data: InputOutputData, model: VectorModel = None,
             -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
     cons = RegressionEvaluationUtil if _isRegression(model, isRegression) else ClassificationEvaluationUtil
     return cons(data, evaluatorParams=evaluatorParams, crossValidatorParams=crossValidatorParams)
-
-
-def computeEvaluationMetricsDict(model, evaluatorOrValidator: Union[VectorModelEvaluator, VectorModelCrossValidator]) -> Dict[str, float]:
-    if isinstance(evaluatorOrValidator, VectorModelEvaluator):
-        evaluator: VectorModelEvaluator = evaluatorOrValidator
-        evaluator.fitModel(model)
-        data = evaluator.evalModel(model)
-        return data.getEvalStats().getAll()
-    elif isinstance(evaluatorOrValidator, VectorModelCrossValidator):
-        crossValidator: VectorModelCrossValidator = evaluatorOrValidator
-        data = crossValidator.evalModel(model)
-        return data.getEvalStatsCollection().aggStats()
-    else:
-        raise ValueError(f"Unexpected evaluator/validator of type {type(evaluatorOrValidator)}")
 
 
 def evalModelViaEvaluator(model: TModel, inputOutputData: InputOutputData, testFraction=0.2,

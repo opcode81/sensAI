@@ -10,7 +10,7 @@ from .eval_stats.eval_stats_base import PredictionEvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationEvalStatsCollection
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
 from .evaluation import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
-    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator
+    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, MetricsEvaluator
 from ..data_ingest import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
@@ -63,7 +63,7 @@ class PredictorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalSta
 TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
 
 
-class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
+class VectorModelCrossValidator(MetricsEvaluator, Generic[TCrossValData], ABC):
     def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None):
         """
         :param data: the data set
@@ -94,7 +94,7 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
     def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> TCrossValData:
         pass
 
-    def evalModel(self, model):
+    def evalModel(self, model: VectorModel):
         trainedModels = [] if self.returnTrainedModels else None
         evalDataList = []
         testIndicesList = []
@@ -109,6 +109,10 @@ class VectorModelCrossValidator(ABC, Generic[TCrossValData]):
             evalDataList.append(evaluator.evalModel(modelToFit))
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
+
+    def computeMetrics(self, model: VectorModel):
+        data = self.evalModel(model)
+        return data.getEvalStatsCollection().aggStats()
 
 
 class VectorRegressionModelCrossValidationData(PredictorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):

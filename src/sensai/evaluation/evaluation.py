@@ -19,6 +19,13 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
+# TODO: I'm not sure about the name and signature. Should we add a more generic model type and call this ModelEvaluator?
+class MetricsEvaluator(ABC):
+    @abstractmethod
+    def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+        pass
+
+
 class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
     def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: PredictorModel):
         """
@@ -68,7 +75,7 @@ class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[Regressio
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
-class VectorModelEvaluator(ABC):
+class VectorModelEvaluator(MetricsEvaluator, ABC):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
             testFraction=None, randomSeed=42, shuffle=True):
         """
@@ -110,6 +117,10 @@ class VectorModelEvaluator(ABC):
         :return: the evaluation result
         """
         pass
+
+    def computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+        evalData = self.evalModel(model)
+        return evalData.getEvalStats().getAll()
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator):
