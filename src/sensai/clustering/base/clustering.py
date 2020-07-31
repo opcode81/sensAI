@@ -1,19 +1,19 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Union, Set, Callable, Iterable
+from typing import Union, Set, Callable, Iterable, Optional
 
 import numpy as np
 import pandas as pd
 from scipy.spatial import distance_matrix
 from typing_extensions import Protocol
 
-from ...util.cache import PickleSerializingMixin
+from ...util.cache import PickleLoadSaveMixin
 
 log = logging.getLogger(__name__)
 
 
-# TODO or not TODO: at the moment we do not implement predict for clustering models although certain algorithms allow that
-class ClusteringModel(PickleSerializingMixin, ABC):
+# TODO at some point in the future: generalize to other input and deal with algorithms that allow prediction of labels
+class ClusteringModel(PickleLoadSaveMixin, ABC):
     """
     Base class for all clustering algorithms. Supports noise clusters and relabelling of identified clusters as noise
     based on their size.
@@ -23,9 +23,10 @@ class ClusteringModel(PickleSerializingMixin, ABC):
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
     def __init__(self, noiseLabel=-1, minClusterSize: int = None, maxClusterSize: int = None):
-        self._datapoints = None
-        self._labels = None
-        self._clusterIdentifiers = None
+        self._datapoints: Optional[np.ndarray] = None
+        self._labels: Optional[np.ndarray] = None
+        self._clusterIdentifiers: Optional[Set[int]] = None
+        self._nonNoiseClusterIdentifiers: Optional[Set[int]] = None
 
         if minClusterSize is not None or maxClusterSize is not None:
             if noiseLabel is None:
@@ -34,10 +35,15 @@ class ClusteringModel(PickleSerializingMixin, ABC):
         self.maxClusterSize = maxClusterSize if maxClusterSize is not None else np.inf
         self.minClusterSize = minClusterSize if minClusterSize is not None else -np.inf
 
+        self._clusterDict = {}
+        self._numClusters: Optional[int] = None
+
     class Cluster:
         def __init__(self, datapoints: np.ndarray, identifier: Union[int, str]):
             self.datapoints = datapoints
             self.identifier = identifier
+            self._radius: Optional[float] = None
+            self._centroid: Optional[np.ndarray] = None
 
         def __len__(self):
             return len(self.datapoints)
@@ -45,22 +51,25 @@ class ClusteringModel(PickleSerializingMixin, ABC):
         def __str__(self):
             return f"{self.__class__.__name__}_{self.identifier}"
 
-        def __eq__(self, other):
-            if isinstance(other, self.__class__):
-                return self.identifier == other.identifier and np.array_equal(self.datapoints, other.datapoints)
-            return False
+        def _computeRadius(self):
+            return np.max(distance_matrix([self.centroid()], self.datapoints))
 
-        def centroid(self):
+        def _computeCentroid(self):
             return np.mean(self.datapoints, axis=0)
 
+        def centroid(self):
+            if self._centroid is None:
+                self._centroid = self._computeCentroid()
+            return self._centroid
+
         def radius(self):
-            return np.max(distance_matrix([self.centroid()], self.datapoints))
+            if self._radius is None:
+                self._radius = self._computeRadius()
+            return self._radius
 
         def summaryDict(self):
             """
-            Dictionary containing coarse information about the cluster (e.g. num_members and centroid)
-
-            :return: A dict
+            :return: dictionary containing coarse information about the cluster (e.g. num_members and centroid)
             """
             return {
                 "identifier": self.identifier,
@@ -76,10 +85,10 @@ class ClusteringModel(PickleSerializingMixin, ABC):
     def clusters(self, condition: Callable[[Cluster], bool] = None) -> Iterable[Cluster]:
         """
         :param condition: if provided, only clusters fulfilling the condition will be included
-        :return: A generator of clusters
+        :return: generator of clusters
         """
         percentageToLog = 0
-        for i, clusterId in enumerate(self.clusterIdentifiers.difference({self.noiseLabel})):
+        for i, clusterId in enumerate(self._nonNoiseClusterIdentifiers):
             # logging process through the loop
             percentageGenerated = int(100 * i / self.numClusters)
             if percentageGenerated == percentageToLog:
@@ -97,22 +106,28 @@ class ClusteringModel(PickleSerializingMixin, ABC):
 
     def summaryDF(self, condition: Callable[[Cluster], bool] = None):
         """
-        Data frame containing coarse information about the clusters
-
         :param condition: if provided, only clusters fulfilling the condition will be included
-        :return: pandas DataFrame
+        :return: pandas DataFrame containing coarse information about the clusters
         """
         summary_dicts = [cluster.summaryDict() for cluster in self.clusters(condition=condition)]
         return pd.DataFrame(summary_dicts).set_index("identifier", drop=True)
 
     def fit(self, data: np.ndarray) -> None:
         log.info(f"Fitting {self} to {len(data)} coordinate datapoints.")
-        self._fit(data)
+        labels = self._computeLabels(data)
+        if len(labels) != len(data):
+            raise Exception(f"Bad Implementation: number of labels does not match number of datapoints")
+        # Relabel clusters that do not fulfill size bounds as noise
+        if self.minClusterSize != -np.inf or self.maxClusterSize != np.inf:
+            for clusterId, clusterSize in zip(*np.unique(labels, return_counts=True)):
+                if not self.minClusterSize <= clusterSize <= self.maxClusterSize:
+                    labels[labels == clusterId] = self.noiseLabel
+
         self._datapoints = data
-        self._labels = self.getLabels()
-        if len(self._labels) != len(data):
-            raise Exception(f"Number of labels does not match number of datapoints")
-        self._clusterIdentifiers = set(self._labels)
+        self._clusterIdentifiers = set(labels)
+        self._labels = labels
+        if self.noiseLabel is not None:
+            self._nonNoiseClusterIdentifiers = self._clusterIdentifiers.difference({self.noiseLabel})
         log.info(f"{self} found {self.numClusters} clusters")
 
     @property
@@ -124,15 +139,10 @@ class ClusteringModel(PickleSerializingMixin, ABC):
         assert self.isFitted
         return self._datapoints
 
-    def getLabels(self) -> np.ndarray:
+    @property
+    def labels(self) -> np.ndarray:
         assert self.isFitted
-        labels = self._getLabels()
-        # Relabel clusters that do not fulfill size bounds as noise
-        if self.minClusterSize != -np.inf or self.maxClusterSize != np.inf:
-            for clusterId, clusterSize in zip(*np.unique(labels, return_counts=True)):
-                if not self.minClusterSize <= clusterSize <= self.maxClusterSize:
-                    labels[labels == clusterId] = self.noiseLabel
-        return labels
+        return self._labels
 
     @property
     def clusterIdentifiers(self) -> Set[int]:
@@ -142,27 +152,30 @@ class ClusteringModel(PickleSerializingMixin, ABC):
     # unfortunately, there seems to be no way to annotate the return type correctly
     # https://github.com/python/mypy/issues/3993
     def getCluster(self, clusterId: int) -> Cluster:
-        if clusterId not in self.getLabels():
+        if clusterId not in self.labels:
             raise KeyError(f"no cluster for id {clusterId}")
-        return self.Cluster(self.datapoints[self.getLabels() == clusterId], identifier=clusterId)
+        result = self._clusterDict.get(clusterId)
+        if result is None:
+            result = self.Cluster(self.datapoints[self.labels == clusterId], identifier=clusterId)
+            self._clusterDict[clusterId] = result
+        return result
 
     @property
     def numClusters(self) -> int:
-        return len(self.clusterIdentifiers.difference({self.noiseLabel}))
+        return len(self._nonNoiseClusterIdentifiers)
 
     @abstractmethod
-    def _fit(self, x: np.ndarray) -> None:
-        pass
-
-    @abstractmethod
-    def _getLabels(self) -> np.ndarray:
+    def _computeLabels(self, x: np.ndarray) -> np.ndarray:
         """
+        Fit the clustering model and return an array of integer cluster labels
+
+        :param x: the datapoints
         :return: list of the same length as the input datapoints; it represents the mapping coordinate -> cluster_id
         """
         pass
 
 
-class SKLearnTypeClusterer(Protocol):
+class SKLearnClustererProtocol(Protocol):
     """
     Only used for type hints, do not instantiate
     """
@@ -181,15 +194,13 @@ class SKLearnClusteringModel(ClusteringModel):
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
 
-    def __init__(self, clusterer: SKLearnTypeClusterer, noiseLabel=-1,
+    def __init__(self, clusterer: SKLearnClustererProtocol, noiseLabel=-1,
              minClusterSize: int = None, maxClusterSize: int = None):
         super().__init__(noiseLabel=noiseLabel, minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
         self.clusterer = clusterer
 
-    def _fit(self, x: np.ndarray):
+    def _computeLabels(self, x: np.ndarray):
         self.clusterer.fit(x)
-
-    def _getLabels(self):
         return self.clusterer.labels_
 
     def __str__(self):

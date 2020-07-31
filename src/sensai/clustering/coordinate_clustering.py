@@ -5,11 +5,11 @@ import geopandas as gp
 import numpy as np
 from shapely.geometry import MultiPoint
 
-from .base.clustering import ClusteringModel, SKLearnTypeClusterer, SKLearnClusteringModel
+from .base.clustering import ClusteringModel, SKLearnClustererProtocol, SKLearnClusteringModel
 from ..base.interfaces import GeoDataFrameWrapper
 from ..util.cache import LoadSaveInterface
 from ..util.coordinates import validateCoordinates, coordinatesFromGeoDF
-from ..util.tracking import timeit
+from ..util.tracking import timed
 
 log = logging.getLogger(__name__)
 
@@ -84,12 +84,9 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
             log.info(f"Saving instance of {self.__class__.__name__} as shapefile to {path}")
             self.toGeoDF(crs).to_file(path, index=True)
 
-    def _fit(self, x: np.ndarray) -> None:
+    def _computeLabels(self, x: np.ndarray) -> np.ndarray:
         validateCoordinates(x)
-        self.clusterer._fit(x)
-
-    def _getLabels(self) -> np.ndarray:
-        return self.clusterer._getLabels()
+        return self.clusterer._computeLabels(x)
 
     def fit(self, data: Union[np.ndarray, gp.GeoDataFrame, MultiPoint]):
         """
@@ -104,7 +101,7 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
             data = np.array(data)
         super().fit(data)
 
-    @timeit
+    @timed
     def toGeoDF(self, condition: Callable[[Cluster], bool] = None, crs='epsg:3857',
             includeNoise=False) -> gp.GeoDataFrame:
         """
@@ -116,14 +113,14 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         :param includeNoise:
         :return: GeoDataFrame with all clusters indexed by their identifier
         """
-        gdf = gp.GeoDataFrame()
-        gdf.crs = crs
+        geodf = gp.GeoDataFrame()
+        geodf.crs = crs
         # TODO or not TODO: parallelize this or improve performance some another way
         for cluster in self.clusters(condition):
-            gdf = gdf.append(cluster.toGeoDF(crs=crs))
+            geodf = geodf.append(cluster.toGeoDF(crs=crs))
         if includeNoise:
-            gdf = gdf.append(self.noiseCluster().toGeoDF(crs=crs))
-        return gdf
+            geodf = geodf.append(self.noiseCluster().toGeoDF(crs=crs))
+        return geodf
 
     def plot(self, includeNoise=False, condition=None, **kwargs):
         """
@@ -134,11 +131,11 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         :param kwargs: passed to GeoDataFrame.plot
         :return:
         """
-        gdf = self.toGeoDF(condition=condition, includeNoise=includeNoise)
-        gdf["color"] = np.random.random(len(gdf))
+        geodf = self.toGeoDF(condition=condition, includeNoise=includeNoise)
+        geodf["color"] = np.random.random(len(geodf))
         if includeNoise:
-            gdf.loc[self.noiseLabel, "color"] = 0
-        gdf.plot(column="color", **kwargs)
+            geodf.loc[self.noiseLabel, "color"] = 0
+        geodf.plot(column="color", **kwargs)
 
     # the overriding of the following methods is only necessary for getting the type annotations right
     # if mypy ever permits annotating nested classes correctly, these methods can be removed
@@ -162,8 +159,8 @@ class SKLearnCoordinateClustering(CoordinateClusteringModel):
     :param minClusterSize: if not None, clusters below this size will be labeled as noise
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
-    def __init__(self, clusterer: SKLearnTypeClusterer, noiseLabel=-1,
-            minClusterSize: int = None, maxClusterSize: int = None):
+    def __init__(self, clusterer: SKLearnClustererProtocol, noiseLabel=-1,
+                 minClusterSize: int = None, maxClusterSize: int = None):
         clusterer = SKLearnClusteringModel(clusterer, noiseLabel=noiseLabel,
                            minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
         super().__init__(clusterer)
