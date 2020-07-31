@@ -1,10 +1,10 @@
 import logging
 
-import sklearn.datasets
 import pandas as pd
+import sklearn.datasets
 
-from sensai import InputOutputData, VectorClassificationModel, VectorClassificationModelEvaluator
-
+from sensai import InputOutputData, VectorClassificationModel
+from sensai.evaluation.evaluation import VectorClassificationModelEvaluator
 
 log = logging.getLogger(__name__)
 
