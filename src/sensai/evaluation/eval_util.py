@@ -21,7 +21,7 @@ from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCr
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
-from .evaluation import VectorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
+from .evaluator import VectorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
 from ..data_ingest import InputOutputData
 from ..util.io import ResultWriter

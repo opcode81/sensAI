@@ -5,7 +5,7 @@ import pytest
 import sklearn.datasets
 
 from sensai import InputOutputData, VectorClassificationModel
-from sensai.evaluation.evaluation import VectorClassificationModelEvaluator
+from sensai.evaluation import VectorClassificationModelEvaluator
 
 log = logging.getLogger(__name__)
 

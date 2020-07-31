@@ -9,8 +9,9 @@ import numpy as np
 from .eval_stats.eval_stats_base import PredictionEvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationEvalStatsCollection
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
-from .evaluation import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
-    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, MetricsEvaluator
+from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
+    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
+    MetricsDictsProvider
 from ..data_ingest import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
@@ -63,7 +64,7 @@ class PredictorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalSta
 TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
 
 
-class VectorModelCrossValidator(MetricsEvaluator, Generic[TCrossValData], ABC):
+class VectorModelCrossValidator(MetricsDictsProvider, Generic[TCrossValData], ABC):
     def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None):
         """
         :param data: the data set
