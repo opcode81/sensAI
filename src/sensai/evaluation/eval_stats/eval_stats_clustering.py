@@ -115,6 +115,7 @@ class ClusteringUnsupervisedEvalStats(ClusterLabelsEvalStats[ClusteringUnsupervi
         if not len(labels) == len(datapoints):
             raise ValueError("Length of labels does not match length of datapoints array")
         if metrics is None:
+            # Silhouette score is not included by default because it takes long to compute
             metrics = [CalinskiHarabaszScore(), DaviesBouldinScore()]
         super().__init__(labels, noiseLabel, metrics, additionalMetrics=additionalMetrics)
         self.datapoints = datapoints
@@ -187,7 +188,7 @@ class ClusteringSupervisedEvalStats(ClusterLabelsEvalStats[ClusteringSupervisedM
     """
     Class containing methods to compute evaluation statistics a clustering result based on ground truth clusters
     """
-    def __init__(self, labels: np.ndarray, trueLabels: np.ndarray, noiseLabel=-1,
+    def __init__(self, labels: Sequence[int], trueLabels: Sequence[int], noiseLabel=-1,
              metrics: Sequence[ClusteringSupervisedMetric] = None,
              additionalMetrics: Sequence[ClusteringSupervisedMetric] = None):
         """
@@ -196,16 +197,16 @@ class ClusteringSupervisedEvalStats(ClusterLabelsEvalStats[ClusteringSupervisedM
         :param additionalMetrics: the metrics to compute. If None, will compute default metrics
         :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
         """
-        if labels.shape != trueLabels.shape:
+        if len(labels) != len(trueLabels):
             raise ValueError("true labels must be of same shape as labels")
-        self.trueLabels = trueLabels
+        self.trueLabels = np.array(trueLabels)
         self._labelsWithRemovedCommonNoise = None
         if metrics is None:
             metrics = [VMeasureScore(), FowlkesMallowsScore(), AdjustedRandScore(), AdjustedMutualInfoScore()]
         super().__init__(labels, noiseLabel, metrics, additionalMetrics=additionalMetrics)
 
     @classmethod
-    def fromModel(cls, clusteringModel: ClusteringModel, trueLabels):
+    def fromModel(cls, clusteringModel: ClusteringModel, trueLabels: Sequence[int]):
         return cls(clusteringModel.labels, trueLabels, noiseLabel=clusteringModel.noiseLabel)
 
     def labelsWithRemovedCommonNoise(self) -> Tuple[np.ndarray, np.ndarray]:
