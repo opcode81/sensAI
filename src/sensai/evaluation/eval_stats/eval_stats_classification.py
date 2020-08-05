@@ -1,10 +1,9 @@
-from abc import ABC, abstractmethod
-from typing import List, Sequence
-
 import numpy as np
 import pandas as pd
 import sklearn
+from abc import ABC, abstractmethod
 from sklearn.metrics import confusion_matrix, accuracy_score
+from typing import List, Sequence
 
 from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric
 from ...util.plot import plotMatrix
@@ -83,7 +82,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         :param y_predictedClassProbabilities: a data frame whose columns are the class labels and whose values are probabilities
         :param labels: the list of class labels
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
-        :param additionalMetrics: the metrics to additionally compute
+        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
         """
         self.labels = labels
         self.y_predictedClassProbabilities = y_predictedClassProbabilities
@@ -102,9 +101,8 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
             for m in additionalMetrics:
                 if not self._probabilitiesAvailable and m.requiresProbabilities:
                     raise ValueError(f"Additional metric {m} not supported, as class probabilities were not provided")
-            metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted, y_true, metrics)
+        super().__init__(y_predicted, y_true, metrics, additionalMetrics=additionalMetrics)
 
     def getConfusionMatrix(self) -> "ConfusionMatrix":
         return ConfusionMatrix(self.y_true, self.y_predicted)

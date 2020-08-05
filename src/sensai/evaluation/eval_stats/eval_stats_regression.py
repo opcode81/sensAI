@@ -1,11 +1,10 @@
 import logging
-from abc import abstractmethod, ABC
-from typing import List, Sequence
-
 import numpy as np
 import seaborn as sns
+from abc import abstractmethod, ABC
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from typing import List, Sequence
 
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
 
@@ -13,9 +12,6 @@ log = logging.getLogger(__name__)
 
 
 class RegressionMetric(Metric["RegressionEvalStats"], ABC):
-    def __init__(self, name):
-        super().__init__(name)
-
     def computeValueForEvalStats(self, evalStats: "RegressionEvalStats"):
         return self.computeValue(np.array(evalStats.y_true), np.array(evalStats.y_predicted))
 
@@ -120,7 +116,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :param y_predicted: the predicted values
         :param y_true: the true values
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
-        :param additionalMetrics: the metrics to additionally compute
+        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
         """
 
         if metrics is None:
@@ -128,10 +124,8 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
                        RegressionMetricMAE(), RegressionMetricMSE(), RegressionMetricRMSE(),
                        RegressionMetricStdDevAE()]
         metrics = list(metrics)
-        if additionalMetrics is not None:
-            metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted, y_true, metrics)
+        super().__init__(y_predicted, y_true, metrics, additionalMetrics=additionalMetrics)
 
     def getMSE(self):
         return self.computeMetricValue(RegressionMetricMSE())
