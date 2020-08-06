@@ -10,9 +10,7 @@ from ...util.plot import plotMatrix
 
 
 class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
-    def __init__(self, name, requiresProbabilities=False):
-        super().__init__(name)
-        self.requiresProbabilities = requiresProbabilities
+    requiresProbabilities = False
 
     def computeValueForEvalStats(self, evalStats: "ClassificationEvalStats"):
         return self.computeValue(evalStats.y_true, evalStats.y_predicted, evalStats.y_predictedClassProbabilities)
@@ -28,16 +26,15 @@ class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
 
 
 class ClassificationMetricAccuracy(ClassificationMetric):
-    def __init__(self):
-        super().__init__("ACC")
+    name = "ACC"
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         return accuracy_score(y_true=y_true, y_pred=y_predicted)
 
 
 class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetric):
-    def __init__(self):
-        super().__init__("GeoMeanTrueClassProb", requiresProbabilities=True)
+    name = "GeoMeanTrueClassProb"
+    requiresProbabilities = True
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         y_predicted_proba_true_class = np.zeros(len(y_true))
@@ -53,8 +50,12 @@ class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetr
 
 
 class ClassificationMetricTopNAccuracy(ClassificationMetric):
+    requiresProbabilities = True
+
     def __init__(self, n: int):
-        super().__init__(f"Top{n}Accuracy", requiresProbabilities=True)
+        # TODO or not TODO: this is the only metric where the name is not static. We could make a static name like
+        #   "TopNAccuracy" without losing much information
+        self.name = f"Top{n}Accuracy"
         self.n = n
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):

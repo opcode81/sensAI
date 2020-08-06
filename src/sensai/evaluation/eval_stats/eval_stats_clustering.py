@@ -54,9 +54,7 @@ class ClusteringUnsupervisedMetric(Metric["ClusteringUnsupervisedEvalStats"], AB
 
 
 class RemovedNoiseUnsupervisedMetric(ClusteringUnsupervisedMetric):
-    def __init__(self, name: str, worstValue=0):
-        self.worstValue = worstValue
-        super().__init__(name)
+    worstValue = 0
 
     def computeValueForEvalStats(self, evalStats: "ClusteringUnsupervisedEvalStats") -> float:
         if len(evalStats.clustersLabels) == 0:  # all is noise
@@ -70,8 +68,7 @@ class RemovedNoiseUnsupervisedMetric(ClusteringUnsupervisedMetric):
 
 
 class CalinskiHarabaszScore(RemovedNoiseUnsupervisedMetric):
-    def __init__(self):
-        super().__init__("CalinskiHarabaszScore")
+    name = "CalinskiHarabaszScore"
 
     @staticmethod
     def computeValue(datapoints: np.ndarray, labels: Sequence[int]):
@@ -79,9 +76,9 @@ class CalinskiHarabaszScore(RemovedNoiseUnsupervisedMetric):
 
 
 class DaviesBouldinScore(RemovedNoiseUnsupervisedMetric):
-    def __init__(self):
-        # TODO: I think in some edge cases this score could be larger than one, one should look into that
-        super().__init__("DaviesBouldinScore", worstValue=1)
+    name = "DaviesBouldinScore"
+    # TODO: I think in some edge cases this score could be larger than one, one should look into that
+    worstValue = 1
 
     @staticmethod
     def computeValue(datapoints: np.ndarray, labels: Sequence[int]):
@@ -90,8 +87,8 @@ class DaviesBouldinScore(RemovedNoiseUnsupervisedMetric):
 
 # Note: this takes a lot of time to compute for many datapoints
 class SilhouetteScore(RemovedNoiseUnsupervisedMetric):
-    def __init__(self):
-        super().__init__("SilhouetteScore", worstValue=-1)
+    name = "SilhouetteScore"
+    worstValue = -1
 
     @staticmethod
     def computeValue(datapoints: np.ndarray, labels: Sequence[int]):
@@ -132,9 +129,7 @@ class ClusteringSupervisedMetric(Metric["ClusteringSupervisedEvalStats"], ABC):
 
 
 class RemovedCommonNoiseSupervisedMetric(ClusteringSupervisedMetric, ABC):
-    def __init__(self, name, worstValue=0):
-        self.worstValue = worstValue
-        super().__init__(name)
+    worstValue = 0
 
     def computeValueForEvalStats(self, evalStats: "ClusteringSupervisedEvalStats") -> float:
         labels, trueLabels = evalStats.labelsWithRemovedCommonNoise()
@@ -149,8 +144,7 @@ class RemovedCommonNoiseSupervisedMetric(ClusteringSupervisedMetric, ABC):
 
 
 class VMeasureScore(RemovedCommonNoiseSupervisedMetric):
-    def __init__(self):
-        super().__init__("VMeasureScore")
+    name = "VMeasureScore"
 
     @staticmethod
     def computeValue(labels: Sequence[int], trueLabels: Sequence[int]):
@@ -158,8 +152,8 @@ class VMeasureScore(RemovedCommonNoiseSupervisedMetric):
 
 
 class AdjustedRandScore(RemovedCommonNoiseSupervisedMetric):
-    def __init__(self):
-        super().__init__("AdjustedRandScore", worstValue=-1)
+    name = "AdjustedRandScore"
+    worstValue = -1
 
     @staticmethod
     def computeValue(labels: Sequence[int], trueLabels: Sequence[int]):
@@ -167,8 +161,7 @@ class AdjustedRandScore(RemovedCommonNoiseSupervisedMetric):
 
 
 class FowlkesMallowsScore(RemovedCommonNoiseSupervisedMetric):
-    def __init__(self):
-        super().__init__("FowlkesMallowsScore")
+    name = "FowlkesMallowsScore"
 
     @staticmethod
     def computeValue(labels: Sequence[int], trueLabels: Sequence[int]):
@@ -176,8 +169,7 @@ class FowlkesMallowsScore(RemovedCommonNoiseSupervisedMetric):
 
 
 class AdjustedMutualInfoScore(RemovedCommonNoiseSupervisedMetric):
-    def __init__(self):
-        super().__init__("AdjustedMutualInfoScore")
+    name = "AdjustedMutualInfoScore"
 
     @staticmethod
     def computeValue(labels: Sequence[int], trueLabels: Sequence[int]):

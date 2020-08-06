@@ -57,8 +57,7 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 
 
 class Metric(Generic[TEvalStats], ABC):
-    def __init__(self, name: str):
-        self.name = name
+    name: str
 
     @abstractmethod
     def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
