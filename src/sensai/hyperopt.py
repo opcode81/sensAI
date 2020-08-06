@@ -1,12 +1,12 @@
+from concurrent.futures import ProcessPoolExecutor
+
 import logging
 import os
+import pandas as pd
 from abc import ABC
 from abc import abstractmethod
-from concurrent.futures import ProcessPoolExecutor
 from random import Random
 from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List, Optional, Hashable
-
-import pandas as pd
 
 from .evaluation.evaluator import MetricsDictProvider
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
@@ -112,13 +112,15 @@ class ParametersMetricsCollection:
     """
     Utility class for holding and persisting evaluation results
     """
-    def __init__(self, csvPath=None, sortColumnName=None):
+    def __init__(self, csvPath=None, sortColumnName=None, ascending=True):
         """
         :param csvPath: path to save the data frame to upon every update
         :param sortColumnName: the column name by which to sort the data frame that is collected; if None, do not sort
+        :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
         """
         self.sortColumnName = sortColumnName
         self.csvPath = csvPath
+        self.ascending = ascending
         self.df = None
         self.cols = None
         self._currentRow = 0
@@ -150,7 +152,7 @@ class ParametersMetricsCollection:
 
         # sort where applicable
         if self.sortColumnName is not None and self.sortColumnName in self.df.columns:
-            self.df.sort_values(self.sortColumnName, axis=0, inplace=True)
+            self.df.sort_values(self.sortColumnName, axis=0, inplace=True, ascending=self.ascending)
             self.df.reset_index(drop=True, inplace=True)
 
         self._saveCSV()
@@ -174,7 +176,7 @@ class GridSearch(TrackedExperimentDataProvider):
     log = log.getChild(__qualname__)
 
     def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
-            numProcesses=1, csvResultsPath=None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
+            numProcesses=1, csvResultsPath: str = None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
         """
         :param modelFactory: the function to call with keyword arguments reflecting the parameters to try in order to obtain a model instance
         :param parameterOptions: a dictionary which maps from parameter names to lists of possible values - or a list of such dictionaries,
@@ -227,7 +229,7 @@ class GridSearch(TrackedExperimentDataProvider):
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
-    def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None) -> pd.DataFrame:
+    def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None, ascending=True) -> pd.DataFrame:
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
         to that file directly after being computed
@@ -235,10 +237,12 @@ class GridSearch(TrackedExperimentDataProvider):
         :param metricsEvaluator: the evaluator or cross-validator with which to evaluate models
         :param sortColumnName: the name of the column by which to sort the data frame of results; if None, do not sort.
             Note that the column names that are generated depend on the evaluator/validator being applied.
+        :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
         :return: the data frame with all evaluation results
         """
         loggingCallback = self._trackedExperiment.trackValues if self._trackedExperiment is not None else None
-        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath, sortColumnName=sortColumnName)
+        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath,
+                                                  sortColumnName=sortColumnName, ascending=ascending)
 
         def collectResult(values):
             if values is None:
