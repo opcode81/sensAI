@@ -10,7 +10,7 @@ from shapely.geometry import Polygon, MultiPoint, MultiPolygon
 from typing import Sequence, Union, Optional
 
 from ..clustering.coordinate_clustering import GeoDataFrameWrapper
-from ..util.coordinates import validateCoordinates
+from ..util.coordinates import extractCoordinatesArray, TCoordinates
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class PolygonAnnotatedCoordinates(GeoDataFrameWrapper):
     From the provided 2-dim. coordinates only points within the ground truth region will be considered.
     """
 
-    def __init__(self, coordinates: np.ndarray, groundTruthPolygons: Union[str, Sequence[Polygon], GeoDataFrame],
+    def __init__(self, coordinates: TCoordinates, groundTruthPolygons: Union[str, Sequence[Polygon], GeoDataFrame],
                  noiseLabel: Optional[int] = -1):
         """
         :param coordinates: coordinates of points. These points should be spread over an area larger or equal to
@@ -34,8 +34,8 @@ class PolygonAnnotatedCoordinates(GeoDataFrameWrapper):
         :param noiseLabel: label to associate with noise or None
         """
 
-        # The constructor might seem bloated but it really mostly does input validation
-        validateCoordinates(coordinates)
+        # The constructor might seem bloated but it really mostly does input validation for the polygons
+        coordinates = extractCoordinatesArray(coordinates)
         if isinstance(groundTruthPolygons, str):
             polygons: Sequence[Polygon] = gp.read_file(groundTruthPolygons).geometry.values
         elif isinstance(groundTruthPolygons, GeoDataFrame):

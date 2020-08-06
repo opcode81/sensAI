@@ -1,4 +1,3 @@
-import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, Sequence, Generic, TypeVar
 
@@ -30,7 +29,7 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
 
 
 class ClusteringModelUnsupervisedEvaluator(ClusteringModelEvaluator[ClusteringUnsupervisedEvalStats]):
-    def __init__(self, datapoints: np.ndarray):
+    def __init__(self, datapoints):
         self.datapoints = datapoints
 
     def evalModel(self, model: ClusteringModel, fit=True):
@@ -48,7 +47,7 @@ class ClusteringModelUnsupervisedEvaluator(ClusteringModelEvaluator[ClusteringUn
 
 
 class ClusteringModelSupervisedEvaluator(ClusteringModelEvaluator[ClusteringSupervisedEvalStats]):
-    def __init__(self, datapoints: np.ndarray, trueLabels: Sequence[int], noiseLabel=-1):
+    def __init__(self, datapoints, trueLabels: Sequence[int], noiseLabel=-1):
         """
         :param datapoints:
         :param trueLabels: labels of the true clusters, including the noise clusters.
