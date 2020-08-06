@@ -28,7 +28,7 @@ class EvalStats(Generic[TMetric]):
         # Implementations of EvalStats will typically provide default metrics, therefore we include
         # the possibility for passing additional metrics here
         if additionalMetrics is not None:
-            self.metrics.extend(additionalMetrics)
+            self.metrics = self.metrics + additionalMetrics
         self.name = None
 
     def setName(self, name: str):
