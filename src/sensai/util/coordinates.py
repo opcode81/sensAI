@@ -3,7 +3,9 @@ import numpy as np
 from shapely.geometry import MultiPoint
 from typing import Union
 
-TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame]
+from sensai.clustering import ClusteringModel
+
+TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame, ClusteringModel.Cluster]
 
 
 def validateCoordinates(coordinates: np.ndarray):
@@ -14,10 +16,7 @@ def validateCoordinates(coordinates: np.ndarray):
 
 def extractCoordinatesArray(coordinates: TCoordinates) -> np.ndarray:
     """
-    Extract coordinates as numpy array from a GeoDataFrame.
-
-    :param coordinates: A GeoDataFrame with one point per row
-    :return: coordinates as array
+    Extract coordinates as numpy array
     """
     if isinstance(coordinates, gp.GeoDataFrame):
         try:
@@ -27,5 +26,7 @@ def extractCoordinatesArray(coordinates: TCoordinates) -> np.ndarray:
                              f"Is the geometry column a sequence of Points?")
     elif isinstance(coordinates, MultiPoint):
         coordinates = np.array(coordinates)
+    elif isinstance(coordinates, ClusteringModel.Cluster):
+        coordinates = coordinates.datapoints
     validateCoordinates(coordinates)
     return coordinates
