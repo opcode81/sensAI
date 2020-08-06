@@ -83,7 +83,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         :param y_predictedClassProbabilities: a data frame whose columns are the class labels and whose values are probabilities
         :param labels: the list of class labels
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
-        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
+        :param additionalMetrics: the metrics to additionally compute
         """
         self.labels = labels
         self.y_predictedClassProbabilities = y_predictedClassProbabilities

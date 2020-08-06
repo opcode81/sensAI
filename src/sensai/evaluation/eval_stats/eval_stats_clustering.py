@@ -107,7 +107,7 @@ class ClusteringUnsupervisedEvalStats(ClusterLabelsEvalStats[ClusteringUnsupervi
         :param datapoints: datapoints that were clustered
         :param labels: sequence of labels, usually the output of some clustering algorithm
         :param additionalMetrics: the metrics to compute. If None, will compute default metrics
-        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
+        :param additionalMetrics: the metrics to additionally compute
         """
         if not len(labels) == len(datapoints):
             raise ValueError("Length of labels does not match length of datapoints array")
@@ -187,7 +187,7 @@ class ClusteringSupervisedEvalStats(ClusterLabelsEvalStats[ClusteringSupervisedM
         :param labels: sequence of labels, usually the output of some clustering algorithm
         :param trueLabels: sequence of labels that represent the ground truth clusters
         :param additionalMetrics: the metrics to compute. If None, will compute default metrics
-        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
+        :param additionalMetrics: the metrics to additionally compute
         """
         if len(labels) != len(trueLabels):
             raise ValueError("true labels must be of same shape as labels")

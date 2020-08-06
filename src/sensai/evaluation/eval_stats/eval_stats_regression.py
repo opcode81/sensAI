@@ -108,7 +108,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :param y_predicted: the predicted values
         :param y_true: the true values
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
-        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
+        :param additionalMetrics: the metrics to additionally compute
         """
 
         if metrics is None:
