@@ -1,19 +1,16 @@
-from abc import ABC, abstractmethod
-from typing import List, Sequence
-
 import numpy as np
 import pandas as pd
 import sklearn
+from abc import ABC, abstractmethod
 from sklearn.metrics import confusion_matrix, accuracy_score
+from typing import List, Sequence
 
 from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric
 from ...util.plot import plotMatrix
 
 
 class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
-    def __init__(self, name, requiresProbabilities=False):
-        super().__init__(name)
-        self.requiresProbabilities = requiresProbabilities
+    requiresProbabilities = False
 
     def computeValueForEvalStats(self, evalStats: "ClassificationEvalStats"):
         return self.computeValue(evalStats.y_true, evalStats.y_predicted, evalStats.y_predictedClassProbabilities)
@@ -29,16 +26,15 @@ class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
 
 
 class ClassificationMetricAccuracy(ClassificationMetric):
-    def __init__(self):
-        super().__init__("ACC")
+    name = "ACC"
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         return accuracy_score(y_true=y_true, y_pred=y_predicted)
 
 
 class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetric):
-    def __init__(self):
-        super().__init__("GeoMeanTrueClassProb", requiresProbabilities=True)
+    name = "GeoMeanTrueClassProb"
+    requiresProbabilities = True
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         y_predicted_proba_true_class = np.zeros(len(y_true))
@@ -54,9 +50,11 @@ class ClassificationMetricGeometricMeanOfTrueClassProbability(ClassificationMetr
 
 
 class ClassificationMetricTopNAccuracy(ClassificationMetric):
+    requiresProbabilities = True
+
     def __init__(self, n: int):
-        super().__init__(f"Top{n}Accuracy", requiresProbabilities=True)
         self.n = n
+        super().__init__(name=f"Top{n}Accuracy")
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         labels = y_predictedClassProbabilities.columns
@@ -102,9 +100,8 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
             for m in additionalMetrics:
                 if not self._probabilitiesAvailable and m.requiresProbabilities:
                     raise ValueError(f"Additional metric {m} not supported, as class probabilities were not provided")
-            metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted, y_true, metrics)
+        super().__init__(y_predicted, y_true, metrics, additionalMetrics=additionalMetrics)
 
     def getConfusionMatrix(self) -> "ConfusionMatrix":
         return ConfusionMatrix(self.y_true, self.y_predicted)

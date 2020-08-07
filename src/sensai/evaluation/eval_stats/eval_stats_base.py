@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, List, Union, Dict, Sequence
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from abc import ABC, abstractmethod
 from matplotlib import pyplot as plt
+from typing import Generic, TypeVar, List, Union, Dict, Sequence
 
+from ...util.tracking import timed
 from ...vector_model import VectorModel
 
 # Note: in the 2020.2 version of PyCharm passing strings to bound is highlighted as error
@@ -21,13 +21,17 @@ PredictionArray = Union[np.ndarray, pd.Series, pd.DataFrame, list]
 
 
 class EvalStats(Generic[TMetric]):
-    def __init__(self, metrics: List[TMetric]):
+    def __init__(self, metrics: List[TMetric], additionalMetrics: List[TMetric] = None):
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
         self.metrics = metrics
+        # Implementations of EvalStats will typically provide default metrics, therefore we include
+        # the possibility for passing additional metrics here
+        if additionalMetrics is not None:
+            self.metrics = self.metrics + additionalMetrics
         self.name = None
 
-    def setName(self, name):
+    def setName(self, name: str):
         self.name = name
 
     def addMetric(self, metric: TMetric):
@@ -36,6 +40,7 @@ class EvalStats(Generic[TMetric]):
     def computeMetricValue(self, metric: TMetric) -> float:
         return metric.computeValueForEvalStats(self)
 
+    @timed
     def getAll(self) -> Dict[str, float]:
         """Gets a dictionary with all metrics"""
         d = {}
@@ -52,8 +57,14 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 
 
 class Metric(Generic[TEvalStats], ABC):
-    def __init__(self, name: str):
-        self.name = name
+    name: str
+
+    def __init__(self, name: str = None):
+        """
+        :param name: the name of the metric; if None use the class' name attribute
+        """
+        # this raises an attribute error if a subclass does not specify a name as a static attribute nor as parameter
+        self.name = name if name is not None else self.__class__.name
 
     @abstractmethod
     def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
@@ -113,12 +124,14 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
     Collects data for the evaluation of predicted labels (including multi-dimensional predictions)
     and computes corresponding metrics
     """
-    def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray, metrics: List[TMetric]):
+    def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray,
+                 metrics: List[TMetric], additionalMetrics: List[TMetric] = None):
         """
         :param y_predicted: sequence of predicted labels. In case of multi-dimensional predictions, a data frame with
             one column per dimension should be passed
         :param y_true: sequence of ground truth labels of same shape as y_predicted
         :param metrics: list of metrics to be computed on the provided data
+        :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
         """
         self.y_true = []
         self.y_predicted = []
@@ -126,7 +139,7 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
         self.y_predicted_multidim = None
         if y_predicted is not None:
             self._addAll(y_predicted, y_true)
-        super().__init__(metrics)
+        super().__init__(metrics, additionalMetrics=additionalMetrics)
 
     def _add(self, y_predicted, y_true):
         """

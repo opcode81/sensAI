@@ -1,14 +1,12 @@
-import logging
-from typing import Callable, Union, Iterable
-
 import geopandas as gp
+import logging
 import numpy as np
 from shapely.geometry import MultiPoint
+from typing import Callable, Union, Iterable
 
 from .base.clustering import ClusteringModel, SKLearnClustererProtocol, SKLearnClusteringModel
-from ..base.interfaces import GeoDataFrameWrapper
 from ..util.cache import LoadSaveInterface
-from ..util.coordinates import validateCoordinates, coordinatesFromGeoDF
+from ..util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ..util.tracking import timed
 
 log = logging.getLogger(__name__)
@@ -88,18 +86,15 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         validateCoordinates(x)
         return self.clusterer._computeLabels(x)
 
-    def fit(self, data: Union[np.ndarray, gp.GeoDataFrame, MultiPoint]):
+    def fit(self, coordinates: TCoordinates):
         """
         Fitting to coordinates from a numpy array, a MultiPoint object or a GeoDataFrame with one Point per row
 
-        :param data:
+        :param coordinates:
         :return:
         """
-        if isinstance(data, gp.GeoDataFrame):
-            data = coordinatesFromGeoDF(data)
-        if isinstance(data, MultiPoint):
-            data = np.array(data)
-        super().fit(data)
+        coordinates = extractCoordinatesArray(coordinates)
+        super().fit(coordinates)
 
     @timed
     def toGeoDF(self, condition: Callable[[Cluster], bool] = None, crs='epsg:3857',

@@ -1,11 +1,10 @@
 import logging
-from abc import abstractmethod, ABC
-from typing import List, Sequence
-
 import numpy as np
 import seaborn as sns
+from abc import abstractmethod, ABC
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from typing import List, Sequence
 
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
 
@@ -13,9 +12,6 @@ log = logging.getLogger(__name__)
 
 
 class RegressionMetric(Metric["RegressionEvalStats"], ABC):
-    def __init__(self, name):
-        super().__init__(name)
-
     def computeValueForEvalStats(self, evalStats: "RegressionEvalStats"):
         return self.computeValue(np.array(evalStats.y_true), np.array(evalStats.y_predicted))
 
@@ -34,8 +30,7 @@ class RegressionMetric(Metric["RegressionEvalStats"], ABC):
 
 
 class RegressionMetricMAE(RegressionMetric):
-    def __init__(self):
-        super().__init__("MAE")
+    name = "MAE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -43,8 +38,7 @@ class RegressionMetricMAE(RegressionMetric):
 
 
 class RegressionMetricMSE(RegressionMetric):
-    def __init__(self):
-        super().__init__("MSE")
+    name = "MSE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -53,8 +47,7 @@ class RegressionMetricMSE(RegressionMetric):
 
 
 class RegressionMetricRMSE(RegressionMetric):
-    def __init__(self):
-        super().__init__("MSE")
+    name = "RMSE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -63,8 +56,7 @@ class RegressionMetricRMSE(RegressionMetric):
 
 
 class RegressionMetricRRSE(RegressionMetric):
-    def __init__(self):
-        super().__init__("RRSE")
+    name = "RRSE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -75,8 +67,7 @@ class RegressionMetricRRSE(RegressionMetric):
 
 
 class RegressionMetricR2(RegressionMetric):
-    def __init__(self):
-        super().__init__("R2")
+    name = "R2"
 
     def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
         rrse = RegressionMetricRRSE.computeValue(y_true, y_predicted)
@@ -84,8 +75,7 @@ class RegressionMetricR2(RegressionMetric):
 
 
 class RegressionMetricPCC(RegressionMetric):
-    def __init__(self):
-        super().__init__("PCC")
+    name = "PCC"
 
     def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
         cov = np.cov([y_true, y_predicted])
@@ -93,8 +83,7 @@ class RegressionMetricPCC(RegressionMetric):
 
 
 class RegressionMetricStdDevAE(RegressionMetric):
-    def __init__(self):
-        super().__init__("StdDevAE")
+    name = "StdDevAE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -102,8 +91,7 @@ class RegressionMetricStdDevAE(RegressionMetric):
 
 
 class RegressionMetricMedianAE(RegressionMetric):
-    def __init__(self):
-        super().__init__("MedianAE")
+    name = "MedianAE"
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
@@ -128,10 +116,8 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
                        RegressionMetricMAE(), RegressionMetricMSE(), RegressionMetricRMSE(),
                        RegressionMetricStdDevAE()]
         metrics = list(metrics)
-        if additionalMetrics is not None:
-            metrics.extend(additionalMetrics)
 
-        super().__init__(y_predicted, y_true, metrics)
+        super().__init__(y_predicted, y_true, metrics, additionalMetrics=additionalMetrics)
 
     def getMSE(self):
         return self.computeMetricValue(RegressionMetricMSE())
