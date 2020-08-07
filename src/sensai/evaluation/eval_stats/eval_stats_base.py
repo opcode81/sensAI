@@ -59,6 +59,13 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 class Metric(Generic[TEvalStats], ABC):
     name: str
 
+    def __init__(self, name: str = None):
+        """
+        :param name: the name of the metric; if None use the class' name attribute
+        """
+        # this raises an attribute error if a subclass does not specify a name as a static attribute nor as parameter
+        self.name = name if name is not None else self.__class__.name
+
     @abstractmethod
     def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
         pass

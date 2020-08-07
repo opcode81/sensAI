@@ -53,10 +53,8 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
     requiresProbabilities = True
 
     def __init__(self, n: int):
-        # TODO or not TODO: this is the only metric where the name is not static. We could make a static name like
-        #   "TopNAccuracy" without losing much information
-        self.name = f"Top{n}Accuracy"
         self.n = n
+        super().__init__(name=f"Top{n}Accuracy")
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         labels = y_predictedClassProbabilities.columns
