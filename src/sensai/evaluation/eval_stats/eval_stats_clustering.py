@@ -28,6 +28,10 @@ class ClusterLabelsEvalStats(EvalStats[TMetric], ABC):
         self.clusterIdentifiers, self.clusterSizeDistribution = \
             np.unique(self.labels[self.clusterLabelsMask], return_counts=True)
         self.noiseClusterSize = self.noiseLabelsMask.sum()
+
+        # operations like max and min raise an exception for empty arrays, this counteracts this effect
+        if len(self.clusterSizeDistribution) == 0:
+            self.clusterSizeDistribution = np.zeros(1)
         super().__init__(defaultMetrics, additionalMetrics=additionalMetrics)
 
     def getDistributionSummary(self) -> Dict[str, float]:
