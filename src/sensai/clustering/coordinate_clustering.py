@@ -1,25 +1,15 @@
 import geopandas as gp
 import logging
 import numpy as np
-from abc import ABC, abstractmethod
 from shapely.geometry import MultiPoint
 from typing import Callable, Union, Iterable
 
 from .base.clustering import ClusteringModel, SKLearnClustererProtocol, SKLearnClusteringModel
 from ..util.cache import LoadSaveInterface
-from ..util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates
+from ..util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ..util.tracking import timed
 
 log = logging.getLogger(__name__)
-
-
-class GeoDataFrameWrapper(ABC):
-    @abstractmethod
-    def toGeoDF(self, *args, **kwargs) -> gp.GeoDataFrame:
-        pass
-
-    def plot(self, *args, **kwargs):
-        self.toGeoDF().plot(*args, **kwargs)
 
 
 class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):

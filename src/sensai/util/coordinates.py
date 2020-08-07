@@ -1,5 +1,6 @@
 import geopandas as gp
 import numpy as np
+from abc import ABC, abstractmethod
 from shapely.geometry import MultiPoint
 from typing import Union
 
@@ -30,3 +31,12 @@ def extractCoordinatesArray(coordinates: TCoordinates) -> np.ndarray:
         coordinates = coordinates.datapoints
     validateCoordinates(coordinates)
     return coordinates
+
+
+class GeoDataFrameWrapper(ABC):
+    @abstractmethod
+    def toGeoDF(self, *args, **kwargs) -> gp.GeoDataFrame:
+        pass
+
+    def plot(self, *args, **kwargs):
+        self.toGeoDF().plot(*args, **kwargs)

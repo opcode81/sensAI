@@ -9,8 +9,7 @@ from geopandas import GeoDataFrame
 from shapely.geometry import Polygon, MultiPoint, MultiPolygon
 from typing import Sequence, Union, Optional
 
-from ..clustering.coordinate_clustering import GeoDataFrameWrapper
-from ..util.coordinates import extractCoordinatesArray, TCoordinates
+from ..util.coordinates import extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 
 log = logging.getLogger(__name__)
 
