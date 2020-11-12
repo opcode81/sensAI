@@ -291,7 +291,7 @@ class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegre
         resultCollector.addFigure("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions(titleAdd=subtitle))
 
 
-class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelCrossValidator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
+class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
     def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
         resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix(titleAdd=subtitle))
 
