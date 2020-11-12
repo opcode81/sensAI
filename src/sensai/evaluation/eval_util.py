@@ -305,11 +305,10 @@ class MultiDataEvaluationUtil:
         self.inputOutputDataDict = inputOutputDataDict
         self.keyName = keyName
 
-    def compareModelsCrossValidation(self, isRegression, modelFactories: Sequence[Callable[[], VectorModel]],
+    def compareModelsCrossValidation(self, modelFactories: Sequence[Callable[[], VectorModel]],
             resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
             crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        :param isRegression: flag indicating whether the models to evaluate are regression models
         :param modelFactories: a sequence of factory functions for the creation of models to evaluate
         :param resultWriter: a writer with which to store results
         :param writePerDatasetResults: whether to use resultWriter (if not None) in order to generate detailed results for each
@@ -323,8 +322,15 @@ class MultiDataEvaluationUtil:
         allResults = pd.DataFrame()
         for key, inputOutputData in self.inputOutputDataDict.items():
             log.info(f"Evaluating models for {key}")
-            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
             models = [f() for f in modelFactories]
+            modelsAreRegression = [model.isRegressionModel() for model in models]
+            if all(modelsAreRegression):
+                isRegression = True
+            elif not any(modelsAreRegression):
+                isRegression = False
+            else:
+                raise ValueError("The models have to be either all regression models or all classification, not a mixture")
+            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
             childResultWriter = resultWriter.childForSubdirectory(key) if writePerDatasetResults else None
             df = ev.compareModelsCrossValidation(models, resultWriter=childResultWriter)
             df[self.keyName] = key
