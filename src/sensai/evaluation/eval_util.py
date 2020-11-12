@@ -148,6 +148,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
     def createEvaluator(self, model: TModel = None, isRegression: bool = None) -> TEvaluator:
         """
         Creates an evaluator holding the current input-output data
+
         :param model: the model for which to create an evaluator (just for reading off regression or classification,
             the resulting evaluator will work on other models as well)
         :param isRegression: whether to create a regression model evaluator. Either this or model have to be specified
@@ -159,6 +160,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
     def createCrossValidator(self, model: TModel = None, isRegression: bool = None) -> TCrossValidator:
         """
         Creates a cross-validator holding the current input-output data
+
         :param model: the model for which to create a cross-validator (just for reading off regression or classification,
             the resulting evaluator will work on other models as well)
         :param isRegression: whether to create a regression model cross-validator. Either this or model have to be specified
