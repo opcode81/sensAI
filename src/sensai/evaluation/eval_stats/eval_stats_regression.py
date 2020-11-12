@@ -34,7 +34,7 @@ class RegressionMetricMAE(RegressionMetric):
 
     @classmethod
     def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
-        return cls.computeAbsErrors(y_true, y_predicted)
+        return np.mean(cls.computeAbsErrors(y_true, y_predicted))
 
 
 class RegressionMetricMSE(RegressionMetric):
