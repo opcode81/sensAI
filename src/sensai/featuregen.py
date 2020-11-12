@@ -609,6 +609,11 @@ class FeatureCollector(object):
     def getMultiFeatureGenerator(self) -> MultiFeatureGenerator:
         return self._multiFeatureGenerator
 
+    def getNormalizationRules(self, includeGeneratedCategoricalRules=True):
+        return self.getMultiFeatureGenerator().getNormalisationRules(
+            includeGeneratedCategoricalRules=includeGeneratedCategoricalRules
+        )
+
     def _createMultiFeatureGenerator(self):
         featureGenerators = []
         for f in self._featureGeneratorsOrNames:
