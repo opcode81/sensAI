@@ -17,7 +17,7 @@ import seaborn as sns
 
 from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCrossValidationData, \
     VectorClassificationModelCrossValidationData, \
-    VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator
+    VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator, VectorModelCrossValidator
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
@@ -33,6 +33,7 @@ TModel = TypeVar("TModel", bound=VectorModel)
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 TEvaluator = TypeVar("TEvaluator", bound=VectorModelEvaluator)
+TCrossValidator = TypeVar("TCrossValidator", bound=VectorModelCrossValidator)
 TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
 TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
 
@@ -110,7 +111,7 @@ def evalModelViaEvaluator(model: TModel, inputOutputData: InputOutputData, testF
     return ev.performSimpleEvaluation(model, showPlots=True, logResults=True)
 
 
-class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, TEvalStats]):
+class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator, TCrossValData, TEvalStats]):
     """
     Utility class for the evaluation of models based on a dataset
     """
@@ -144,13 +145,29 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
                 resultWriter = resultWriter.childWithAddedPrefix(addedFilenamePrefix)
             return self.__class__(showPlots=self.showPlots, resultWriter=resultWriter)
 
-    def createEvaluator(self, model) -> TEvaluator:
+    def createEvaluator(self, model: TModel = None, isRegression: bool = None) -> TEvaluator:
         """
-        Creates an evaluator which is suitable for evaluation of the given model
-        :param model: the model for which to create an evaluator
+        Creates an evaluator holding the current input-output data
+
+        :param model: the model for which to create an evaluator (just for reading off regression or classification,
+            the resulting evaluator will work on other models as well)
+        :param isRegression: whether to create a regression model evaluator. Either this or model have to be specified
         :return: an evaluator
         """
-        return createVectorModelEvaluator(self.inputOutputData, model=model, **self.evaluatorParams)
+        return createVectorModelEvaluator(self.inputOutputData, model=model, isRegression=isRegression,
+                                         **self.evaluatorParams)
+
+    def createCrossValidator(self, model: TModel = None, isRegression: bool = None) -> TCrossValidator:
+        """
+        Creates a cross-validator holding the current input-output data
+
+        :param model: the model for which to create a cross-validator (just for reading off regression or classification,
+            the resulting evaluator will work on other models as well)
+        :param isRegression: whether to create a regression model cross-validator. Either this or model have to be specified
+        :return: an evaluator
+        """
+        return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression,
+                                         **self.crossValidatorParams)
 
     def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False) -> TEvalData:
@@ -269,14 +286,14 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValData, 
         pass
 
 
-class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
+class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegressionModelEvaluator, VectorRegressionModelEvaluationData, VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
     def _createEvalStatsPlots(self, evalStats: RegressionEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
         resultCollector.addFigure("error-dist", evalStats.plotErrorDistribution(titleAdd=subtitle))
         resultCollector.addFigure("heatmap-gt-pred", evalStats.plotHeatmapGroundTruthPredictions(titleAdd=subtitle))
         resultCollector.addFigure("scatter-gt-pred", evalStats.plotScatterGroundTruthPredictions(titleAdd=subtitle))
 
 
-class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
+class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
     def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
         resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix(titleAdd=subtitle))
 
@@ -290,11 +307,10 @@ class MultiDataEvaluationUtil:
         self.inputOutputDataDict = inputOutputDataDict
         self.keyName = keyName
 
-    def compareModelsCrossValidation(self, isRegression, modelFactories: Sequence[Callable[[], VectorModel]],
+    def compareModelsCrossValidation(self, modelFactories: Sequence[Callable[[], VectorModel]],
             resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
             crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        :param isRegression: flag indicating whether the models to evaluate are regression models
         :param modelFactories: a sequence of factory functions for the creation of models to evaluate
         :param resultWriter: a writer with which to store results
         :param writePerDatasetResults: whether to use resultWriter (if not None) in order to generate detailed results for each
@@ -308,8 +324,15 @@ class MultiDataEvaluationUtil:
         allResults = pd.DataFrame()
         for key, inputOutputData in self.inputOutputDataDict.items():
             log.info(f"Evaluating models for {key}")
-            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
             models = [f() for f in modelFactories]
+            modelsAreRegression = [model.isRegressionModel() for model in models]
+            if all(modelsAreRegression):
+                isRegression = True
+            elif not any(modelsAreRegression):
+                isRegression = False
+            else:
+                raise ValueError("The models have to be either all regression models or all classification, not a mixture")
+            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
             childResultWriter = resultWriter.childForSubdirectory(key) if writePerDatasetResults else None
             df = ev.compareModelsCrossValidation(models, resultWriter=childResultWriter)
             df[self.keyName] = key
