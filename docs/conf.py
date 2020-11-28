@@ -19,7 +19,7 @@ log = logging.getLogger("docs")
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-sys.path.insert(0, os.path.abspath('../src'))
+sys.path.insert(0, os.path.abspath("../src"))
 print(sys.path)
 
 # -- General configuration -----------------------------------------------------
@@ -29,21 +29,32 @@ print(sys.path)
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.napoleon', 'sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx.ext.linkcode', 'sphinx_rtd_theme']
+extensions = [
+    "sphinx.ext.napoleon",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.linkcode",
+    "sphinx_rtd_theme",
+    "nbsphinx",
+    # see https://github.com/spatialaudio/nbsphinx/issues/24 for an explanation why this extension is necessary
+    "IPython.sphinxext.ipython_console_highlighting",
+]
 
 sys.setrecursionlimit(2500)
 
 # adding links to source files
 # see https://www.sphinx-doc.org/en/master/usage/extensions/linkcode.html#module-sphinx.ext.linkcode
 def linkcode_resolve(domain, info):
-    if domain != 'py':
+    if domain != "py":
         return None
-    if not info['module']:
+    if not info["module"]:
         return None
 
-    path, linkExtension = getPathAndLinkExtension(info['module'])
-    objectName = info['fullname']
-    if "." in objectName:  # don't add source link to methods within classes (we might want to change that in the future)
+    path, linkExtension = getPathAndLinkExtension(info["module"])
+    objectName = info["fullname"]
+    if (
+        "." in objectName
+    ):  # don't add source link to methods within classes (we might want to change that in the future)
         return None
     lineno = findLineFromObjectName(path, objectName)
     return f"https://github.com/jambit/sensAI/blob/master/{linkExtension}#L{lineno}"
@@ -55,7 +66,7 @@ def getPathAndLinkExtension(module: str):
         the first entry is the local path to a given module or to __init__.py of the package
         and the second entry is the corresponding path from the top level directory
     """
-    filename = module.replace('.', '/')
+    filename = module.replace(".", "/")
     docsDir = os.path.dirname(os.path.realpath(__file__))
     sourcePathPrefix = os.path.join(docsDir, f"../src/{filename}")
 
@@ -66,14 +77,23 @@ def getPathAndLinkExtension(module: str):
         linkExtension = f"src/{filename}/__init__.py"
         return os.path.join(sourcePathPrefix, "__init__.py"), linkExtension
     else:
-        raise Exception(f"{sourcePathPrefix} is neither a module nor a package with init - did you fortet to add an __init__.py?")
+        raise Exception(
+            f"{sourcePathPrefix} is neither a module nor a package with init - did you fortet to add an __init__.py?"
+        )
 
 
 def findLineFromObjectName(sourceFile, objectName):
     desiredNodeName = objectName.split(".")[0]
-    with open(sourceFile, 'r') as f:
+    with open(sourceFile, "r") as f:
         sourceNode = ast.parse(f.read())
-    desiredNode = next((node for node in sourceNode.body if getattr(node, "name", "") == desiredNodeName), None)
+    desiredNode = next(
+        (
+            node
+            for node in sourceNode.body
+            if getattr(node, "name", "") == desiredNodeName
+        ),
+        None,
+    )
     if desiredNode is None:
         log.warning(f"Could not find object {desiredNodeName} in {sourceFile}")
         return 0
@@ -81,45 +101,58 @@ def findLineFromObjectName(sourceFile, objectName):
         return desiredNode.lineno
 
 
-autodoc_mock_imports = ["torch", "torchtext", "tensorflow", "lightgbm", "sklearn", "seaborn", "psutil", "pyyaml",
-                        "sqlite3", "azureml", "mlflow", "MySQLdb", "catboost", "trains"]
+autodoc_mock_imports = [
+    "torch",
+    "torchtext",
+    "tensorflow",
+    "lightgbm",
+    "sklearn",
+    "seaborn",
+    "psutil",
+    "pyyaml",
+    "sqlite3",
+    "azureml",
+    "mlflow",
+    "MySQLdb",
+    "catboost",
+    "trains",
+]
 
 # Render docu of __init__ methods
 # autoclass_content = 'both'
 
 
 autodoc_default_options = {
-    'exclude-members': 'log, DuplicateColumnNamesException',
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'show-inheritance': True
+    "exclude-members": "log, DuplicateColumnNamesException",
+    "member-order": "bysource",
+    "special-members": "__init__",
+    "show-inheritance": True,
 }
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # The suffix of source filenames.
-source_suffix = '.rst'
+source_suffix = ".rst"
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
 
 # The master toctree document.
-master_doc = 'index'
+master_doc = "index"
 
 # General information about the project.
-project = u'sensAI'
+project = "sensAI"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
-# The short X.Y version.
-version = pkg_resources.require(project)[0].version
-major_v, minor_v = version.split(".")[:2]
-version = f"{major_v}.{minor_v}"
 # The full version, including alpha/beta/rc tags.
-release = version
+release = pkg_resources.get_distribution(project).version
+# The short X.Y version.
+major_v, minor_v = release.split(".")[:2]
+version = f"{major_v}.{minor_v}"
 
 # The language for content autogenerated by Sphinx. Refer to documentation
 # for a list of supported languages.
@@ -133,7 +166,7 @@ release = version
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build']
+exclude_patterns = ["_build"]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -150,7 +183,7 @@ add_module_names = False
 # show_authors = False
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+pygments_style = "sphinx"
 
 # A list of ignored prefixes for module index sorting.
 # modindex_common_prefix = []
@@ -160,7 +193,7 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -233,7 +266,7 @@ html_static_path = []
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'sensAI_doc'
+htmlhelp_basename = "sensAI_doc"
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -241,10 +274,8 @@ htmlhelp_basename = 'sensAI_doc'
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
     # 'papersize': 'letterpaper',
-
     # The font size ('10pt', '11pt' or '12pt').
     # 'pointsize': '10pt',
-
     # Additional stuff for the LaTeX preamble.
     # 'preamble': '',
 }
@@ -278,10 +309,7 @@ latex_elements = {
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    ('index', 'sensAI', '',
-     ["jambit"], 1)
-]
+man_pages = [("index", "sensAI", "", ["jambit"], 1)]
 
 # If true, show URL addresses after external links.
 # man_show_urls = False
