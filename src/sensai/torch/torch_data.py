@@ -238,10 +238,26 @@ class ClassificationVectorDataUtil(VectorDataUtil):
 class TorchDataSet:
     @abstractmethod
     def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
+        """
+        Provides an iterator over batches from the data set.
+
+        :param batchSize: the maximum size of each batch
+        :param shuffle: whether to shuffle the data set
+        :param inputOnly: whether to provide only inputs (rather than inputs and corresponding outputs).
+            If true, provide a single tensor, which is to serve as a model input.
+            If false, provide a pair of tensors (i, o) with inputs and corresponding outputs.
+            Some data sets may only be able to provide inputs, in which case inputOnly=False should lead to an
+            exception.
+        """
         pass
 
     @abstractmethod
     def size(self) -> Optional[int]:
+        """
+        Returns the total size of the data set (number of data points) if it is known.
+
+        :return: the number of data points or None of the size is not known.
+        """
         pass
 
 
@@ -261,6 +277,13 @@ class TorchDataSetProvider:
 
     @abstractmethod
     def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
+        """
+        Provides two data sets, which could, for example, serve as training and validation sets.
+
+        :param fractionalSizeOfFirstSet: the fractional size of the first data set
+        :return: a tuple of data sets (A, B) where A has (approximately) the given fractional size and B encompasses
+            the remainder of the data
+        """
         pass
 
     def getOutputTensorScaler(self) -> TensorScaler:
