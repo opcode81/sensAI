@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # pandoc needed for docu, see https://nbsphinx.readthedocs.io/en/0.7.1/installation.html?highlight=pandoc#pandoc
+      - name: Install non-python packages
+        run: sudo apt-get update -yq && sudo apt-get -yq install pandoc
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -29,7 +32,7 @@ jobs:
       - name: Install Tox and any other packages
         run: pip install tox
       - name: Run Tox
-        run: tox -e py -e torch -e tensorflow -e lightgbm -e docs # Run tox using the version of Python in `PATH`
+        run: tox # Run tox using the version of Python in `PATH`
       - name: Setup Python 3.6
         uses: actions/setup-python@v1
         with:
@@ -37,4 +40,4 @@ jobs:
       - name: Install Tox and any other packages
         run: pip install tox
       - name: Run Tox
-        run: tox -e py -e torch -e tensorflow -e lightgbm # Run tox using the version of Python in `PATH`, don't build docs on py36 due to bugs in sphinx
+        run: tox -e py # don't build docs on py36 due to bugs in sphinx
