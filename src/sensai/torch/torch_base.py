@@ -194,9 +194,19 @@ class TorchModel(ABC):
             return None
 
 
+class TorchModelFromModuleFactory(TorchModel):
+    def __init__(self, moduleFactory: Callable[[], torch.nn.Module], cuda=True):
+        super().__init__(cuda)
+        self.moduleFactory = moduleFactory
+
+    def createTorchModule(self) -> torch.nn.Module:
+        return self.moduleFactory()
+
+
 class VectorTorchModel(TorchModel, ABC):
     """
-    Adds
+    Base class for TorchModels that can be used within VectorModels, where the input and output dimensions
+    are determined by the data
     """
     def __init__(self, cuda: bool = True):
         super().__init__(cuda=cuda)
@@ -217,6 +227,10 @@ class VectorTorchModel(TorchModel, ABC):
 
 
 class TorchVectorRegressionModel(VectorRegressionModel):
+    """
+    Base class for the implementation of VectorRegressionModels based on TorchModels.
+    An instance of this class will have an instance of TorchModel as the underlying model.
+    """
     def __init__(self, modelClass: Callable[..., TorchModel], modelArgs=(), modelKwArgs=None,
             normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
@@ -240,7 +254,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
 
-    def _createWrappedTorchVectorModule(self) -> TorchModel:
+    def _createTorchModel(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
@@ -248,7 +262,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        self.model = self._createWrappedTorchVectorModule()
+        self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, **self.nnOptimiserParams)
 
@@ -271,6 +285,10 @@ class TorchVectorRegressionModel(VectorRegressionModel):
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
+    """
+    Base class for the implementation of VectorClassificationModels based on TorchModels.
+    An instance of this class will have an instance of TorchModel as the underlying model.
+    """
     def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
             normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
         """
@@ -294,7 +312,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
 
-    def _createWrappedTorchVectorModule(self) -> VectorTorchModel:
+    def _createTorchModel(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
@@ -310,7 +328,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         labels: pd.Series = outputs.iloc[:, 0]
         outputs = pd.DataFrame([self._labels.index(l) for l in labels], columns=outputs.columns, index=outputs.index)
 
-        self.model = self._createWrappedTorchVectorModule()
+        self.model = self._createTorchModel()
 
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, **self.nnOptimiserParams)

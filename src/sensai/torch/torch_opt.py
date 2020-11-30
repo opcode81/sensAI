@@ -13,7 +13,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch import cuda as torchcuda
 
-from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider
+from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
+    TensorScalerIdentity
+
 if TYPE_CHECKING:
     from .torch_base import TorchModel
 
@@ -128,45 +130,52 @@ class _Optimiser(object):
 
 class NNLossEvaluator(ABC):
     """
-    Provides functionality for a training process.
-    An instance cannot be used for more than one simultaneous training process.
+    Base class defining the interface for training and validation loss evaluation.
     """
 
     @abstractmethod
-    def getTrainingCriterion(self):
-        """Gets the optimisation criterion (loss function) for training"""
+    def getTrainingCriterion(self) -> nn.Module:
+        """
+        Gets the optimisation criterion (loss function) for training.
+        Standard implementations are available in torch.nn (torch.nn.MSELoss, torch.nn.CrossEntropyLoss, etc.).
+        """
         pass
 
     @abstractmethod
-    def startTraining(self, cuda) -> "NNLossEvaluatorState":
-        """Prepares for a new training process, initialising internal state as required"""
+    def createValidationLossEvaluator(self, cuda: bool) -> "ValidationLossEvaluator":
+        """
+        :param cuda: whether to use CUDA-based tensors
+        :return: the evaluator instance which is to be used to evaluate the model on validation data
+        """
         pass
 
     def getValidationMetricName(self) -> str:
         """
-        Gets the name of the metric (key of dictionary as returned by endValidationCollection), which
-        is defining for the quality of the model
+        Gets the name of the metric (key of dictionary as returned by the validation loss evaluator's
+        endValidationCollection method), which is defining for the quality of the model and thus determines which
+        epoch's model is considered the best.
 
-        :return: the name of the metrics that is indicated of model quality
+        :return: the name of the metric
         """
         pass
 
 
-    class State(ABC):
+    class ValidationLossEvaluator(ABC):
         @abstractmethod
         def startValidationCollection(self, groundTruthShape):
             """
-            Initiates validation data collection for a new epoch
+            Initiates validation data collection for a new epoch, appropriately resetting this object's internal state.
 
-            :param groundTruthShape: the tensor shape of a single ground truth data point
+            :param groundTruthShape: the tensor shape of a single ground truth data point (not including the batch
+                entry dimension)
             """
             pass
 
         @abstractmethod
-        def collectValidationResultBatch(self, output, groundTruth):
+        def processValidationResultBatch(self, output, groundTruth):
             """
             Collects, for validation, the given output and ground truth data (tensors holding data on one batch,
-            where the first dimensions is the batch)
+            where the first dimension is the batch entry)
 
             :param output: the model's output
             :param groundTruth: the corresponding ground truth
@@ -177,7 +186,7 @@ class NNLossEvaluator(ABC):
         @abstractmethod
         def endValidationCollection(self) -> OrderedDict:
             """
-            Computes validation metrics based on the data previously collected.
+            Computes validation metrics based on the data previously processed.
 
             :return: an ordered dictionary with validation metrics
             """
@@ -185,7 +194,7 @@ class NNLossEvaluator(ABC):
 
 
 class NNLossEvaluatorRegression(NNLossEvaluator):
-    """A loss evaluator for (multi-variate) regression"""
+    """A loss evaluator for (multi-variate) regression."""
 
     class LossFunction(Enum):
         L1LOSS = "L1Loss"
@@ -193,19 +202,19 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
         MSELOSS = "MSELoss"
         SMOOTHL1LOSS = "SmoothL1Loss"
 
-    def __init__(self, lossFn: LossFunction):
+    def __init__(self, lossFn: LossFunction = LossFunction.L2LOSS):
         if lossFn is None:
             lossFn = self.LossFunction.L2LOSS
         try:
             self.lossFn = self.LossFunction(lossFn)
         except ValueError:
-            raise Exception(f"Loss function {lossFn} not supported. Available are: {[e.value for e in self.LossFunction]}")
+            raise Exception(f"The loss function '{lossFn}' is not supported. Available options are: {[e.value for e in self.LossFunction]}")
 
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
 
-    def startTraining(self, cuda):
-        return self.State(cuda)
+    def createValidationLossEvaluator(self, cuda):
+        return self.ValidationLossEvaluator(cuda)
 
     def getTrainingCriterion(self):
         if self.lossFn is self.LossFunction.L1LOSS:
@@ -218,7 +227,7 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    class State(NNLossEvaluator.State):
+    class ValidationLossEvaluator(NNLossEvaluator.ValidationLossEvaluator):
         def __init__(self, cuda: bool):
             self.total_loss_l1 = None
             self.total_loss_l2 = None
@@ -238,7 +247,7 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             self.total_loss_l2 = np.zeros(self.outputDims)
             self.allTrueOutputs = None
 
-        def collectValidationResultBatch(self, output, groundTruth):
+        def processValidationResultBatch(self, output, groundTruth):
             # obtain series of outputs per output dimension: (batch_size, output_size) -> (output_size, batch_size)
             predictedOutput = output.permute(1, 0)
             trueOutput = groundTruth.permute(1, 0)
@@ -290,7 +299,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
     class LossFunction(Enum):
         CROSSENTROPY = "CrossEntropy"
 
-    def __init__(self, lossFn: LossFunction):
+    def __init__(self, lossFn: LossFunction = LossFunction.CROSSENTROPY):
         if lossFn is None:
             lossFn = self.LossFunction.CROSSENTROPY
         try:
@@ -301,8 +310,8 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
 
-    def startTraining(self, cuda):
-        return self.State(cuda)
+    def createValidationLossEvaluator(self, cuda):
+        return self.ValidationLossEvaluator(cuda)
 
     def getTrainingCriterion(self):
         if self.lossFn is self.LossFunction.CROSSENTROPY:
@@ -311,7 +320,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    class State(NNLossEvaluator.State):
+    class ValidationLossEvaluator(NNLossEvaluator.ValidationLossEvaluator):
         def __init__(self, cuda: bool):
             self.totalLossCE = None
             self.numValidationSamples = None
@@ -323,7 +332,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             self.totalLossCE = 0
             self.numValidationSamples = 0
 
-        def collectValidationResultBatch(self, output, groundTruth):
+        def processValidationResultBatch(self, output, groundTruth):
             self.totalLossCE += self.evaluateCE(output, groundTruth).item()
             self.numValidationSamples += output.shape[0]
 
@@ -346,13 +355,14 @@ class NNOptimiser:
             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None,
             useShrinkage=True, **optimiserArgs):
         """
-        :param cuda: whether to use CUDA or not
+        :param cuda: whether to use CUDA
         :param lossEvaluator: the loss evaluator to use
         :param gpu: index of the gpu to be used, if parameter cuda is True
         :param optimiser: the optimizer to be used; defaults to "adam"
         :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
         :param optimiserLR: the optimizer's learning rate decay
-        :param trainFraction: the fraction of the data used for training; defaults to 0.75
+        :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
+            If no validation is to be performed, pass 1.0.
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
         :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
@@ -361,7 +371,7 @@ class NNOptimiser:
         if optimiser == 'lbfgs':
             largeBatchSize = 1e12
             if batchSize is not None:
-                self.log.warning(f"LBFGS does not make use of batches, therefore using largeBatchSize {largeBatchSize} to achieve use of a single batch")
+                self.log.warning(f"LBFGS does not make use of batches, therefore using large batch size {largeBatchSize} to achieve use of a single batch")
             batchSize = largeBatchSize
         else:
             if batchSize is None:
@@ -394,19 +404,26 @@ class NNOptimiser:
             f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
             f"optimiserArgs={self.optimiserArgs}]"
 
-    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider]):
+    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, TorchDataSet]):
+        """
+        Fits the parameters of the given model to the given data.
+
+        :param model: the model to be fitted
+        :param data: the data to use, which can either be given via a TorchDataSetProvider or one or more DataUtil instances.
+            For the case where only training data is required (i.e. no validation, trainFraction=1.0), a TorchDataSet
+            instance can also be passed.
+        """
         self.log.info(f"Preparing parameter learning of {model} via {self}")
+
+        useValidation = self.trainFraction != 1.0
 
         def toDataSetProvider(d) -> TorchDataSetProvider:
             if isinstance(d, TorchDataSetProvider):
                 return d
             elif isinstance(d, DataUtil):
                 return TorchDataSetProviderFromDataUtil(d, self.cuda)
-
-        if type(data) != list:
-            dataSetProviders = [toDataSetProvider(data)]
-        else:
-            dataSetProviders = [toDataSetProvider(item) for item in data]
+            else:
+                raise ValueError()
 
         # initialise data to be generated
         self.trainingLog = []
@@ -430,14 +447,24 @@ class NNOptimiser:
         validationSets = []
         trainingSets = []
         outputScalers = []
-        self.log.info("Obtaining input/output training instances")
-        for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
-            outputScalers.append(dataSetProvider.getOutputTensorScaler())
-            trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
-            trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
-            validationSets.append(valS)
-            trainingSets.append(trainS)
-        trainingLog("Number of validation sets: %d" % len(validationSets))
+        if isinstance(data, TorchDataSet):
+            if useValidation:
+                raise ValueError("Passing a TorchDataSet instance is not admissible when validation is enabled (trainFraction != 1.0). Pass a TorchDataSetProvider instead.")
+            trainingSets.append(data)
+            outputScalers.append(TensorScalerIdentity())
+        else:
+            if type(data) != list:
+                dataSetProviders = [toDataSetProvider(data)]
+            else:
+                dataSetProviders = [toDataSetProvider(item) for item in data]
+            self.log.info("Obtaining input/output training instances")
+            for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
+                outputScalers.append(dataSetProvider.getOutputTensorScaler())
+                trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
+                trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
+                validationSets.append(valS)
+                trainingSets.append(trainS)
+            trainingLog("Number of validation sets: %d" % len(validationSets))
 
         torchModel = model.createTorchModule()
         if self.cuda:
@@ -460,7 +487,7 @@ class NNOptimiser:
             use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
-        self.lossEvaluatorState = self.lossEvaluator.startTraining(self.cuda)
+        self.lossEvaluatorState = self.lossEvaluator.createValidationLossEvaluator(self.cuda)
         validationMetricName = self.lossEvaluator.getValidationMetricName()
         try:
             self.log.info('Begin training')
@@ -471,44 +498,47 @@ class NNOptimiser:
                 # perform training step, processing all the training data once
                 train_loss = self._train(trainingSets, torchModel, criterion, optim, self.batchSize, self.cuda, outputScalers)
 
-                # perform validation, computing the mean metrics across all validation sets (if more than one)
-                metricsSum = None
-                metricsKeys = None
-                for i, (validationSet, outputScaler) in enumerate(zip(validationSets, outputScalers)):
-                    metrics = self._evaluate(validationSet, torchModel, outputScaler)
-                    metricsArray = np.array(list(metrics.values()))
-                    if i == 0:
-                        metricsSum = metricsArray
-                        metricsKeys = metrics.keys()
+                # perform validation, computing the mean metrics across all validation sets (if more than one),
+                # and check for new best result according to validation results
+                isNewBest = False
+                if useValidation:
+                    metricsSum = None
+                    metricsKeys = None
+                    for i, (validationSet, outputScaler) in enumerate(zip(validationSets, outputScalers)):
+                        metrics = self._evaluate(validationSet, torchModel, outputScaler)
+                        metricsArray = np.array(list(metrics.values()))
+                        if i == 0:
+                            metricsSum = metricsArray
+                            metricsKeys = metrics.keys()
+                        else:
+                            metricsSum += metricsArray
+                    metricsSum /= len(validationSets)  # mean results
+                    metrics = dict(zip(metricsKeys, metricsSum))
+                    current_val = metrics[self.lossEvaluator.getValidationMetricName()]
+                    isNewBest = current_val < best_val
+                    if isNewBest:
+                        best_val = current_val
+                        best_epoch = epoch
+                        bestStr = "best {:s} {:5.6f} from this epoch".format(validationMetricName, best_val)
                     else:
-                        metricsSum += metricsArray
-                metricsSum /= len(validationSets)  # mean results
-                metrics = dict(zip(metricsKeys, metricsSum))
-
-                # check for new best result according to validation results
-                current_val = metrics[self.lossEvaluator.getValidationMetricName()]
-                isNewBest = current_val < best_val
-                if isNewBest:
-                    best_val = current_val
-                    best_epoch = epoch
-                    bestStr = "best {:s} {:5.6f} from this epoch".format(validationMetricName, best_val)
+                        bestStr = "best {:s} {:5.6f} from epoch {:d}".format(validationMetricName, best_val, best_epoch)
+                    valStr = f' | validation {", ".join(["%s %5.4f" % e for e in metrics.items()])} | {bestStr}'
                 else:
-                    bestStr = "best {:s} {:5.6f} from epoch {:d}".format(validationMetricName, best_val, best_epoch)
+                    valStr = ""
                 trainingLog(
-                    'Epoch {:3d}/{} completed in {:5.2f}s | train loss {:5.4f} | validation {:s} | {:s}'.format(
-                        epoch, self.epochs, (time.time() - epoch_start_time), train_loss,
-                        ", ".join(["%s %5.4f" % e for e in metrics.items()]),
-                        bestStr))
-                if isNewBest:
+                    'Epoch {:3d}/{} completed in {:5.2f}s | train loss {:5.4f}{:s}'.format(
+                        epoch, self.epochs, (time.time() - epoch_start_time), train_loss, valStr))
+                if useValidation and isNewBest:
                     bestModelBytes = model.getModuleBytes()
             trainingLog("Training complete")
         except KeyboardInterrupt:
             trainingLog('Exiting from training early')
-        trainingLog('Best model is from epoch %d with %s %f on validation set' % (best_epoch, validationMetricName, best_val))
-        self.bestEpoch = best_epoch
 
-        # reload best model
-        model.setModuleBytes(bestModelBytes)
+        # reload best model according to validation results
+        if useValidation:
+            trainingLog(f'Best model is from epoch {best_epoch} with {validationMetricName} {best_val} on validation set')
+            self.bestEpoch = best_epoch
+            model.setModuleBytes(bestModelBytes)
 
     def getTrainingLog(self):
         return self.trainingLog
@@ -565,7 +595,7 @@ class NNOptimiser:
                 self.lossEvaluatorState.startValidationCollection(groundTruthShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
-            self.lossEvaluatorState.collectValidationResultBatch(output, groundTruth)
+            self.lossEvaluatorState.processValidationResultBatch(output, groundTruth)
 
         return self.lossEvaluatorState.endValidationCollection()
 
