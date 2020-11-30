@@ -16,7 +16,8 @@ jobs:
 
     steps:
       # pandoc needed for docu, see https://nbsphinx.readthedocs.io/en/0.7.1/installation.html?highlight=pandoc#pandoc
-      - apt-get update -yq && apt-get -yq install pandoc
+      - name: Install non-python packages
+        run: sudo apt-get update -yq && sudo apt-get -yq install pandoc
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
