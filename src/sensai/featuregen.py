@@ -597,9 +597,10 @@ class FeatureCollector(object):
     A feature collector which can provide a multi-feature generator from a list of names/generators and registry
     """
 
-    def __init__(self, *featureGeneratorsOrNames: Union[str, FeatureGenerator], registry=None):
+    def __init__(self, *featureGeneratorsOrNames: Union[str, FeatureGenerator], registry:
+            FeatureGeneratorRegistry = None):
         """
-        :param featureGeneratorsOrNames: generator names (known to articleFeatureGeneratorRegistry) or generator instances.
+        :param featureGeneratorsOrNames: generator names (known to the registry) or generator instances.
         :param registry: the feature generator registry for the case where names are passed
         """
         self._featureGeneratorsOrNames = featureGeneratorsOrNames
