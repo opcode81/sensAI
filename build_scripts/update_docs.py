@@ -47,7 +47,7 @@ def write_to_file(content: str, path: str):
     os.chmod(path, 0o666)
 
 
-def make_docu(basedir=os.path.join("src", "sem_env"), overwrite=False):
+def make_docu(basedir=os.path.join("src", "sensai"), overwrite=False):
     """
     Creates/updates documentation in form of rst files for modules and packages.
     Does not delete any existing rst files. Thus, rst files for packages or modules that have been removed or renamed
