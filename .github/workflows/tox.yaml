@@ -1,10 +1,8 @@
-name: Merge master, run tests and build docu
+name: Merge develop, run tests and build docu
 
 on:
-  push:
-    branches: [master]
   pull_request:
-    branches: [master]
+    branches: [develop]
   workflow_dispatch:
     inputs:
       reason:
@@ -20,10 +18,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Merge master into current branch
+      - name: Merge develop into current branch
         run: |
-          git fetch origin master:master --update-head-ok
-          git merge master
+          git fetch origin develop:develop --update-head-ok
+          git merge develop
       - name: Setup Python 3.7
         uses: actions/setup-python@v1
         with:
