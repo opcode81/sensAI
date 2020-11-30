@@ -208,7 +208,7 @@ class GridSearch(TrackedExperimentDataProvider):
         log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
-        self._trackedExperiment = None
+        self.trackedExperiment = None
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
@@ -227,7 +227,7 @@ class GridSearch(TrackedExperimentDataProvider):
         return values
 
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self._trackedExperiment = trackedExperiment
+        self.trackedExperiment = trackedExperiment
 
     def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None, ascending=True) -> pd.DataFrame:
         """
@@ -240,7 +240,12 @@ class GridSearch(TrackedExperimentDataProvider):
         :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
         :return: the data frame with all evaluation results
         """
-        loggingCallback = self._trackedExperiment.trackValues if self._trackedExperiment is not None else None
+        if self.trackedExperiment is not None:
+            loggingCallback = self.trackedExperiment.trackValues
+        elif metricsEvaluator.trackedExperiment is not None:
+            loggingCallback = metricsEvaluator.trackedExperiment.trackValues
+        else:
+            loggingCallback = None
         paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath,
                                                   sortColumnName=sortColumnName, ascending=ascending)
 
@@ -350,10 +355,10 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self.p0 = p0
         self.p1 = p1
         self._sa = None
-        self._trackedExperiment = None
+        self.trackedExperiment = None
 
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self._trackedExperiment = trackedExperiment
+        self.trackedExperiment = trackedExperiment
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
@@ -375,6 +380,8 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             values.update(**params)
             if trackedExperiment is not None:
                 trackedExperiment.trackValues(values)
+            elif metricsEvaluator.trackedExperiment is not None:
+                metricsEvaluator.trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addValues(values)
                 cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")
@@ -384,7 +391,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
 
     def _computeMetric(self, params):
         metrics = self._evalParams(self.modelFactory, self.evaluatorOrValidator, self.parametersMetricsCollection,
-            self.parameterCombinationEquivalenceClassValueCache, self._trackedExperiment, **params)
+                                   self.parameterCombinationEquivalenceClassValueCache, self.trackedExperiment, **params)
         metricValue = metrics[self.metricToOptimise]
         if not self.minimiseMetric:
             return -metricValue

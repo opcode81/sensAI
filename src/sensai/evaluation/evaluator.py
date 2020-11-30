@@ -1,7 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional
 
 import pandas as pd
 
@@ -9,6 +9,7 @@ from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
 from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
+from ..tracking import TrackedExperiment
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
 
@@ -20,9 +21,27 @@ TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection
 
 
 class MetricsDictProvider(ABC):
+    def __init__(self):
+        self.trackedExperiment: Optional[TrackedExperiment] = None
+
     @abstractmethod
     def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
+
+    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
+        self.trackedExperiment = trackedExperiment
+
+    def unsetTrackedExperiment(self):
+        self.trackedExperiment = None
+
+    def computeAndTrack(self, model, returnResult=True, **kwargs) -> Optional[Dict[str, float]]:
+        if self.trackedExperiment is None:
+            raise Exception("Cannot track results: trackedExperiment is not set.")
+        valuesDict = self.computeMetrics(model, **kwargs)
+        valuesDict["str(model)"] = str(model)
+        self.trackedExperiment.trackValues(valuesDict)
+        if returnResult:
+            return valuesDict
 
 
 class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -99,6 +118,7 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         else:
             self.trainingData = data
             self.testData = testData
+        super().__init__()
 
     def fitModel(self, model: VectorModel):
         """Fits the given model's parameters using this evaluator's training data"""
