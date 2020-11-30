@@ -21,6 +21,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
+          lfs: true
+      # lfs=true is not enough, see https://stackoverflow.com/questions/61463578/github-actions-actions-checkoutv2-lfs-true-flag-not-converting-pointers-to-act
+      - name: Checkout LFS objects
+        run: git lfs pull
       - name: Merge develop into current branch
         run: |
           git fetch origin develop:develop --update-head-ok
