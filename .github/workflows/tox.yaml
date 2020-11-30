@@ -3,6 +3,8 @@ name: Merge develop, run tests and build docu
 on:
   pull_request:
     branches: [develop]
+  push:
+    branches: [develop, master]
   workflow_dispatch:
     inputs:
       reason:
