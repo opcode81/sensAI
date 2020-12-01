@@ -111,7 +111,10 @@ class OtherRepo:
         remoteCommitId = self.lastSyncIdLibRepo()
         remoteCommitExists = execute("git rev-list HEAD..%s" % remoteCommitId, exceptionOnError=False)
         if not remoteCommitExists:
-            if not self._userInputYesNo(f"\nWARNING: The referenced remote commit {remoteCommitId} does not exist in your {LIB_NAME} branch '{self.branch}'!\nSomeone else may have pulled/pushed in the meantime.\nIt is recommended that you do not continue. Continue?"):
+            if not self._userInputYesNo(f"\nWARNING: The referenced remote commit {remoteCommitId} does not exist "
+                                        f"in your {LIB_NAME} branch '{self.branch}'!\nSomeone else may have "
+                                        f"pulled/pushed in the meantime.\nIt is recommended that you do not continue. "
+                                        f"Continue?"):
                 return
 
         # get log with relevant commits in this repo that are to be pulled
@@ -148,7 +151,8 @@ class OtherRepo:
         execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
         execute(f'git commit -m "{self.SYNC_COMMIT_MESSAGE} (pull)"')
 
-        print(f"\n\nIf everything was successful, you should now push your changes to branch '{self.branch}'\nand get your branch merged into master (issuing a pull request where appropriate)")
+        print(f"\n\nIf everything was successful, you should now push your changes to branch "
+              f"'{self.branch}'\nand get your branch merged into develop (issuing a pull request where appropriate)")
         
     def push(self, libRepo: "LibRepo"):
         """
@@ -156,9 +160,9 @@ class OtherRepo:
         """
         os.chdir(libRepo.rootPath)
 
-        # switch to the source repo branch and merge master into it (to make sure it's up to date)
+        # switch to the source repo branch and merge develop into it (to make sure it's up to date)
         execute(f"git checkout {self.branch}")
-        execute("git merge master")
+        execute("git merge develop")
 
         if self.isSyncEstablished():
 
@@ -166,7 +170,9 @@ class OtherRepo:
             unpulledCommits = self.gitLogThisRepoSinceLastSync().strip()
             if unpulledCommits != "":
                 print(f"\n{unpulledCommits}\n\n")
-                if not self._userInputYesNo(f"WARNING: The above changes in repository '{self.name}' have not yet been pulled.\nYou might want to pull them.\nIf you continue with the push, they will be lost. Continue?"):
+                if not self._userInputYesNo(f"WARNING: The above changes in repository '{self.name}' have not"
+                                            f" yet been pulled.\nYou might want to pull them.\n"
+                                            f"If you continue with the push, they will be lost. Continue?"):
                     return
 
             # get change log in lib repo since last sync

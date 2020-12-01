@@ -14,6 +14,8 @@ from .evaluation.eval_stats import eval_stats_classification, eval_stats_regress
 from .normalisation import NormalisationMode
 from .vector_model import VectorModel, VectorRegressionModel, VectorClassificationModel
 
+__version__ = "0.0.5"
+
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow
 # torch

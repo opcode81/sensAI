@@ -31,6 +31,7 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
 class ClusteringModelUnsupervisedEvaluator(ClusteringModelEvaluator[ClusteringUnsupervisedEvalStats]):
     def __init__(self, datapoints):
         self.datapoints = datapoints
+        super().__init__()
 
     def evalModel(self, model: ClusteringModel, fit=True):
         """
@@ -58,6 +59,7 @@ class ClusteringModelSupervisedEvaluator(ClusteringModelEvaluator[ClusteringSupe
         self.datapoints = datapoints
         self.trueLabels = trueLabels
         self.noiseLabel = noiseLabel
+        super().__init__()
 
     def evalModel(self, model: ClusteringModel, fit=True):
         """

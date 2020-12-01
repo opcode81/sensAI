@@ -86,6 +86,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndices = permutedIndices[testStartIdx:testEndIdx]
             trainIndices = np.concatenate((permutedIndices[:testStartIdx], permutedIndices[testEndIdx:]))
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
+        super().__init__()
 
     @abstractmethod
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
