@@ -43,16 +43,15 @@ jobs:
       - name: Prepare Pages
         if: github.ref == 'refs/heads/develop'
         run: |
-          mkdir -p pages/docs pages/coverage
-          mv docs/_build/html/* pages/docs
-          mv htmlcov/* pages/coverage
+          mv docs/_build/html/* public/docs
+          mv htmlcov/* public/coverage
       - name: Deploy Pages
         uses: JamesIves/github-pages-deploy-action@3.7.1
         if: github.ref == 'refs/heads/develop'
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages
-          FOLDER: pages
+          FOLDER: public
           TARGET_FOLDER: .
           CLEAN: true
           SINGLE_COMMIT: true
