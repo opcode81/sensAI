@@ -32,11 +32,12 @@ Usage:
   release-version.sh [FLAGS] [VERSION_STR]
 
   Optional flags:
-    -h, --help     Show this information and exit
-    -d             Delete release branch after merging
-    -e             Edit changelog (using default editor)
-    -v, --verbose  Print debug information
-    -y, --yes      Do not prompt for confirmation, for non-interactive use (incompatible with -e)
+    -h, --help              Show this information and exit
+    -d                      Delete release branch after merging
+    -e                      Edit changelog (using default editor)
+    -v, --verbose           Print debug information
+    -y, --yes               Do not prompt for confirmation, for non-interactive use (incompatible with -e)
+    -r, --remote <remote>   The remote on which to release, default is origin
 
   Positional options:
     VERSION_STR   Version to release, e.g. v0.1.2.
@@ -55,6 +56,7 @@ function _parse_opts() {
   EDIT_CHANGELOG=
   FORCE_YES=
   HELP=
+  REMOTE="origin"
 
   while [[ $# -gt 0 ]]
   do
@@ -79,6 +81,10 @@ function _parse_opts() {
         -d|--delete-branch)
           DELETE_BRANCH=1
           shift
+        ;;
+        -r|--remote)
+          REMOTE="$2"
+          shift 2
         ;;
         -*)
           >&2 echo "Unknown option: $1"
@@ -155,7 +161,7 @@ function _check_sanity() {
 function _confirm() {
   cat << EOF
 🔍 Summary of changes:
-    - Pull latest remote version of ${bold}develop${normal} (fast-forward only)
+    - Pull latest remote version of ${bold}develop${normal} (fast-forward only) from $REMOTE
     - Create branch ${bold}$RELEASE_BRANCH${normal}
     - Bump version number: ${bold}$CURRENT_VERSION ⟶ $RELEASE_VERSION${normal}
 EOF
@@ -164,9 +170,9 @@ EOF
     echo "    - Open CHANGELOG.md for editing"
   fi
   cat << EOF
-    - Merge release branch into ${bold}master${normal}
+    - Merge release branch into ${bold}master${normal} locally and on $REMOTE
     - Bump version number again to next development pre-release
-    - Merge release branch into ${bold}develop${normal}
+    - Merge release branch into ${bold}develop${normal} locally and on $REMOTE
 EOF
   if [[ -n "$DELETE_BRANCH" ]]; then
     echo "    - Delete release branch"
@@ -205,7 +211,7 @@ if [[ -z "$FORCE_YES" ]]; then
   _confirm
 fi
 
-git pull --ff-only
+git pull --ff-only "$REMOTE" develop
 
 echo "📝 Creating release branch"
 git checkout -b "$RELEASE_BRANCH"
@@ -235,10 +241,10 @@ bumpversion --commit --new-version "$RELEASE_VERSION" release
 
 echo "🔨 Merging release branch into master"
 git checkout master
-git pull --ff-only
+git pull --ff-only "$REMOTE" master
 git merge --no-ff -X theirs "$RELEASE_BRANCH"
 git tag -a "$RELEASE_TAG" -m"Release $RELEASE_VERSION"
-git push --follow-tags origin master
+git push --follow-tags "$REMOTE" master
 
 echo "🏷️ Bumping to next patch version"
 git checkout "$RELEASE_BRANCH"
@@ -247,7 +253,7 @@ bumpversion --commit patch
 echo "🔨 Merging release branch into develop"
 git checkout develop
 git merge --no-ff "$RELEASE_BRANCH"
-git push origin develop
+git push "$REMOTE" develop
 
 if [[ -n "$DELETE_BRANCH" ]]; then
   echo "🗑️ Deleting release branch"
