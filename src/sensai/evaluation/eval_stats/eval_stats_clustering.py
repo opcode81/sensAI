@@ -39,12 +39,12 @@ class ClusterLabelsEvalStats(EvalStats[TMetric], ABC):
             self.NUM_CLUSTERS: len(self.clusterIdentifiers),
             self.AV_SIZE: self.clusterSizeDistribution.mean(),
             self.STDDEV_SIZE: self.clusterSizeDistribution.std(),
-            self.MAX_SIZE: np.max(self.clusterSizeDistribution),
-            self.MIN_SIZE: np.min(self.clusterSizeDistribution),
+            self.MAX_SIZE: int(np.max(self.clusterSizeDistribution)),
+            self.MIN_SIZE: int(np.min(self.clusterSizeDistribution)),
             self.MEDIAN_SIZE: np.median(self.clusterSizeDistribution)
         }
         if self.noiseLabel is not None:
-            result[self.NOISE_SIZE] = self.noiseClusterSize
+            result[self.NOISE_SIZE] = int(self.noiseClusterSize)
         return result
 
     def getAll(self) -> Dict[str, float]:
