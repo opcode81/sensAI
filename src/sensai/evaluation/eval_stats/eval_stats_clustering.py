@@ -44,7 +44,7 @@ class ClusterLabelsEvalStats(EvalStats[TMetric], ABC):
             self.MEDIAN_SIZE: np.median(self.clusterSizeDistribution)
         }
         if self.noiseLabel is not None:
-            result[self.NOISE_SIZE] = self.noiseClusterSize
+            result[self.NOISE_SIZE] = int(self.noiseClusterSize)
         return result
 
     def getAll(self) -> Dict[str, float]:
