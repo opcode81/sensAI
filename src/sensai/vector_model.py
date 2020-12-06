@@ -157,7 +157,7 @@ class FittableModel(PredictorModel, ABC):
 class RulesBasedModel(FittableModel, ABC):
     """
     Base class for models where the essential logic is rule based but the feature generators
-    and input transformers can be fitted on a
+    and input transformers can be fit on data frames
     """
     def __init__(self):
         super().__init__()
