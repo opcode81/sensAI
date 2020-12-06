@@ -98,6 +98,8 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         :param featureGenerator: the feature generator to use for input computation
         :return: self
         """
+        if featureGenerator is None:
+            featureGenerator = _IdentityFG()
         self._featureGenerator = featureGenerator
         return self
 
@@ -206,7 +208,7 @@ class VectorModel(FittableModel, ABC):
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = ["UNKNOWN"]
-        self._targetTransformer: Optional[InvertibleDataFrameTransformer] = _IdentityDFT()
+        self._targetTransformer: InvertibleDataFrameTransformer = _IdentityDFT()
         self.checkInputColumns = checkInputColumns
 
     def withTargetTransformer(self, targetTransformer: InvertibleDataFrameTransformer) -> __qualname__:
