@@ -104,7 +104,7 @@ class FeatureGenerator(ABC):
         return self._generatedColumnNames
 
     @abstractmethod
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         Fits the feature generator based on the given data
 
@@ -172,7 +172,7 @@ class FeatureGenerator(ABC):
         """
         pass
 
-    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         """
         Fits the feature generator and subsequently generates features for the data points in the given data frame
 
@@ -191,7 +191,7 @@ class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     """
     A feature generator which does not require fitting
     """
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X, Y=None, ctx=None):
         pass
 
 
@@ -229,12 +229,12 @@ class MultiFeatureGenerator(FeatureGenerator):
             return fg.generate(inputDF, ctx=ctx)
         return self._generateFromMultiple(generateFeatures, inputDF.index)
 
-    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         def generateFeatures(fg: FeatureGenerator):
             return fg.fitGenerate(X, Y, ctx)
         return self._generateFromMultiple(generateFeatures, X.index)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         for fg in self.featureGenerators:
             fg.fit(X, Y)
 
@@ -411,10 +411,10 @@ class ChainedFeatureGenerator(FeatureGenerator):
             df = featureGen.generate(df, ctx)
         return df
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         self.fitGenerate(X, Y, ctx)
 
-    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         for fg in self.featureGenerators:
             X = fg.fitGenerate(X, Y, ctx)
         return X
@@ -466,7 +466,7 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         # This will hold the mapping: column -> featureValue -> targetValue -> targetValueEmpiricalProbability
         self._discreteTargetDistributionsByColumn: Dict[str, Dict[Any, Dict[Any, float]]] = None
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         This will persist the empirical target probability distributions for all unique values in the specified columns
         """
@@ -657,7 +657,7 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.vectorModel = vectorModel
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         targetDF = self.targetFeatureGenerator.fitGenerate(X, Y)
         if self.inputFeatureGenerator:
             X = self.inputFeatureGenerator.fitGenerate(X, Y)
