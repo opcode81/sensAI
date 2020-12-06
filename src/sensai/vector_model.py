@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any, Optional, Union, TypeVar
+from typing import Sequence, List, Any, Optional, Union, TypeVar, Type
 
 import numpy as np
 import pandas as pd
@@ -125,7 +125,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         self.setName(name)
         return self
 
-    def getInputTransformer(self, cls):
+    def getInputTransformer(self, cls: Type[DataFrameTransformer]):
         for it in self._inputTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):
                 return it
