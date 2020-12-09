@@ -180,9 +180,9 @@ class RuleBasedModel(FittableModel, ABC):
                         f"Ignore this warning if they don't require fitting or have been fitted separately from {self}")
         x = self._featureGenerator.generate(x, self)
         x = self._inputTransformerChain.apply(x, fit=False)
-        y = self._predict(x)
-        y = self._outputTransformerChain.apply(y)
-        return y
+        x = self._predict(x)
+        x = self._outputTransformerChain.apply(x)
+        return x
 
     @abstractmethod
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
