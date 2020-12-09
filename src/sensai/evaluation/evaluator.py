@@ -9,7 +9,7 @@ from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
 from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
-from ..tracking import TrackedExperiment, TrackedExperimentDataProvider
+from ..tracking import TrackedExperiment, TrackingMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
 
@@ -20,19 +20,10 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class MetricsDictProvider(TrackedExperimentDataProvider, ABC):
-    def __init__(self):
-        self.trackedExperiment: Optional[TrackedExperiment] = None
-
+class MetricsDictProvider(TrackingMixin, ABC):
     @abstractmethod
     def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
-
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self.trackedExperiment = trackedExperiment
-
-    def unsetTrackedExperiment(self):
-        self.trackedExperiment = None
 
     def computeMetrics(self, model, **kwargs) -> Optional[Dict[str, float]]:
         valuesDict = self._computeMetrics(model, **kwargs)
@@ -117,7 +108,6 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         else:
             self.trainingData = data
             self.testData = testData
-        super().__init__()
 
     def fitModel(self, model: VectorModel):
         """Fits the given model's parameters using this evaluator's training data"""

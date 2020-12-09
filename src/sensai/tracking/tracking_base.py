@@ -21,11 +21,15 @@ class TrackedExperiment(ABC):
         pass
 
 
-class TrackedExperimentDataProvider(ABC):
-    @abstractmethod
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        pass
+class TrackingMixin(ABC):
+    _trackedExperiment = None
 
-    @abstractmethod
+    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
+        self._trackedExperiment = trackedExperiment
+
     def unsetTrackedExperiment(self):
-        pass
+        self._trackedExperiment = None
+
+    @property
+    def trackedExperiment(self):
+        return self._trackedExperiment

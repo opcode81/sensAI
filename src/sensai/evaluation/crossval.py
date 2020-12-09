@@ -74,7 +74,6 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
         :param evaluatorParams: keyword parameters with which to instantiate model evaluators
         """
-        super().__init__()
         self.returnTrainedModels = returnTrainedModels
         self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
         numDataPoints = len(data)
