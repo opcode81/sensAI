@@ -139,10 +139,11 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
             return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
         return self._name
 
+    # TODO: why do we need the getter and the setter? We only have them for fgens, not for the input/output/target transformers
     def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
         self.withFeatureGenerator(featureGenerator)
 
-    def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
+    def getFeatureGenerator(self) -> FeatureGenerator:
         return self._featureGenerator
 
 
