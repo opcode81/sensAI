@@ -148,8 +148,8 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
         result = super()._predictOutputsForInputDataFrame(inputs)
         return np.squeeze(result, 2)
 
-    def _computeInputs(self, x: pd.DataFrame, y=None) -> pd.DataFrame:
-        x = super()._computeInputs(x, y=y)
+    def _computeInputs(self, x: pd.DataFrame, y=None, fit=False) -> pd.DataFrame:
+        x = super()._computeInputs(x, Y=y, fit=fit)
 
         # sort input data frame columns by name
         x = x[sorted(x.columns)]
