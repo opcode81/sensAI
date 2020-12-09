@@ -98,9 +98,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         :param featureGenerator: the feature generator to use for input computation
         :return: self
         """
-        if featureGenerator is None:
-            featureGenerator = _IdentityFG()
-        self._featureGenerator = featureGenerator
+        self._featureGenerator = featureGenerator if featureGenerator is not None else _IdentityFG()
         return self
 
     def withFeatureCollector(self, featureCollector: FeatureCollector) -> __qualname__:
@@ -150,14 +148,15 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
 
 class FittableModel(PredictorModel, ABC):
     @abstractmethod
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
 
-class RulesBasedModel(FittableModel, ABC):
+class RuleBasedModel(FittableModel, ABC):
     """
-    Base class for models where the essential logic is rule based but the feature generators
-    and input transformers can be fit on data frames
+    Base class for models where the essential prediction logic is based on rules coded by humans
+    and thus does not require fitting. However, the input generation process may use mechanisms
+    such as feature generation or data transformation, which may require fitting.
     """
     def __init__(self):
         super().__init__()
@@ -176,10 +175,8 @@ class RulesBasedModel(FittableModel, ABC):
         :return: a DataFrame with the same index as the input
         """
         if not self._isFitted:
-            log.warning(
-                f"The input transformers and feature generators of {self} might never have been fitted. "
-                f"Ignore this message if they don't require fitting or have been fitted separately from {self}"
-            )
+            log.warning(f"The input transformers and feature generators of {self} might never have been fitted. "
+                        f"Ignore this warning if they don't require fitting or have been fitted separately from {self}")
         x = self._featureGenerator.generate(x, self)
         x = self._inputTransformerChain.apply(x, fit=False)
         y = self._predict(x)
@@ -197,7 +194,6 @@ class VectorModel(FittableModel, ABC):
     """
     def __init__(self, checkInputColumns=True):
         """
-
         :param checkInputColumns: Whether to check if the input column list (after feature generation)
             during inference coincides with the input column list during fit.
             This should be disabled if feature generation is not performed by the model itself,
@@ -211,7 +207,7 @@ class VectorModel(FittableModel, ABC):
         self._targetTransformer: InvertibleDataFrameTransformer = _IdentityDFT()
         self.checkInputColumns = checkInputColumns
 
-    def withTargetTransformer(self, targetTransformer: InvertibleDataFrameTransformer) -> __qualname__:
+    def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
         Makes the model use the given target transformers.
 
@@ -223,24 +219,24 @@ class VectorModel(FittableModel, ABC):
             the model, i.e. the transformation is completely transparent when applying the model.
         :return: self
         """
-        self._targetTransformer = targetTransformer
+        self._targetTransformer = targetTransformer if targetTransformer is not None else _IdentityDFT()
         return self
 
     def isFitted(self):
         return self._isFitted
 
-    def _computeInputs(self, x: pd.DataFrame, y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+    def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
         if fit:
-            x = self._featureGenerator.fitGenerate(x, y, self)
+            X = self._featureGenerator.fitGenerate(X, Y, self)
         else:
-            x = self._featureGenerator.generate(x, self)
-        x = self._inputTransformerChain.apply(x, fit=fit)
+            X = self._featureGenerator.generate(X, self)
+        X = self._inputTransformerChain.apply(X, fit=fit)
         if not fit:
             if not self.isFitted():
                 raise Exception(f"Model has not been fitted")
-            if self.checkInputColumns and list(x.columns) != self._modelInputVariableNames:
-                raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(x.columns)}")
-        return x
+            if self.checkInputColumns and list(X.columns) != self._modelInputVariableNames:
+                raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(X.columns)}")
+        return X
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
@@ -254,46 +250,33 @@ class VectorModel(FittableModel, ABC):
         # TODO or not TODO: why do we do this? Isn't it the implementation's responsibility to get it right?
         y.index = x.index
         y = self._outputTransformerChain.apply(y)
-        if self._targetTransformer is not None:
-            y = self._targetTransformer.applyInverse(y)
+        y = self._targetTransformer.applyInverse(y)
         return y
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+    @abstractmethod
+    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         """
         Fits the model using the given data
 
         :param X: a data frame containing input data
-        :param Y: a data frame containing output data or None for unsupervised models
+        :param Y: a data frame containing output data
         """
         log.info(f"Training {self.__class__.__name__}")
-        X = self._computeInputs(X, y=Y, fit=True)
-        if Y is None and not isinstance(self._targetTransformer, _IdentityDFT):
-            raise ValueError(
-                f"targetTransformer should be trivial be since no target data is provided. "
-                f"Instead got: {self._targetTransformer.__class__.__name__}"
-            )
+        self._predictedVariableNames = list(Y.columns)
+        X = self._computeInputs(X, Y=Y, fit=True)
         self._targetTransformer.fit(Y)
         Y = self._targetTransformer.apply(Y)
-
         self._modelInputVariableNames = list(X.columns)
-        output_info = ""
-        if Y is not None:
-            self._predictedVariableNames = list(Y.columns)
-            self._modelOutputVariableNames = list(Y.columns)
-            output_info = f"outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, "
-        input_info = f"inputs[{len(self._modelInputVariableNames)}]=" \
-                     f"[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]"
-
-        log.info(f"Training with {output_info}{input_info}")
+        self._modelOutputVariableNames = list(Y.columns)
+        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
         self._isFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
-        pass
-
-    @abstractmethod
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         pass
 
     def getModelOutputVariableNames(self):
@@ -320,17 +303,13 @@ class VectorClassificationModel(VectorModel, ABC):
     def __init__(self):
         """
         """
-        self._labels = None
         super().__init__()
+        self._labels = None
 
     def isRegressionModel(self) -> bool:
         return False
 
-    def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
-        if Y is None:
-            raise NotImplemented(
-                "Unsupervised classification models are currently not implemented"
-            )
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         if len(Y.columns) != 1:
             raise ValueError("Classification requires exactly one output column with class labels")
         self._labels = sorted([label for label in Y.iloc[:, 0].unique()])
