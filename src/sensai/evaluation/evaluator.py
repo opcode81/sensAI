@@ -1,7 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional
 
 import pandas as pd
 
@@ -9,6 +9,7 @@ from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
 from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
+from ..tracking import TrackedExperiment, TrackingMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
 
@@ -19,10 +20,18 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class MetricsDictProvider(ABC):
+class MetricsDictProvider(TrackingMixin, ABC):
     @abstractmethod
-    def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
+
+    def computeMetrics(self, model, **kwargs) -> Optional[Dict[str, float]]:
+        valuesDict = self._computeMetrics(model, **kwargs)
+        if self.trackedExperiment is not None:
+            trackedDict = valuesDict.copy()
+            trackedDict["str(model)"] = str(model)
+            self.trackedExperiment.trackValues(trackedDict)
+        return valuesDict
 
 
 class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -117,7 +126,7 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         """
         pass
 
-    def computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+    def _computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
         evalData = self.evalModel(model)
         return evalData.getEvalStats().getAll()
 

@@ -331,7 +331,9 @@ class DFTNormalisation(DataFrameTransformer):
         """
         :param rules: the set of rules to apply
         :param defaultTransformerFactory: a factory for the creation of transformer instances (from sklearn.preprocessing, e.g. StandardScaler)
-            that shall be used to create a transformer for all rules that don't specify a particular transformer
+            that shall be used to create a transformer for all rules that don't specify a particular transformer.
+            The default transformer will only be applied to columns matched by such rules, unmatched columns will
+            not be transformed.
         :param requireAllHandled: whether to raise an exception if not all columns are matched by a rule
         :param inplace: whether to apply data frame transformations in-place
         """

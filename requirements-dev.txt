@@ -1,7 +1,11 @@
+PyQt5==5.14.1
+psutil==5.6.7
 torch==1.4.0
 catboost~=0.23
 pytest~=5.4.1
 tox~=3.14.6
+bump2version
 tensorflow~=2.2.0
 lightgbm==1.18.5
 jupyter
+pyyaml==5.3

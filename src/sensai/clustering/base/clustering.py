@@ -74,7 +74,7 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
             return {
                 "identifier": self.identifier,
                 "centroid": self.centroid(),
-                "num_members": len(self),
+                "numMembers": len(self),
                 "radius": self.radius()
             }
 

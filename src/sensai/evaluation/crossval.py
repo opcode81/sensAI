@@ -111,7 +111,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
-    def computeMetrics(self, model: VectorModel):
+    def _computeMetrics(self, model: VectorModel):
         data = self.evalModel(model)
         return data.getEvalStatsCollection().aggStats()
 

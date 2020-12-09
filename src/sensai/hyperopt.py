@@ -11,7 +11,7 @@ from typing import Dict, Sequence, Any, Callable, Generator, Union, Tuple, List,
 from .evaluation.evaluator import MetricsDictProvider
 from .local_search import SACostValue, SACostValueNumeric, SAOperator, SAState, SimulatedAnnealing, \
     SAProbabilitySchedule, SAProbabilityFunctionLinear
-from .tracking.tracking_base import TrackedExperimentDataProvider, TrackedExperiment
+from .tracking.tracking_base import TrackingMixin
 from .vector_model import VectorModel
 
 log = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ class ParametersMetricsCollection:
         return self.df
 
 
-class GridSearch(TrackedExperimentDataProvider):
+class GridSearch(TrackingMixin):
     """
     Instances of this class can be used for evaluating models with different user-provided parametrizations
     over the same data and persisting the results
@@ -208,7 +208,6 @@ class GridSearch(TrackedExperimentDataProvider):
         log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
-        self._trackedExperiment = None
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
@@ -226,9 +225,6 @@ class GridSearch(TrackedExperimentDataProvider):
             skipDecider.tell(params, values)
         return values
 
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self._trackedExperiment = trackedExperiment
-
     def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None, ascending=True) -> pd.DataFrame:
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
@@ -240,7 +236,12 @@ class GridSearch(TrackedExperimentDataProvider):
         :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
         :return: the data frame with all evaluation results
         """
-        loggingCallback = self._trackedExperiment.trackValues if self._trackedExperiment is not None else None
+        if self.trackedExperiment is not None:
+            loggingCallback = self.trackedExperiment.trackValues
+        elif metricsEvaluator.trackedExperiment is not None:
+            loggingCallback = metricsEvaluator.trackedExperiment.trackValues
+        else:
+            loggingCallback = None
         paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath,
                                                   sortColumnName=sortColumnName, ascending=ascending)
 
@@ -269,7 +270,7 @@ class GridSearch(TrackedExperimentDataProvider):
         return paramsMetricsCollection.getDataFrame()
 
 
-class SAHyperOpt(TrackedExperimentDataProvider):
+class SAHyperOpt(TrackingMixin):
     log = log.getChild(__qualname__)
 
     class State(SAState):
@@ -350,20 +351,19 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self.p0 = p0
         self.p1 = p1
         self._sa = None
-        self._trackedExperiment = None
-
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self._trackedExperiment = trackedExperiment
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
                     parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
+        if trackedExperiment is not None and metricsEvaluator.trackedExperiment is not None:
+            log.warning(f"Tracked experiment already set in evaluator, results will be tracked twice and"
+                        f"might get overwritten!")
+
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
         if metrics is not None:
             cls.log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
-            return metrics
         else:
             cls.log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
@@ -384,7 +384,7 @@ class SAHyperOpt(TrackedExperimentDataProvider):
 
     def _computeMetric(self, params):
         metrics = self._evalParams(self.modelFactory, self.evaluatorOrValidator, self.parametersMetricsCollection,
-            self.parameterCombinationEquivalenceClassValueCache, self._trackedExperiment, **params)
+                                   self.parameterCombinationEquivalenceClassValueCache, self.trackedExperiment, **params)
         metricValue = metrics[self.metricToOptimise]
         if not self.minimiseMetric:
             return -metricValue
