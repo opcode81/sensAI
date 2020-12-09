@@ -22,8 +22,6 @@ class TrackedExperiment(ABC):
 
 
 class TrackingMixin(ABC):
-    _trackedExperiment = None
-
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self._trackedExperiment = trackedExperiment
 
@@ -32,4 +30,6 @@ class TrackingMixin(ABC):
 
     @property
     def trackedExperiment(self):
-        return self._trackedExperiment
+        if hasattr(self, "_trackedExperiment"):
+            return self._trackedExperiment
+        return None
