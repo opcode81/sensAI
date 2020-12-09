@@ -22,14 +22,15 @@ class TrackedExperiment(ABC):
 
 
 class TrackingMixin(ABC):
+    # hackidy hack
+    _trackedExperimentAttributeName = "_trackedExperiment"
+
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self._trackedExperiment = trackedExperiment
+        setattr(self, self._trackedExperimentAttributeName, trackedExperiment)
 
     def unsetTrackedExperiment(self):
-        self._trackedExperiment = None
+        setattr(self, self._trackedExperimentAttributeName, None)
 
     @property
     def trackedExperiment(self):
-        if hasattr(self, "_trackedExperiment"):
-            return self._trackedExperiment
-        return None
+        return getattr(self, self._trackedExperimentAttributeName, None)
