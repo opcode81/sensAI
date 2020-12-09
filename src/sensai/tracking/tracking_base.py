@@ -25,3 +25,7 @@ class TrackedExperimentDataProvider(ABC):
     @abstractmethod
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         pass
+
+    @abstractmethod
+    def unsetTrackedExperiment(self):
+        pass

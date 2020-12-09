@@ -208,7 +208,7 @@ class GridSearch(TrackedExperimentDataProvider):
         log.info(f"Created GridSearch object for {self.numCombinations} parameter combinations")
 
         self._executor = None
-        self.trackedExperiment = None
+        self.trackedExperiment: Optional[TrackedExperiment] = None
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
@@ -228,6 +228,9 @@ class GridSearch(TrackedExperimentDataProvider):
 
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self.trackedExperiment = trackedExperiment
+
+    def unsetTrackedExperiment(self):
+        self.trackedExperiment = None
 
     def run(self, metricsEvaluator: MetricsDictProvider, sortColumnName=None, ascending=True) -> pd.DataFrame:
         """
@@ -355,20 +358,26 @@ class SAHyperOpt(TrackedExperimentDataProvider):
         self.p0 = p0
         self.p1 = p1
         self._sa = None
-        self.trackedExperiment = None
+        self.trackedExperiment: Optional[TrackedExperiment] = None
 
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
         self.trackedExperiment = trackedExperiment
 
+    def unsetTrackedExperiment(self):
+        self.trackedExperiment = None
+
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
                     parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
+        if trackedExperiment is not None and metricsEvaluator.trackedExperiment is not None:
+            log.warning(f"Tracked experiment already set in evaluator, results will be tracked twice and"
+                        f"might get overwritten!")
+
         metrics = None
         if parameterCombinationEquivalenceClassValueCache is not None:
             metrics = parameterCombinationEquivalenceClassValueCache.get(params)
         if metrics is not None:
             cls.log.info(f"Result for parameter combination {params} could be retrieved from cache, not adding new result")
-            return metrics
         else:
             cls.log.info(f"Evaluating parameter combination {params}")
             model = modelFactory(**params)
@@ -380,8 +389,6 @@ class SAHyperOpt(TrackedExperimentDataProvider):
             values.update(**params)
             if trackedExperiment is not None:
                 trackedExperiment.trackValues(values)
-            elif metricsEvaluator.trackedExperiment is not None:
-                metricsEvaluator.trackedExperiment.trackValues(values)
             if parametersMetricsCollection is not None:
                 parametersMetricsCollection.addValues(values)
                 cls.log.info(f"Data frame with all results:\n\n{parametersMetricsCollection.getDataFrame().to_string()}\n")

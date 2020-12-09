@@ -74,6 +74,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
         :param evaluatorParams: keyword parameters with which to instantiate model evaluators
         """
+        super().__init__()
         self.returnTrainedModels = returnTrainedModels
         self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
         numDataPoints = len(data)
@@ -86,7 +87,6 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndices = permutedIndices[testStartIdx:testEndIdx]
             trainIndices = np.concatenate((permutedIndices[:testStartIdx], permutedIndices[testEndIdx:]))
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
-        super().__init__()
 
     @abstractmethod
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
@@ -112,7 +112,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
-    def computeMetrics(self, model: VectorModel):
+    def _computeMetrics(self, model: VectorModel):
         data = self.evalModel(model)
         return data.getEvalStatsCollection().aggStats()
 

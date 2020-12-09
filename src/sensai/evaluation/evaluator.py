@@ -9,7 +9,7 @@ from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
 from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
-from ..tracking import TrackedExperiment
+from ..tracking import TrackedExperiment, TrackedExperimentDataProvider
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
 
@@ -20,12 +20,12 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class MetricsDictProvider(ABC):
+class MetricsDictProvider(TrackedExperimentDataProvider, ABC):
     def __init__(self):
         self.trackedExperiment: Optional[TrackedExperiment] = None
 
     @abstractmethod
-    def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
 
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
@@ -34,14 +34,13 @@ class MetricsDictProvider(ABC):
     def unsetTrackedExperiment(self):
         self.trackedExperiment = None
 
-    def computeAndTrack(self, model, returnResult=True, **kwargs) -> Optional[Dict[str, float]]:
-        if self.trackedExperiment is None:
-            raise Exception("Cannot track results: trackedExperiment is not set.")
-        valuesDict = self.computeMetrics(model, **kwargs)
-        valuesDict["str(model)"] = str(model)
-        self.trackedExperiment.trackValues(valuesDict)
-        if returnResult:
-            return valuesDict
+    def computeMetrics(self, model, **kwargs) -> Optional[Dict[str, float]]:
+        valuesDict = self._computeMetrics(model, **kwargs)
+        if self.trackedExperiment is not None:
+            trackedDict = valuesDict.copy()
+            trackedDict["str(model)"] = str(model)
+            self.trackedExperiment.trackValues(trackedDict)
+        return valuesDict
 
 
 class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -137,7 +136,7 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         """
         pass
 
-    def computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+    def _computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
         evalData = self.evalModel(model)
         return evalData.getEvalStats().getAll()
 

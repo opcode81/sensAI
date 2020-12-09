@@ -12,7 +12,7 @@ TClusteringEvalStats = TypeVar("TClusteringEvalStats", bound=ClusterLabelsEvalSt
 
 class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats], ABC):
     @timed
-    def computeMetrics(self, model: ClusteringModel, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model: ClusteringModel, **kwargs) -> Dict[str, float]:
         """
         Evaluate the model and return the results as dict
 
