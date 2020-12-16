@@ -1,3 +1,9 @@
+"""
+This module defines base classes for models that use pandas.DataFrames for inputs and outputs, where each data frame row represents
+a single model input or output. Since every row contains a vector of data (one-dimensional array), we refer to them as vector-based
+models. Hence the name of the module and of the central base class VectorModel.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Sequence, List, Any, Optional, Union, TypeVar, Type
