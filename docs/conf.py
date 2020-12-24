@@ -115,7 +115,7 @@ autodoc_mock_imports = [
     "mlflow",
     "MySQLdb",
     "catboost",
-    "trains",
+    "clearml",
 ]
 
 # Render docu of __init__ methods

@@ -2,13 +2,13 @@ import logging
 
 from ..tracking import TrackedExperiment
 
-from trains import Task
+from clearml import Task
 
 log = logging.getLogger(__name__)
 
 
 # TODO: this is an initial working implementation, it should eventually be improved
-class TrackedTrainsExperiment(TrackedExperiment):
+class ClearMLExperiment(TrackedExperiment):
     def __init__(self, task: Task = None, projectName: str = None, taskName: str = None,
             additionalLoggingValuesDict=None):
         """
