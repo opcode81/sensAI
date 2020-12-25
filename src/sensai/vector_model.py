@@ -1,3 +1,9 @@
+"""
+This module defines base classes for models that use pandas.DataFrames for inputs and outputs, where each data frame row represents
+a single model input or output. Since every row contains a vector of data (one-dimensional array), we refer to them as vector-based
+models. Hence the name of the module and of the central base class VectorModel.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Sequence, List, Any, Optional, Union, TypeVar, Type
@@ -15,31 +21,12 @@ log = logging.getLogger(__name__)
 T = TypeVar('T')
 
 
-class _IdentityFG(FeatureGenerator):
-    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
-        return df
-
-    def fit(self, X, Y=None, ctx=None):
-        pass
-
-
-class _IdentityDFT(InvertibleDataFrameTransformer):
-    def applyInverse(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df
-
-    def fit(self, df):
-        pass
-
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df
-
-
 class PredictorModel(PickleLoadSaveMixin, ABC):
     """
     Base class for models that map data frames to predictions
     """
     def __init__(self):
-        self._featureGenerator: FeatureGenerator = _IdentityFG()
+        self._featureGenerator: Optional[FeatureGenerator] = None
         self._inputTransformerChain = DataFrameTransformerChain(())
         self._outputTransformerChain = DataFrameTransformerChain(())
         self._name = None
@@ -98,7 +85,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         :param featureGenerator: the feature generator to use for input computation
         :return: self
         """
-        self._featureGenerator = featureGenerator if featureGenerator is not None else _IdentityFG()
+        self._featureGenerator = featureGenerator
         return self
 
     def withFeatureCollector(self, featureCollector: FeatureCollector) -> __qualname__:
@@ -139,11 +126,10 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
             return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
         return self._name
 
-    # TODO: why do we need the getter and the setter? We only have them for fgens, not for the input/output/target transformers
     def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
         self.withFeatureGenerator(featureGenerator)
 
-    def getFeatureGenerator(self) -> FeatureGenerator:
+    def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
         return self._featureGenerator
 
 
@@ -164,7 +150,8 @@ class RuleBasedModel(FittableModel, ABC):
         self._isFitted = False
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
-        self._featureGenerator.fit(X, Y=Y, ctx=self)
+        if self._featureGenerator is not None:
+            self._featureGenerator.fit(X, Y=Y, ctx=self)
         self._inputTransformerChain.fit(X)
         self._isFitted = True
 
@@ -178,7 +165,8 @@ class RuleBasedModel(FittableModel, ABC):
         if not self._isFitted:
             log.warning(f"The input transformers and feature generators of {self} might never have been fitted. "
                         f"Ignore this warning if they don't require fitting or have been fitted separately from {self}")
-        x = self._featureGenerator.generate(x, self)
+        if self._featureGenerator is not None:
+            x = self._featureGenerator.generate(x, self)
         x = self._inputTransformerChain.apply(x, fit=False)
         x = self._predict(x)
         x = self._outputTransformerChain.apply(x)
@@ -191,7 +179,7 @@ class RuleBasedModel(FittableModel, ABC):
 
 class VectorModel(FittableModel, ABC):
     """
-    Base class for models that map dataframes to predictions and can be fitted on dataframes
+    Base class for models that map data frames to predictions and can be fitted on data frames
     """
     def __init__(self, checkInputColumns=True):
         """
@@ -205,7 +193,7 @@ class VectorModel(FittableModel, ABC):
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = ["UNKNOWN"]
-        self._targetTransformer: InvertibleDataFrameTransformer = _IdentityDFT()
+        self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
 
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
@@ -220,17 +208,18 @@ class VectorModel(FittableModel, ABC):
             the model, i.e. the transformation is completely transparent when applying the model.
         :return: self
         """
-        self._targetTransformer = targetTransformer if targetTransformer is not None else _IdentityDFT()
+        self._targetTransformer = targetTransformer
         return self
 
     def isFitted(self):
         return self._isFitted
 
     def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
-        if fit:
-            X = self._featureGenerator.fitGenerate(X, Y, self)
-        else:
-            X = self._featureGenerator.generate(X, self)
+        if self._featureGenerator is not None:
+            if fit:
+                X = self._featureGenerator.fitGenerate(X, Y, self)
+            else:
+                X = self._featureGenerator.generate(X, self)
         X = self._inputTransformerChain.apply(X, fit=fit)
         if not fit:
             if not self.isFitted():
@@ -248,10 +237,10 @@ class VectorModel(FittableModel, ABC):
         """
         x = self._computeInputs(x)
         y = self._predict(x)
-        # TODO or not TODO: why do we do this? Isn't it the implementation's responsibility to get it right?
         y.index = x.index
         y = self._outputTransformerChain.apply(y)
-        y = self._targetTransformer.applyInverse(y)
+        if self._targetTransformer is not None:
+            y = self._targetTransformer.applyInverse(y)
         return y
 
     @abstractmethod
@@ -268,8 +257,9 @@ class VectorModel(FittableModel, ABC):
         log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, Y=Y, fit=True)
-        self._targetTransformer.fit(Y)
-        Y = self._targetTransformer.apply(Y)
+        if self._targetTransformer is not None:
+            self._targetTransformer.fit(Y)
+            Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
