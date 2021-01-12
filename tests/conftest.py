@@ -1,5 +1,6 @@
 import logging
-
+import sys
+import os
 import pandas as pd
 import pytest
 import sklearn.datasets
@@ -7,7 +8,15 @@ import sklearn.datasets
 from sensai import InputOutputData, VectorClassificationModel
 from sensai.evaluation import VectorClassificationModelEvaluator
 
+sys.path.append(os.path.abspath("."))
+from config import topLevelDirectory
+
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="session")
+def testResources():
+    return os.path.join(topLevelDirectory, "tests", "resources")
 
 
 class IrisDataSet:
@@ -28,9 +37,10 @@ class ClassificationTestCase:
     def __init__(self, data: InputOutputData):
         self.data = data
 
-    def testMinAccuracy(self, model: VectorClassificationModel, minAccuracy: float):
+    def testMinAccuracy(self, model: VectorClassificationModel, minAccuracy: float, fit=True):
         ev = VectorClassificationModelEvaluator(self.data, testFraction=0.2)
-        ev.fitModel(model)
+        if fit:
+            ev.fitModel(model)
         resultData = ev.evalModel(model)
         stats = resultData.getEvalStats()
         #stats.plotConfusionMatrix().savefig("cmat.png")
