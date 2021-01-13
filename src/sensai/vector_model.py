@@ -55,7 +55,8 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
 
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
-        Makes the model use the given output transformers.
+        Makes the model use the given output transformers. For models that can be fitted, they are ignored during
+        the fit phase.
 
         :param outputTransformers: DataFrameTransformers for the transformation of outputs
             (after the model has been applied)
@@ -102,6 +103,10 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         self.setName(name)
         return self
 
+    # TODO: why do we need this? As a user I usually would not want to look for specific classes.
+    #   Moreover, they are applied in a chain and one transformer might be almost meaningless without its predecessors
+    #   I propose to return the whole chain instead. This class-based retrieval could be made part of the chain, if it is
+    #   really needed somewhere
     def getInputTransformer(self, cls: Type[DataFrameTransformer]):
         for it in self._inputTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):
@@ -128,6 +133,10 @@ class FittableModel(PredictorModel, ABC):
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
+    @abstractmethod
+    def isFitted(self) -> bool:
+        pass
+
 
 class RuleBasedModel(FittableModel, ABC):
     """
@@ -137,13 +146,17 @@ class RuleBasedModel(FittableModel, ABC):
     """
     def __init__(self):
         super().__init__()
-        self._isFitted = False
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
         if self._featureGenerator is not None:
             self._featureGenerator.fit(X, Y=Y, ctx=self)
         self._inputTransformerChain.fit(X)
-        self._isFitted = True
+
+    def isFitted(self):
+        result = self._inputTransformerChain.isFitted()
+        if self.getFeatureGenerator() is not None:
+            result = result and self.getFeatureGenerator().isFitted()
+        return result
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
@@ -152,9 +165,6 @@ class RuleBasedModel(FittableModel, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
-        if not self._isFitted:
-            log.warning(f"The input transformers and feature generators of {self} might never have been fitted. "
-                        f"Ignore this warning if they don't require fitting or have been fitted separately from {self}")
         if self._featureGenerator is not None:
             x = self._featureGenerator.generate(x, self)
         x = self._inputTransformerChain.apply(x)
@@ -179,7 +189,7 @@ class VectorModel(FittableModel, ABC):
             e.g. in ensemble models.
         """
         super().__init__()
-        self._isFitted = False
+        self.__modelIsFitted = False
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = ["UNKNOWN"]
@@ -201,8 +211,19 @@ class VectorModel(FittableModel, ABC):
         self._targetTransformer = targetTransformer
         return self
 
+    def getTargetTransformer(self):
+        return self._targetTransformer
+
+    def _prePostProcessorsAreFitted(self):
+        result = self._inputTransformerChain.isFitted() and self._outputTransformerChain.isFitted()
+        if self.getFeatureGenerator() is not None:
+            result = result and self.getFeatureGenerator().isFitted()
+        if self._targetTransformer is not None:
+            result = result and self._targetTransformer.isFitted()
+        return result
+
     def isFitted(self):
-        return self._isFitted
+        return self.__modelIsFitted and self._prePostProcessorsAreFitted()
 
     def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
         if fit:
@@ -238,23 +259,44 @@ class VectorModel(FittableModel, ABC):
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         pass
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, fitPreprocessors=True, fitTargetTransformer=True):
         """
         Fits the model using the given data
 
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
+        :param fitPreprocessors: if False, the model's feature generator and input transformer will not be fitted.
+            If a preprocessor requires fitting, was not separately fit before and this option is set to False,
+            an exception will be raised.
+        :param fitTargetTransformer: if False, the model's target transformer will not be fitted.
+            If it requires fitting, was not separately fit before and this option is set to False,
+            an exception will be raised.
         """
         log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
-        X = self._computeInputs(X, Y=Y, fit=True)
+        X = self._computeInputs(X, Y=Y, fit=fitPreprocessors)
         if self._targetTransformer is not None:
-            Y = self._targetTransformer.fitApply(Y)
+            if fitTargetTransformer:
+                Y = self._targetTransformer.fitApply(Y)
+            else:
+                Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
-        self._isFitted = True
+        self.__modelIsFitted = True
+
+    # TODO: just showing how I roughly imagine the interface in the future.
+    #  Pre- and postprocessors can typically not be fit on batches which is one of the reasons I added the flag above.
+    def fitDataSet(self, dataSet):
+        """
+        Fits the models on a DataSet which does not need to be loaded to ram. Any pre- and postprocessors forming
+        part of the model are expected to be fit prior to calling this method or to not require fitting.
+        :param dataSet:
+        :return:
+        """
+        for batch in dataSet:
+            self.fit(batch.X, batch.Y, fitPreprocessors=False, fitTargetTransformer=False)
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):

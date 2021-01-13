@@ -143,6 +143,10 @@ class FeatureGenerator(ABC):
             this is typically the model instance that this feature generator is to generate inputs for
         :return: a data frame containing the generated features, which uses the same index as X (and Y)
         """
+        if not self.isFitted():
+            raise Exception(f"Cannot generate features from a FeatureGenerator which is not fitted: "
+                            f"the feature generator {self.getName()} requires fitting")
+
         log.debug(f"Generating features with {self}")
         resultDF = self._generate(df, ctx=ctx)
 

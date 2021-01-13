@@ -46,6 +46,10 @@ class DataFrameTransformer(ABC):
         pass
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.isFitted():
+            raise Exception(f"Cannot apply a DataFrameTransformer which is not fitted: "
+                            f"the df transformer {self.getName()} requires fitting")
+
         inputColumns = set(df.columns)
         df = self._apply(df)
         outputColumns = set(df.columns)
