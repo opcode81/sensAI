@@ -54,18 +54,17 @@ class DataFrameTransformer(ABC):
         df = self._apply(df)
         outputColumns = set(df.columns)
 
-        if inputColumns != outputColumns:
-            self._changesColumns = True
-            self.__removedColumns = inputColumns.difference(outputColumns)
-            self.__addedColumns = outputColumns.difference(inputColumns)
+        self.__removedColumns = inputColumns.difference(outputColumns)
+        self.__addedColumns = outputColumns.difference(inputColumns)
         return df
 
     def getChangeInColumnNames(self):
         """
         Returns a dict describing the change in column names that was created in the most recent application of
-        the data frame transformers. If no changes in column names were created or apply was never called, returns None.
+        the data frame transformers. If apply was never called, returns None.
         """
-        if not self._changesColumns:
+        applyWasNeverCalled = self.__removedColumns is None
+        if applyWasNeverCalled:
             return None
         return {
             "removedColumns": self.__removedColumns,
@@ -125,8 +124,6 @@ class DataFrameTransformerChain(DataFrameTransformer):
                 result.extend(x)
         return result
 
-    # TODO: do we really need the more flexible interface? I propose a breaking change to *dataFrameTransformers: DataFrameTransformer
-    #   without the flattened stuff
     def __init__(self, *dataFrameTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]):
         super().__init__()
         self.dataFrameTransformers = self._flattened(dataFrameTransformers)
@@ -346,7 +343,6 @@ class DFTOneHotEncoder(DataFrameTransformer):
         return summary
 
 
-# TODO: we have a feature generator doing the same thing. Can we remove this and its child below?
 class DFTColumnFilter(RuleBasedDataFrameTransformer):
     """
     A DataFrame transformer that filters columns by retaining or dropping specified columns
@@ -545,7 +541,6 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
         return summary
 
 
-# TODO: shouldn't this and the aggregation below rather be feature extractors?
 class DFTCountEntries(RuleBasedDataFrameTransformer):
     """
     Adds a new column with counts of the values on a selected column

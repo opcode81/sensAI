@@ -29,6 +29,11 @@ class TestDFTTransformerBasics:
         assert testdft.getChangeInColumnNames()["removedColumns"] == {"bar"}
         assert testdft.getChangeInColumnNames()["addedColumns"] == {"baz"}
 
+        # testing with no change in columns
+        testdft.apply(pd.DataFrame({"foo": [1, 2], "baz": [1, 2]}))
+        assert testdft.getChangeInColumnNames()["removedColumns"] == set()
+        assert testdft.getChangeInColumnNames()["addedColumns"] == set()
+
     def test_ruleBasedAlwaysFitted(self):
         assert self.RuleBasedTestDFT().isFitted()
 

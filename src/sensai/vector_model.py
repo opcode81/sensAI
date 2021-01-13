@@ -6,7 +6,7 @@ models. Hence the name of the module and of the central base class VectorModel.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Any, Optional, Union, TypeVar, Type
+from typing import List, Any, Optional, Union, Type
 
 import numpy as np
 import pandas as pd
@@ -16,9 +16,6 @@ from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
 
 log = logging.getLogger(__name__)
-
-
-T = TypeVar('T')
 
 
 class PredictorModel(PickleLoadSaveMixin, ABC):
@@ -103,15 +100,17 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         self.setName(name)
         return self
 
-    # TODO: why do we need this? As a user I usually would not want to look for specific classes.
-    #   Moreover, they are applied in a chain and one transformer might be almost meaningless without its predecessors
-    #   I propose to return the whole chain instead. This class-based retrieval could be made part of the chain, if it is
-    #   really needed somewhere
     def getInputTransformer(self, cls: Type[DataFrameTransformer]):
         for it in self._inputTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):
                 return it
         return None
+
+    def getInputTransformerChain(self):
+        return self._inputTransformerChain
+
+    def getOutputTransformerChain(self):
+        return self._outputTransformerChain
 
     def setName(self, name):
         self._name = name
@@ -285,18 +284,6 @@ class VectorModel(FittableModel, ABC):
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
         self.__modelIsFitted = True
-
-    # TODO: just showing how I roughly imagine the interface in the future.
-    #  Pre- and postprocessors can typically not be fit on batches which is one of the reasons I added the flag above.
-    def fitDataSet(self, dataSet):
-        """
-        Fits the models on a DataSet which does not need to be loaded to ram. Any pre- and postprocessors forming
-        part of the model are expected to be fit prior to calling this method or to not require fitting.
-        :param dataSet:
-        :return:
-        """
-        for batch in dataSet:
-            self.fit(batch.X, batch.Y, fitPreprocessors=False, fitTargetTransformer=False)
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):

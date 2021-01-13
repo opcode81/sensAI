@@ -45,7 +45,7 @@ class FeatureGenerator(ABC):
             raise ValueError(f"normalisationRules should be empty when a normalisationRuleTemplate is provided")
 
         self._generatedColumnNames = None
-        self.categoricalFeatureNames = categoricalFeatureNames
+        self.__categoricalFeatureNames = categoricalFeatureNames
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames
@@ -87,7 +87,7 @@ class FeatureGenerator(ABC):
     def summary(self):
         return {
             "name": self.getName(),
-            "categoricalFeatureNames": self.categoricalFeatureNames,
+            "categoricalFeatureNames": self.__categoricalFeatureNames,
             "generatedColumnNames": self.getGeneratedColumnNames(),
             "isFitted": self.isFitted(),
             "normalizationRules": self.getNormalisationRules(),
@@ -506,7 +506,7 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         """
         :param columns: the categorical columns for which to generate distribution features
         :param targetColumn: the column the distributions over which will make up the features.
-            If targetColumnBins is not None, this column will be discretized before computing the conditional distributions
+            If targetColumnBins is not None, this column will be discretised before computing the conditional distributions
         :param targetColumnBins: if not None, specifies the binning to apply via pandas.cut
             (see https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.cut.html).
             Note that if a value should match no bin, NaN will generated. To avoid this when specifying bin boundaries in a list,
