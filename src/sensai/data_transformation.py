@@ -111,10 +111,21 @@ class DataFrameTransformerChain(DataFrameTransformer):
     Supports the application of a chain of data frame transformers.
     During fit and apply each transformer in the chain receives the transformed output of its predecessor.
     """
+    @staticmethod
+    def _flattened(l: Sequence[Union[DataFrameTransformer, Sequence[DataFrameTransformer]]]) -> List[DataFrameTransformer]:
+        result = []
+        for x in l:
+            if isinstance(x, DataFrameTransformer):
+                result.append(x)
+            else:
+                result.extend(x)
+        return result
 
-    def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
+    # TODO: do we really need the more flexible interface? I propose a breaking change to *dataFrameTransformers: DataFrameTransformer
+    #   without the flattened stuff
+    def __init__(self, *dataFrameTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]):
         super().__init__()
-        self.dataFrameTransformers = dataFrameTransformers
+        self.dataFrameTransformers = self._flattened(dataFrameTransformers)
 
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         for transformer in self.dataFrameTransformers:

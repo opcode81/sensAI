@@ -6,7 +6,7 @@ models. Hence the name of the module and of the central base class VectorModel.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Any, Optional, Union, TypeVar, Type
+from typing import List, Any, Optional, Union, TypeVar, Type
 
 import numpy as np
 import pandas as pd
@@ -27,8 +27,8 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
     """
     def __init__(self):
         self._featureGenerator: Optional[FeatureGenerator] = None
-        self._inputTransformerChain = DataFrameTransformerChain(())
-        self._outputTransformerChain = DataFrameTransformerChain(())
+        self._inputTransformerChain = DataFrameTransformerChain()
+        self._outputTransformerChain = DataFrameTransformerChain()
         self._name = None
 
     @abstractmethod
@@ -43,16 +43,6 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
     def isRegressionModel(self) -> bool:
         pass
 
-    @staticmethod
-    def _flattened(l: Sequence[Union[T, List[T]]]) -> List[T]:
-        result = []
-        for x in l:
-            if type(x) == list:
-                result.extend(x)
-            else:
-                result.append(x)
-        return result
-
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
         Makes the model use the given input transformers.
@@ -60,7 +50,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         :param inputTransformers: DataFrameTransformers for the transformation of inputs
         :return: self
         """
-        self._inputTransformerChain = DataFrameTransformerChain(self._flattened(inputTransformers))
+        self._inputTransformerChain = DataFrameTransformerChain(*inputTransformers)
         return self
 
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
@@ -71,7 +61,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
             (after the model has been applied)
         :return: self
         """
-        self._outputTransformerChain = DataFrameTransformerChain(self._flattened(outputTransformers))
+        self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
         return self
 
     def withFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]) -> __qualname__:

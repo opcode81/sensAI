@@ -33,11 +33,11 @@ class TestDFTTransformerBasics:
         assert self.RuleBasedTestDFT().isFitted()
 
     def test_emptyChainFitted(self):
-        assert DataFrameTransformerChain([]).isFitted()
+        assert DataFrameTransformerChain().isFitted()
 
     def test_combinationFittedIffEachMemberFitted(self):
         # if one of the fgens is not fitted, the combination is not fitted either
-        dftChain = DataFrameTransformerChain([self.TestDFT(), self.RuleBasedTestDFT()])
+        dftChain = DataFrameTransformerChain(self.TestDFT(), self.RuleBasedTestDFT())
         assert dftChain.dataFrameTransformers[1].isFitted()
         assert not dftChain.isFitted()
         dftChain.fit(self.testdf)
