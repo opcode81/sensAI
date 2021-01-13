@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 
 from . import util, data_transformation
-from .util.string import orRegexGroup
 from .columngen import ColumnGenerator
+from .util.string import orRegexGroup
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -45,6 +45,7 @@ class FeatureGenerator(ABC):
             raise ValueError(f"normalisationRules should be empty when a normalisationRuleTemplate is provided")
 
         self._generatedColumnNames = None
+        self.categoricalFeatureNames = categoricalFeatureNames
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames
@@ -69,6 +70,7 @@ class FeatureGenerator(ABC):
                 self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex + r"_\d+", skip=True))  # rule for one-hot transformation
 
         self._name = None
+        self.__isFitted = False
 
     def getName(self) -> str:
         """
@@ -81,6 +83,15 @@ class FeatureGenerator(ABC):
 
     def setName(self, name):
         self._name = name
+
+    def summary(self):
+        return {
+            "name": self.getName(),
+            "categoricalFeatureNames": self.categoricalFeatureNames,
+            "generatedColumnNames": self.getGeneratedColumnNames(),
+            "isFitted": self.isFitted(),
+            "normalizationRules": self.getNormalisationRules(),
+        }
 
     def getNormalisationRules(self, includeGeneratedCategoricalRules=True) -> List[data_transformation.DFTNormalisation.Rule]:
         if includeGeneratedCategoricalRules:
@@ -104,6 +115,9 @@ class FeatureGenerator(ABC):
         return self._generatedColumnNames
 
     @abstractmethod
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        pass
+
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         Fits the feature generator based on the given data
@@ -114,7 +128,11 @@ class FeatureGenerator(ABC):
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
         """
-        pass
+        self._fit(X, Y=Y, ctx=ctx)
+        self.__isFitted = True
+
+    def isFitted(self):
+        return self.__isFitted
 
     def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         """
@@ -194,6 +212,12 @@ class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     def fit(self, X, Y=None, ctx=None):
         pass
 
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        pass
+
+    def isFitted(self):
+        return True
+
 
 class MultiFeatureGenerator(FeatureGenerator):
     """
@@ -234,9 +258,17 @@ class MultiFeatureGenerator(FeatureGenerator):
             return fg.fitGenerate(X, Y, ctx)
         return self._generateFromMultiple(generateFeatures, X.index)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         for fg in self.featureGenerators:
             fg.fit(X, Y)
+
+    def isFitted(self):
+        return all([fg.isFitted() for fg in self.featureGenerators])
+
+    def summary(self):
+        summary = super(MultiFeatureGenerator, self).summary()
+        summary["featureGeneratorNames"] = self.getNames()
+        return summary
 
     def getNames(self) -> List[str]:
         """
@@ -310,6 +342,12 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
 
         return df[columnsToTake]
 
+    def summary(self):
+        summary = super().summary()
+        summary["columns"] = self.columns
+        summary["exceptColumns"] = self.exceptColumns
+        return summary
+
 
 class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     """
@@ -351,6 +389,11 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
+    def summary(self):
+        summary = super().summary()
+        summary["columns"] = self.columns
+        return summary
+
 
 class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
@@ -377,6 +420,12 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
 
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
+
+    def summary(self):
+        summary = super().summary()
+        summary["takeInputColumnIfPresent"] = self.takeInputColumnIfPresent
+        summary["generatedColName"] = self.columnGen.generatedColumnName
+        return summary
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
@@ -411,13 +460,26 @@ class ChainedFeatureGenerator(FeatureGenerator):
             df = featureGen.generate(df, ctx)
         return df
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         self.fitGenerate(X, Y, ctx)
+
+    def isFitted(self):
+        return all([fg.isFitted() for fg in self.featureGenerators])
+
+    def summary(self):
+        summary = super().summary()
+        summary["chainedFeatureGeneratorNames"] = self.getNames()
 
     def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         for fg in self.featureGenerators:
             X = fg.fitGenerate(X, Y, ctx)
         return X
+
+    def getNames(self) -> List[str]:
+        """
+        :return: the list of names of all contained feature generators
+        """
+        return [fg.getName() for fg in self.featureGenerators]
 
 
 class FeatureGeneratorTargetDistribution(FeatureGenerator):
@@ -441,7 +503,7 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         """
         :param columns: the categorical columns for which to generate distribution features
         :param targetColumn: the column the distributions over which will make up the features.
-            If targetColumnBins is not None, this column will be discretised before computing the conditional distributions
+            If targetColumnBins is not None, this column will be discretized before computing the conditional distributions
         :param targetColumnBins: if not None, specifies the binning to apply via pandas.cut
             (see https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.cut.html).
             Note that if a value should match no bin, NaN will generated. To avoid this when specifying bin boundaries in a list,
@@ -455,7 +517,7 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
             columns = [columns]
         self.columns = columns
         self.targetColumn = targetColumn
-        self.targetColumnInInputDf = targetColumnInFeaturesDf
+        self.targetColumnInFeaturesDf = targetColumnInFeaturesDf
         self.targetColumnBins = targetColumnBins
         if self.flatten:
             normalisationRuleTemplate = data_transformation.DFTNormalisation.RuleTemplate(skip=True)
@@ -464,13 +526,21 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         super().__init__(normalisationRuleTemplate=normalisationRuleTemplate)
         self._targetColumnValues = None
         # This will hold the mapping: column -> featureValue -> targetValue -> targetValueEmpiricalProbability
-        self._discreteTargetDistributionsByColumn: Dict[str, Dict[Any, Dict[Any, float]]] = None
+        self._discreteTargetDistributionsByColumn: Optional[Dict[str, Dict[Any, Dict[Any, float]]]] = None
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def summary(self):
+        summary = super().summary()
+        summary["columns"] = self.columns
+        summary["targetColumn"] = self.targetColumn
+        summary["targetColumnBins"] = self.targetColumnBins
+        summary["flatten"] = self.flatten
+        return summary
+
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         This will persist the empirical target probability distributions for all unique values in the specified columns
         """
-        if self.targetColumnInInputDf:
+        if self.targetColumnInFeaturesDf:
             target = X[self.targetColumn]
         else:
             target = Y[self.targetColumn]
@@ -658,7 +728,7 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.vectorModel = vectorModel
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         targetDF = self.targetFeatureGenerator.fitGenerate(X, Y)
         if self.inputFeatureGenerator:
             X = self.inputFeatureGenerator.fitGenerate(X, Y)
@@ -673,6 +743,11 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         else:
             log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
+
+    def summary(self):
+        summary = super().summary()
+        summary["wrappedModelName"] = self.vectorModel.getName()
+        return summary
 
 
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
