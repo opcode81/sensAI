@@ -699,7 +699,7 @@ class FeatureCollector(object):
                 featureGenerators.append(self._registry.getFeatureGenerator(f))
             else:
                 raise ValueError(f"Unexpected type {type(f)} in list of features")
-        return MultiFeatureGenerator(featureGenerators)
+        return MultiFeatureGenerator(*featureGenerators)
 
 
 class FeatureGeneratorFromVectorModel(FeatureGenerator):
@@ -785,4 +785,4 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         return ChainedFeatureGenerator(fgen, flatteningGenerator)
     else:
         return ChainedFeatureGenerator(fgen,
-            MultiFeatureGenerator([flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)]))
+            MultiFeatureGenerator(flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)))
