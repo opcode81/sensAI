@@ -167,7 +167,7 @@ class RuleBasedModel(FittableModel, ABC):
                         f"Ignore this warning if they don't require fitting or have been fitted separately from {self}")
         if self._featureGenerator is not None:
             x = self._featureGenerator.generate(x, self)
-        x = self._inputTransformerChain.apply(x, fit=False)
+        x = self._inputTransformerChain.apply(x)
         x = self._predict(x)
         x = self._outputTransformerChain.apply(x)
         return x
@@ -215,15 +215,16 @@ class VectorModel(FittableModel, ABC):
         return self._isFitted
 
     def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
-        if self._featureGenerator is not None:
-            if fit:
+        if fit:
+            if self._featureGenerator is not None:
                 X = self._featureGenerator.fitGenerate(X, Y, self)
-            else:
-                X = self._featureGenerator.generate(X, self)
-        X = self._inputTransformerChain.apply(X, fit=fit)
-        if not fit:
+            X = self._inputTransformerChain.fitApply(X)
+        else:
             if not self.isFitted():
                 raise Exception(f"Model has not been fitted")
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.generate(X, self)
+            X = self._inputTransformerChain.apply(X)
             if self.checkInputColumns and list(X.columns) != self._modelInputVariableNames:
                 raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(X.columns)}")
         return X
@@ -258,8 +259,7 @@ class VectorModel(FittableModel, ABC):
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, Y=Y, fit=True)
         if self._targetTransformer is not None:
-            self._targetTransformer.fit(Y)
-            Y = self._targetTransformer.apply(Y)
+            Y = self._targetTransformer.fitApply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")

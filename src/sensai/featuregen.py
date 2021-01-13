@@ -225,6 +225,8 @@ class MultiFeatureGenerator(FeatureGenerator):
     returns the concatenation of their outputs
     """
     def __init__(self, *featureGenerators: FeatureGenerator):
+        if len(featureGenerators) == 0:
+            raise ValueError("Empty list of feature generators")
         self.featureGenerators = featureGenerators
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:

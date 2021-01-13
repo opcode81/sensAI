@@ -7,6 +7,7 @@ from typing import List, Sequence, Union, Dict, Callable, Any, Optional, Set
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
+from typing_extensions import Protocol
 
 from .columngen import ColumnGenerator
 from .util.string import orRegexGroup
@@ -20,14 +21,70 @@ class DataFrameTransformer(ABC):
     (possibly applying the transformation to the original data frame - in-place transformation).
     A data frame transformer may require being fitted using training data.
     """
+    def __init__(self):
+        self._name = f"{self.__class__.__name__}-{id(self)}"
+        self.__isFitted = False
+        self._changesColumns = False
+        self.__removedColumns: Optional[Set[str]] = None
+        self.__addedColumns: Optional[Set[str]] = None
+
+    def getName(self) -> str:
+        """
+        :return: the name of this dft transformer, which may be a default name if the name has not been set.
+        """
+        return self._name
+
+    def setName(self, name):
+        self._name = name
 
     @abstractmethod
-    def fit(self, df: pd.DataFrame):
+    def _fit(self, df: pd.DataFrame):
         pass
 
     @abstractmethod
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
+        inputColumns = set(df.columns)
+        df = self._apply(df)
+        outputColumns = set(df.columns)
+
+        if inputColumns != outputColumns:
+            self._changesColumns = True
+            self.__removedColumns = inputColumns.difference(outputColumns)
+            self.__addedColumns = outputColumns.difference(inputColumns)
+        return df
+
+    def getChangeInColumnNames(self):
+        """
+        Returns a dict describing the change in column names that was created in the most recent application of
+        the data frame transformers. If no changes in column names were created or apply was never called, returns None.
+        """
+        if not self._changesColumns:
+            return None
+        return {
+            "removedColumns": self.__removedColumns,
+            "addedColumns": self.__addedColumns,
+        }
+
+    def summary(self):
+        return {
+            "name": self.getName(),
+            "changeInColumnNames": self.getChangeInColumnNames(),
+            "isFitted": self.isFitted(),
+        }
+
+    def fit(self, df: pd.DataFrame):
+        self._fit(df)
+        self.__isFitted = True
+
+    def isFitted(self):
+        return self.__isFitted
+
+    def fitApply(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.fit(df)
+        return self.apply(df)
 
 
 class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
@@ -39,34 +96,51 @@ class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
 class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
     """Base class for transformers whose logic is entirely based on rules and does not need to be fitted to data"""
 
+    def _fit(self, df: pd.DataFrame):
+        pass
+
     def fit(self, df: pd.DataFrame):
         pass
 
+    def isFitted(self):
+        return True
 
-class DataFrameTransformerChain:
-    """Supports the application of a chain of data frame transformers"""
+
+class DataFrameTransformerChain(DataFrameTransformer):
+    """
+    Supports the application of a chain of data frame transformers.
+    During fit and apply each transformer in the chain receives the transformed output of its predecessor.
+    """
 
     def __init__(self, dataFrameTransformers: Sequence[DataFrameTransformer]):
+        super().__init__()
         self.dataFrameTransformers = dataFrameTransformers
 
-    def apply(self, df: pd.DataFrame, fit=False) -> pd.DataFrame:
-        """
-        Applies the chain of transformers to the given DataFrame, optionally fitting each transformer before applying it.
-        Each transformer in the chain receives the transformed output of its predecessor.
-
-        :param df: the data frame
-        :param fit: whether to fit the transformers before applying them
-        :return: the transformed data frame
-        """
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         for transformer in self.dataFrameTransformers:
-            if fit:
-                transformer.fit(df)
             df = transformer.apply(df)
         return df
 
-    def fit(self, df: pd.DataFrame):
-        for transformer in self.dataFrameTransformers:
-            transformer.fit(df)
+    def _fit(self, df: pd.DataFrame):
+        if len(self.dataFrameTransformers) == 0:
+            return
+        for transformer in self.dataFrameTransformers[:-1]:
+            df = transformer.fitApply(df)
+        self.dataFrameTransformers[-1].fit(df)
+
+    def isFitted(self):
+        return all([dft.isFitted() for dft in self.dataFrameTransformers])
+
+    def getNames(self) -> List[str]:
+        """
+        :return: the list of names of all contained feature generators
+        """
+        return [transf.getName() for transf in self.dataFrameTransformers]
+
+    def summary(self):
+        summary = super().summary()
+        summary["chainedDFTTransformerNames"] = self.getNames()
+        return summary
 
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
@@ -74,9 +148,10 @@ class DFTRenameColumns(RuleBasedDataFrameTransformer):
         """
         :param columnsMap: dictionary mapping old column names to new names
         """
+        super().__init__()
         self.columnsMap = columnsMap
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.rename(columns=self.columnsMap)
 
 
@@ -86,63 +161,81 @@ class DFTConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
     for which the function returns True
     """
     def __init__(self, column: str, condition: Callable[[Any], bool]):
+        super().__init__()
         self.column = column
         self.condition = condition
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[df[self.column].apply(self.condition)]
 
 
 class DFTInSetComparisonRowFilterOnColumn(RuleBasedDataFrameTransformer):
     """
-    Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
-    for which the function returns True
+    Filters a data frame on the selected column and retains only the rows for which the value is in the setToKeep
     """
     def __init__(self, column: str, setToKeep: Set):
+        super().__init__()
         self.setToKeep = setToKeep
         self.column = column
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[df[self.column].isin(self.setToKeep)]
+
+    def summary(self):
+        summary = super().summary()
+        summary["column"] = self.column
+        summary["setToKeep"] = self.setToKeep
+        return summary
 
 
 class DFTNotInSetComparisonRowFilterOnColumn(RuleBasedDataFrameTransformer):
     """
-    Filters a data frame by applying a boolean function to one of the columns and retaining only the rows
-    for which the function returns True
+    Filters a data frame on the selected column and retains only the rows for which the value is not in the setToDrop
     """
     def __init__(self, column: str, setToDrop: Set):
+        super().__init__()
         self.setToDrop = setToDrop
         self.column = column
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[~df[self.column].isin(self.setToDrop)]
+
+    def summary(self):
+        summary = super().summary()
+        summary["column"] = self.column
+        summary["setToDrop"] = self.setToDrop
+        return summary
 
 
 class DFTVectorizedConditionalRowFilterOnColumn(RuleBasedDataFrameTransformer):
-    def __init__(self, column: str, vectorizedCondition: Callable[[Any], Sequence[bool]]):
-        """
-
-        :param column:
-        :param vectorizedCondition:
-        """
+    """
+    Filters a data frame by applying a vectorized condition on the selected column and retaining only the rows
+    for which it returns True
+    """
+    def __init__(self, column: str, vectorizedCondition: Callable[[pd.Series], Sequence[bool]]):
+        super().__init__()
         self.column = column
         self.vectorizedCondition = vectorizedCondition
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[self.vectorizedCondition(df[self.column])]
+
+    def summary(self):
+        summary = super().summary()
+        summary["column"] = self.column
+        return summary
 
 
 class DFTRowFilter(RuleBasedDataFrameTransformer):
+    """
+    Filters a data frame by applying a condition function to each row and retaining only the rows
+    for which it returns True
+    """
     def __init__(self, condition: Callable[[Any], bool]):
-        """
-        Filters a data frame by applying a boolean function to each row and retaining only the rows
-        for which the function returns True
-        :param condition:
-        """
+        super().__init__()
         self.condition = condition
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[df.apply(self.condition, axis=1)]
 
 
@@ -153,23 +246,25 @@ class DFTModifyColumn(RuleBasedDataFrameTransformer):
         :param column:
         :param columnTransform:
         """
+        super().__init__()
         self.columnTransform = columnTransform
         self.column = column
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df[self.column] = df[self.column].apply(self.columnTransform)
         return df
 
 
 class DFTModifyColumnVectorized(DFTModifyColumn):
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df[self.column] = self.columnTransform(df[self.column].values)
         return df
 
 
 class DFTOneHotEncoder(DataFrameTransformer):
-    def __init__(self, columns: Optional[Union[str, Sequence[str]]], categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
+    def __init__(self, columns: Optional[Union[str, Sequence[str]]],
+             categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
         """
         One hot encode categorical variables
 
@@ -181,6 +276,9 @@ class DFTOneHotEncoder(DataFrameTransformer):
         :param ignoreUnknown: if True and an unknown category is encountered during transform, the resulting one-hot
             encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
         """
+        super().__init__()
+        self.columns = columns
+        self.inferCategories = categories is None
         self.oneHotEncoders = None
         if columns is None:
             self._columnsToEncode = []
@@ -193,7 +291,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
             self._columnsToEncode = columns
         self.inplace = inplace
         self.handleUnknown = "ignore" if ignoreUnknown else "error"
-        if categories is not None:
+        if not self.inferCategories:
             if type(categories) == dict:
                 self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in categories.items()}
             else:
@@ -201,7 +299,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
                     raise ValueError(f"Given categories must have the same length as columns to process")
                 self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in zip(columns, categories)}
 
-    def fit(self, df: pd.DataFrame):
+    def _fit(self, df: pd.DataFrame):
         if self._columnsToEncode is None:
             self._columnsToEncode = [c for c in df.columns if re.fullmatch(self._columnNameRegex, c) is not None]
             if len(self._columnsToEncode) == 0:
@@ -211,7 +309,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
         for columnName in self._columnsToEncode:
             self.oneHotEncoders[columnName].fit(df[[columnName]])
 
-    def apply(self, df: pd.DataFrame):
+    def _apply(self, df: pd.DataFrame):
         if len(self._columnsToEncode) == 0:
             return df
 
@@ -224,17 +322,26 @@ class DFTOneHotEncoder(DataFrameTransformer):
                 df["%s_%d" % (columnName, i)] = encodedArray[:, i]
         return df
 
+    def summary(self):
+        summary = super().summary()
+        summary["columns"] = self.columns
+        summary["inplace"] = self.inplace
+        summary["handleUnknown"] = self.handleUnknown
+        summary["inferCategories"] = self.inferCategories
+        return summary
 
+
+# TODO: we have a feature generator doing the same thing. Can we remove this and its child below?
 class DFTColumnFilter(RuleBasedDataFrameTransformer):
     """
     A DataFrame transformer that filters columns by retaining or dropping specified columns
     """
-
     def __init__(self, keep: Union[str, Sequence[str]] = None, drop: Union[str, Sequence[str]] = None):
+        super().__init__()
         self.keep = [keep] if type(keep) == str else keep
         self.drop = drop
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         if self.keep is not None:
             df = df[self.keep]
@@ -244,17 +351,17 @@ class DFTColumnFilter(RuleBasedDataFrameTransformer):
 
 
 class DFTKeepColumns(DFTColumnFilter):
-
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[self.keep]
 
 
 class DFTDRowFilterOnIndex(RuleBasedDataFrameTransformer):
     def __init__(self, keep: Set = None, drop: Set = None):
+        super().__init__()
         self.drop = drop
         self.keep = keep
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         if self.keep is not None:
             df = df.loc[self.keep]
@@ -337,13 +444,14 @@ class DFTNormalisation(DataFrameTransformer):
         :param requireAllHandled: whether to raise an exception if not all columns are matched by a rule
         :param inplace: whether to apply data frame transformations in-place
         """
+        super().__init__()
         self.requireAllHandled = requireAllHandled
         self.inplace = inplace
         self._userRules = rules
         self._defaultTransformerFactory = defaultTransformerFactory
         self._rules = None
 
-    def fit(self, df: pd.DataFrame):
+    def _fit(self, df: pd.DataFrame):
         matchedRulesByColumn = {}
         self._rules = []
         for rule in self._userRules:
@@ -383,7 +491,7 @@ class DFTNormalisation(DataFrameTransformer):
             if len(unhandledColumns) > 0:
                 raise Exception(f"The following columns are not handled by any rules: {unhandledColumns}")
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if not self.inplace:
             df = df.copy()
         matchedRulesByColumn = {}
@@ -395,13 +503,20 @@ class DFTNormalisation(DataFrameTransformer):
         self._checkUnhandledColumns(df, matchedRulesByColumn)
         return df
 
+    def summary(self):
+        summary = super().summary()
+        summary["requireAllHandled"] = self.requireAllHandled
+        summary["inplace"] = self.inplace
+        return summary
+
 
 class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
     def __init__(self, columnGenerators: Sequence[ColumnGenerator], inplace=False):
+        super().__init__()
         self.columnGenerators = columnGenerators
         self.inplace = inplace
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if not self.inplace:
             df = df.copy()
         for cg in self.columnGenerators:
@@ -409,53 +524,91 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
             df[series.name] = series
         return df
 
+    def summary(self):
+        summary = super().summary()
+        summary["inplace"] = self.inplace
+        return summary
 
+
+# TODO: shouldn't this and the aggregation below rather be feature extractors?
 class DFTCountEntries(RuleBasedDataFrameTransformer):
+    """
+    Adds a new column with counts of the values on a selected column
+    """
     def __init__(self, columnForEntryCount: str, columnNameForResultingCounts: str = "counts"):
+        super().__init__()
         self.columnNameForResultingCounts = columnNameForResultingCounts
         self.columnForEntryCount = columnForEntryCount
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         series = df[self.columnForEntryCount].value_counts()
         return pd.DataFrame({self.columnForEntryCount: series.index, self.columnNameForResultingCounts: series.values})
+
+    def summary(self):
+        summary = super().summary()
+        summary["columnNameForResultingCounts"] = self.columnNameForResultingCounts
+        summary["columnForEntryCount"] = self.columnForEntryCount
+        return summary
 
 
 class DFTAggregationOnColumn(RuleBasedDataFrameTransformer):
     def __init__(self, columnForAggregation: str, aggregation: Callable):
+        super().__init__()
         self.columnForAggregation = columnForAggregation
         self.aggregation = aggregation
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.groupby(self.columnForAggregation).agg(self.aggregation)
 
 
 class DFTRoundFloats(RuleBasedDataFrameTransformer):
+    def __init__(self, decimals=0):
+        super().__init__()
+        self.decimals = decimals
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return pd.DataFrame(np.round(df.values), columns=df.columns, index=df.index)
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame(np.round(df.values, self.decimals), columns=df.columns, index=df.index)
+
+    def summary(self):
+        summary = super().summary()
+        summary["decimals"] = self.decimals
+        return summary
+
+
+class SklearnTransformerProtocol(Protocol):
+    def inverse_transform(self, arr: np.ndarray) -> np.ndarray:
+        pass
+
+    def transform(self, arr: np.ndarray) -> np.ndarray:
+        pass
+
+    def fit(self, arr: np.ndarray):
+        pass
 
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
     """
     Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame
     """
-    def __init__(self, sklearnTransformer, columns: Optional[List[str]] = None, inplace=False):
+    def __init__(self, sklearnTransformer: SklearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False):
         """
         :param sklearnTransformer: the transformer instance (from sklearn.preprocessing) to use (which will be fitted & applied)
         :param columns: the set of column names to which the transformation shall apply; if None, apply it to all columns
         :param inplace: whether to apply the transformation in-place
         """
+        super().__init__()
+        self.setName(f"{self.__class__.__name__}_wrapped_{sklearnTransformer.__class__.__name__}")
         self.sklearnTransformer = sklearnTransformer
         self.columns = columns
         self.inplace = inplace
 
-    def fit(self, df: pd.DataFrame):
+    def _fit(self, df: pd.DataFrame):
         cols = self.columns
         if cols is None:
             cols = df.columns
         self.sklearnTransformer.fit(df[cols].values)
 
-    def _apply(self, df: pd.DataFrame, inverse: bool) -> pd.DataFrame:
+    def _apply_transformer(self, df: pd.DataFrame, inverse: bool) -> pd.DataFrame:
         if not self.inplace:
             df = df.copy()
         cols = self.columns
@@ -467,16 +620,23 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
             df[cols] = self.sklearnTransformer.transform(df[cols].values)
         return df
 
-    def apply(self, df):
-        return self._apply(df, False)
+    def _apply(self, df):
+        return self._apply_transformer(df, False)
 
     def applyInverse(self, df):
-        return self._apply(df, True)
+        return self._apply_transformer(df, True)
+
+    def summary(self):
+        summary = super().summary()
+        summary["columns"] = self.columns
+        summary["inplace"] = self.inplace
+        summary["sklearnTransformerClass"] = self.sklearnTransformer.__class__.__name__
+        return summary
 
 
 class DFTSortColumns(RuleBasedDataFrameTransformer):
     """
     Sorts a data frame's columns in ascending order
     """
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[sorted(df.columns)]

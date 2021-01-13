@@ -66,6 +66,12 @@ class TestFgenBasics:
     def test_ruleBasedAlwaysFitted(self):
         assert self.RuleBasedTestFgen().isFitted()
 
+    def test_emptyCombinationsRaiseError(self):
+        with pytest.raises(ValueError):
+            MultiFeatureGenerator()
+        with pytest.raises(ValueError):
+            ChainedFeatureGenerator()
+
     def test_combinationFittedIffEachMemberFitted(self):
         # if one of the fgens is not fitted, the combination is not fitted either
         multifgen = MultiFeatureGenerator(self.TestFgen(), self.RuleBasedTestFgen())
