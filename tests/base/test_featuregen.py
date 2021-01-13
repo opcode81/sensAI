@@ -68,7 +68,7 @@ class TestFgenBasics:
 
     def test_combinationFittedIffEachMemberFitted(self):
         # if one of the fgens is not fitted, the combination is not fitted either
-        multifgen = MultiFeatureGenerator([self.TestFgen(), self.RuleBasedTestFgen()])
+        multifgen = MultiFeatureGenerator(self.TestFgen(), self.RuleBasedTestFgen())
         chainfgen = ChainedFeatureGenerator(self.TestFgen(), self.RuleBasedTestFgen())
         assert chainfgen.featureGenerators[1].isFitted() and multifgen.featureGenerators[1].isFitted()
         assert not multifgen.isFitted() and not chainfgen.isFitted()
@@ -78,7 +78,7 @@ class TestFgenBasics:
         assert chainfgen.featureGenerators[0].isFitted() and multifgen.featureGenerators[0].isFitted()
 
         # if all fgens are fitted, the combination is also fitted, even if fit was not called
-        multifgen = MultiFeatureGenerator([self.RuleBasedTestFgen(), self.RuleBasedTestFgen()])
+        multifgen = MultiFeatureGenerator(self.RuleBasedTestFgen(), self.RuleBasedTestFgen())
         chainfgen = ChainedFeatureGenerator(self.RuleBasedTestFgen(), self.RuleBasedTestFgen())
         assert multifgen.isFitted() and chainfgen.isFitted()
 

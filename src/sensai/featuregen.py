@@ -224,10 +224,7 @@ class MultiFeatureGenerator(FeatureGenerator):
     Wrapper for multiple feature generators. Calling generate here applies all given feature generators independently and
     returns the concatenation of their outputs
     """
-    def __init__(self, featureGenerators: Sequence[FeatureGenerator]):
-        """
-        :param featureGenerators:
-        """
+    def __init__(self, *featureGenerators: FeatureGenerator):
         self.featureGenerators = featureGenerators
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:
