@@ -72,6 +72,11 @@ class FeatureGenerator(ABC):
         self._name = None
         self.__isFitted = False
 
+    # for backwards compatibility with persisted Featuregens based on code prior to commit 7088cbbe
+    # They lack the __isFitted attribute and we assume that each such Featuregen was fitted
+    def __setstate__(self, d):
+        self.__isFitted = d.get("__isFitted", True)
+
     def getName(self) -> str:
         """
         :return: the name of this feature generator, which may be a default name if the name has not been set. Note that feature generators created

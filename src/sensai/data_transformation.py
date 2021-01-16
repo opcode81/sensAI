@@ -10,6 +10,7 @@ from sklearn.preprocessing import OneHotEncoder
 from typing_extensions import Protocol
 
 from .columngen import ColumnGenerator
+from .util.metadata import trackDFHistory, DataFrameHistoryTracker
 from .util.string import orRegexGroup
 
 log = logging.getLogger(__name__)
@@ -24,9 +25,14 @@ class DataFrameTransformer(ABC):
     def __init__(self):
         self._name = f"{self.__class__.__name__}-{id(self)}"
         self.__isFitted = False
-        self._changesColumns = False
-        self.__removedColumns: Optional[Set[str]] = None
-        self.__addedColumns: Optional[Set[str]] = None
+        self._dfHistory: Optional[DataFrameHistoryTracker] = None
+
+    # for backwards compatibility with persisted DFTs based on code prior to commit 7088cbbe
+    # They lack the __isFitted attribute and we assume that each such DFT was fitted
+    def __setstate__(self, d):
+        self._name = d.get("_name", f"{self.__class__.__name__}-{id(self)}")
+        self.__isFitted = d.get("__isFitted", True)
+        self._dfHistory = d.get("_dfHistory", None)
 
     def getName(self) -> str:
         """
@@ -45,17 +51,12 @@ class DataFrameTransformer(ABC):
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
+    @trackDFHistory
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if not self.isFitted():
             raise Exception(f"Cannot apply a DataFrameTransformer which is not fitted: "
                             f"the df transformer {self.getName()} requires fitting")
-
-        inputColumns = set(df.columns)
         df = self._apply(df)
-        outputColumns = set(df.columns)
-
-        self.__removedColumns = inputColumns.difference(outputColumns)
-        self.__addedColumns = outputColumns.difference(inputColumns)
         return df
 
     def getChangeInColumnNames(self):
@@ -63,12 +64,14 @@ class DataFrameTransformer(ABC):
         Returns a dict describing the change in column names that was created in the most recent application of
         the data frame transformers. If apply was never called, returns None.
         """
-        applyWasNeverCalled = self.__removedColumns is None
+        applyWasNeverCalled = self._dfHistory is None
         if applyWasNeverCalled:
             return None
+
+        columnsHistory = self._dfHistory.columnsHistory
         return {
-            "removedColumns": self.__removedColumns,
-            "addedColumns": self.__addedColumns,
+            "removedColumns": set(columnsHistory[0]).difference(columnsHistory[-1]),
+            "addedColumns": set(columnsHistory[-1]).difference(columnsHistory[0]),
         }
 
     def summary(self):
