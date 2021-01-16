@@ -8,6 +8,7 @@ import pandas as pd
 
 from . import util, data_transformation
 from .columngen import ColumnGenerator
+from .util import flattenArguments
 from .util.string import orRegexGroup
 
 if TYPE_CHECKING:
@@ -70,12 +71,13 @@ class FeatureGenerator(ABC):
                 self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex + r"_\d+", skip=True))  # rule for one-hot transformation
 
         self._name = None
-        self.__isFitted = False
+        self._isFitted = False
 
     # for backwards compatibility with persisted Featuregens based on code prior to commit 7088cbbe
     # They lack the __isFitted attribute and we assume that each such Featuregen was fitted
     def __setstate__(self, d):
-        self.__isFitted = d.get("__isFitted", True)
+        d["_isFitted"] = d.get("_isFitted", True)
+        self.__dict__ = d
 
     def getName(self) -> str:
         """
@@ -134,10 +136,10 @@ class FeatureGenerator(ABC):
             this is typically the model instance that this feature generator is to generate inputs for
         """
         self._fit(X, Y=Y, ctx=ctx)
-        self.__isFitted = True
+        self._isFitted = True
 
     def isFitted(self):
-        return self.__isFitted
+        return self._isFitted
 
     def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         """
@@ -233,10 +235,10 @@ class MultiFeatureGenerator(FeatureGenerator):
     Wrapper for multiple feature generators. Calling generate here applies all given feature generators independently and
     returns the concatenation of their outputs
     """
-    def __init__(self, *featureGenerators: FeatureGenerator):
-        if len(featureGenerators) == 0:
-            raise ValueError("Empty list of feature generators")
-        self.featureGenerators = featureGenerators
+    def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
+        self.featureGenerators = flattenArguments(featureGenerators)
+        if len(self.featureGenerators) == 0:
+            log.info(f"MultiFeatureGenerator instance {self.getName()} is empty")
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:
             categoricalFeatureNames = "|".join(categoricalFeatureNameRegexes)
@@ -451,17 +453,17 @@ class ChainedFeatureGenerator(FeatureGenerator):
     Chains feature generators such that they are executed one after another. The output of generator i>=1 is the input of
     generator i+1 in the generator sequence.
     """
-    def __init__(self, *featureGenerators: FeatureGenerator):
+    def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
         """
         :param featureGenerators: feature generators to apply in order; the properties of the last feature generator
             determine the relevant meta-data such as categorical feature names and normalisation rules
         """
+        self.featureGenerators = flattenArguments(featureGenerators)
         if len(featureGenerators) == 0:
             raise ValueError("Empty list of feature generators")
-        lastFG: FeatureGenerator = featureGenerators[-1]
+        lastFG: FeatureGenerator = self.featureGenerators[-1]
         super().__init__(categoricalFeatureNames=lastFG.getCategoricalFeatureNameRegex(), normalisationRules=lastFG.getNormalisationRules(),
             addCategoricalDefaultRules=False)
-        self.featureGenerators = featureGenerators
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         for featureGen in self.featureGenerators:

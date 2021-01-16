@@ -10,6 +10,7 @@ from sklearn.preprocessing import OneHotEncoder
 from typing_extensions import Protocol
 
 from .columngen import ColumnGenerator
+from .util import flattenArguments
 from .util.metadata import trackDFHistory, DataFrameHistoryTracker
 from .util.string import orRegexGroup
 
@@ -24,15 +25,16 @@ class DataFrameTransformer(ABC):
     """
     def __init__(self):
         self._name = f"{self.__class__.__name__}-{id(self)}"
-        self.__isFitted = False
+        self._isFitted = False
         self._dfHistory: Optional[DataFrameHistoryTracker] = None
 
     # for backwards compatibility with persisted DFTs based on code prior to commit 7088cbbe
     # They lack the __isFitted attribute and we assume that each such DFT was fitted
     def __setstate__(self, d):
-        self._name = d.get("_name", f"{self.__class__.__name__}-{id(self)}")
-        self.__isFitted = d.get("__isFitted", True)
-        self._dfHistory = d.get("_dfHistory", None)
+        d["_name"] = d.get("_name", f"{self.__class__.__name__}-{id(self)}")
+        d["_isFitted"] = d.get("_isFitted", True)
+        d["_dfHistory"] = d.get("_dfHistory", None)
+        self.__dict__ = d
 
     def getName(self) -> str:
         """
@@ -83,10 +85,10 @@ class DataFrameTransformer(ABC):
 
     def fit(self, df: pd.DataFrame):
         self._fit(df)
-        self.__isFitted = True
+        self._isFitted = True
 
     def isFitted(self):
-        return self.__isFitted
+        return self._isFitted
 
     def fitApply(self, df: pd.DataFrame) -> pd.DataFrame:
         self.fit(df)
@@ -117,19 +119,10 @@ class DataFrameTransformerChain(DataFrameTransformer):
     Supports the application of a chain of data frame transformers.
     During fit and apply each transformer in the chain receives the transformed output of its predecessor.
     """
-    @staticmethod
-    def _flattened(l: Sequence[Union[DataFrameTransformer, Sequence[DataFrameTransformer]]]) -> List[DataFrameTransformer]:
-        result = []
-        for x in l:
-            if isinstance(x, DataFrameTransformer):
-                result.append(x)
-            else:
-                result.extend(x)
-        return result
 
     def __init__(self, *dataFrameTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]):
         super().__init__()
-        self.dataFrameTransformers = self._flattened(dataFrameTransformers)
+        self.dataFrameTransformers = flattenArguments(dataFrameTransformers)
 
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         for transformer in self.dataFrameTransformers:

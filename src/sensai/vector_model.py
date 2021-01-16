@@ -126,6 +126,12 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
     def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
         return self._featureGenerator
 
+    def _prePostProcessorsAreFitted(self):
+        result = self._inputTransformerChain.isFitted() and self._outputTransformerChain.isFitted()
+        if self.getFeatureGenerator() is not None:
+            result = result and self.getFeatureGenerator().isFitted()
+        return result
+
 
 class FittableModel(PredictorModel, ABC):
     @abstractmethod
@@ -152,10 +158,7 @@ class RuleBasedModel(FittableModel, ABC):
         self._inputTransformerChain.fit(X)
 
     def isFitted(self):
-        result = self._inputTransformerChain.isFitted()
-        if self.getFeatureGenerator() is not None:
-            result = result and self.getFeatureGenerator().isFitted()
-        return result
+        return self._prePostProcessorsAreFitted()
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
@@ -188,12 +191,18 @@ class VectorModel(FittableModel, ABC):
             e.g. in ensemble models.
         """
         super().__init__()
-        self.__modelIsFitted = False
+        self._modelIsFitted = False
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = ["UNKNOWN"]
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
+
+    # for backwards compatibility with persisted models based on code prior to commit 7088cbbe
+    def __setstate__(self, d):
+        if "_modelIsFitted" not in d:
+            d["_modelIsFitted"] = d.pop("_isFitted")
+        self.__dict__ = d
 
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
@@ -213,16 +222,11 @@ class VectorModel(FittableModel, ABC):
     def getTargetTransformer(self):
         return self._targetTransformer
 
-    def _prePostProcessorsAreFitted(self):
-        result = self._inputTransformerChain.isFitted() and self._outputTransformerChain.isFitted()
-        if self.getFeatureGenerator() is not None:
-            result = result and self.getFeatureGenerator().isFitted()
+    def isFitted(self):
+        result = self._modelIsFitted and self._prePostProcessorsAreFitted()
         if self._targetTransformer is not None:
             result = result and self._targetTransformer.isFitted()
         return result
-
-    def isFitted(self):
-        return self.__modelIsFitted and self._prePostProcessorsAreFitted()
 
     def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
         if fit:
@@ -283,7 +287,7 @@ class VectorModel(FittableModel, ABC):
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
-        self.__modelIsFitted = True
+        self._modelIsFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
