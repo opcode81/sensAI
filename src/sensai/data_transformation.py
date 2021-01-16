@@ -11,7 +11,7 @@ from typing_extensions import Protocol
 
 from .columngen import ColumnGenerator
 from .util import flattenArguments
-from .util.metadata import trackDFHistory, DataFrameHistoryTracker
+from .util.metadata import DataFrameHistoryTracker
 from .util.string import orRegexGroup
 
 log = logging.getLogger(__name__)
@@ -53,12 +53,13 @@ class DataFrameTransformer(ABC):
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
-    @trackDFHistory
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._dfHistory = DataFrameHistoryTracker(df)
         if not self.isFitted():
             raise Exception(f"Cannot apply a DataFrameTransformer which is not fitted: "
                             f"the df transformer {self.getName()} requires fitting")
         df = self._apply(df)
+        self._dfHistory.update(df)
         return df
 
     def getChangeInColumnNames(self):
