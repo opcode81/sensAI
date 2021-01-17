@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import pandas as pd
 
 
@@ -33,3 +35,30 @@ class DataFrameHistoryTracker:
         self.columnsHistory.append(df.columns)
         if self.trackIndices:
             self.indexHistory.append(df.index)
+
+    @lru_cache(maxsize=1)
+    def getRemovedColumns(self):
+        """
+        Returns the columns in the first entry of the history that are not present in the last entry
+        """
+        return set(self.columnsHistory[0]).difference(self.columnsHistory[-1])
+
+    @lru_cache(maxsize=1)
+    def getAddedColumns(self):
+        """
+        Returns the columns in the last entry of the history that were not present the first one
+        """
+        return set(self.columnsHistory[0]).difference(self.columnsHistory[-1])
+
+    def columnChangeString(self):
+        """
+        Returns the change in columns between the first and last entries in the history as string
+        """
+        initialCols, lastCols = self.columnsHistory[0], self.columnsHistory[-1]
+        if initialCols == lastCols:
+            return "none"
+        removedCols, addedCols = self.getRemovedColumns(), self.getAddedColumns()
+        if removedCols == addedCols == set():
+            return f"reordered {list(lastCols)}"
+
+        return f"added={list(addedCols)}, removed={list(removedCols)}"
