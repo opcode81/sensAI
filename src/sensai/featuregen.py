@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 
 from . import util, data_transformation
-from .util.string import orRegexGroup
 from .columngen import ColumnGenerator
+from .util import flattenArguments
+from .util.string import orRegexGroup
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -45,6 +46,7 @@ class FeatureGenerator(ABC):
             raise ValueError(f"normalisationRules should be empty when a normalisationRuleTemplate is provided")
 
         self._generatedColumnNames = None
+        self.__categoricalFeatureNames = categoricalFeatureNames
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames
@@ -69,6 +71,13 @@ class FeatureGenerator(ABC):
                 self._categoricalFeatureRules.append(data_transformation.DFTNormalisation.Rule(categoricalFeatureNameRegex + r"_\d+", skip=True))  # rule for one-hot transformation
 
         self._name = None
+        self._isFitted = False
+
+    # for backwards compatibility with persisted Featuregens based on code prior to commit 7088cbbe
+    # They lack the __isFitted attribute and we assume that each such Featuregen was fitted
+    def __setstate__(self, d):
+        d["_isFitted"] = d.get("_isFitted", True)
+        self.__dict__ = d
 
     def getName(self) -> str:
         """
@@ -81,6 +90,15 @@ class FeatureGenerator(ABC):
 
     def setName(self, name):
         self._name = name
+
+    def info(self):
+        return {
+            "name": self.getName(),
+            "categoricalFeatureNames": self.__categoricalFeatureNames,
+            "generatedColumnNames": self.getGeneratedColumnNames(),
+            "isFitted": self.isFitted(),
+            "normalisationRules": self.getNormalisationRules(),
+        }
 
     def getNormalisationRules(self, includeGeneratedCategoricalRules=True) -> List[data_transformation.DFTNormalisation.Rule]:
         if includeGeneratedCategoricalRules:
@@ -104,7 +122,7 @@ class FeatureGenerator(ABC):
         return self._generatedColumnNames
 
     @abstractmethod
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         Fits the feature generator based on the given data
 
@@ -116,6 +134,22 @@ class FeatureGenerator(ABC):
         """
         pass
 
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        """
+        Fits the feature generator based on the given data
+
+        :param X: the input/features data frame for the learning problem
+        :param Y: the corresponding output data frame for the learning problem
+            (which will typically contain regression or classification target columns)
+        :param ctx: a context object whose functionality may be required for feature generation;
+            this is typically the model instance that this feature generator is to generate inputs for
+        """
+        self._fit(X, Y=Y, ctx=ctx)
+        self._isFitted = True
+
+    def isFitted(self):
+        return self._isFitted
+
     def generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         """
         Generates features for the data points in the given data frame
@@ -125,6 +159,10 @@ class FeatureGenerator(ABC):
             this is typically the model instance that this feature generator is to generate inputs for
         :return: a data frame containing the generated features, which uses the same index as X (and Y)
         """
+        if not self.isFitted():
+            raise Exception(f"Cannot generate features from a FeatureGenerator which is not fitted: "
+                            f"the feature generator {self.getName()} requires fitting")
+
         log.debug(f"Generating features with {self}")
         resultDF = self._generate(df, ctx=ctx)
 
@@ -194,17 +232,22 @@ class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     def fit(self, X, Y=None, ctx=None):
         pass
 
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        pass
+
+    def isFitted(self):
+        return True
+
 
 class MultiFeatureGenerator(FeatureGenerator):
     """
     Wrapper for multiple feature generators. Calling generate here applies all given feature generators independently and
     returns the concatenation of their outputs
     """
-    def __init__(self, featureGenerators: Sequence[FeatureGenerator]):
-        """
-        :param featureGenerators:
-        """
-        self.featureGenerators = featureGenerators
+    def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
+        self.featureGenerators = flattenArguments(featureGenerators)
+        if len(self.featureGenerators) == 0:
+            log.info("Creating an empty MultiFeatureGenerator. It will generate a data frame without columns.")
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:
             categoricalFeatureNames = "|".join(categoricalFeatureNameRegexes)
@@ -234,9 +277,17 @@ class MultiFeatureGenerator(FeatureGenerator):
             return fg.fitGenerate(X, Y, ctx)
         return self._generateFromMultiple(generateFeatures, X.index)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         for fg in self.featureGenerators:
             fg.fit(X, Y)
+
+    def isFitted(self):
+        return all([fg.isFitted() for fg in self.featureGenerators])
+
+    def info(self):
+        info = super(MultiFeatureGenerator, self).info()
+        info["featureGeneratorNames"] = self.getNames()
+        return info
 
     def getNames(self) -> List[str]:
         """
@@ -310,6 +361,12 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
 
         return df[columnsToTake]
 
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        info["exceptColumns"] = self.exceptColumns
+        return info
+
 
 class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
     """
@@ -351,6 +408,11 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        return info
+
 
 class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
@@ -378,6 +440,12 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
 
+    def info(self):
+        info = super().info()
+        info["takeInputColumnIfPresent"] = self.takeInputColumnIfPresent
+        info["generatedColName"] = self.columnGen.generatedColumnName
+        return info
+
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
         if self.takeInputColumnIfPresent and colName in df.columns:
@@ -394,30 +462,43 @@ class ChainedFeatureGenerator(FeatureGenerator):
     Chains feature generators such that they are executed one after another. The output of generator i>=1 is the input of
     generator i+1 in the generator sequence.
     """
-    def __init__(self, *featureGenerators: FeatureGenerator):
+    def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
         """
         :param featureGenerators: feature generators to apply in order; the properties of the last feature generator
             determine the relevant meta-data such as categorical feature names and normalisation rules
         """
+        self.featureGenerators = flattenArguments(featureGenerators)
         if len(featureGenerators) == 0:
             raise ValueError("Empty list of feature generators")
-        lastFG: FeatureGenerator = featureGenerators[-1]
+        lastFG: FeatureGenerator = self.featureGenerators[-1]
         super().__init__(categoricalFeatureNames=lastFG.getCategoricalFeatureNameRegex(), normalisationRules=lastFG.getNormalisationRules(),
             addCategoricalDefaultRules=False)
-        self.featureGenerators = featureGenerators
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         for featureGen in self.featureGenerators:
             df = featureGen.generate(df, ctx)
         return df
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         self.fitGenerate(X, Y, ctx)
+
+    def isFitted(self):
+        return all([fg.isFitted() for fg in self.featureGenerators])
+
+    def info(self):
+        info = super().info()
+        info["chainedFeatureGeneratorNames"] = self.getNames()
 
     def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         for fg in self.featureGenerators:
             X = fg.fitGenerate(X, Y, ctx)
         return X
+
+    def getNames(self) -> List[str]:
+        """
+        :return: the list of names of all contained feature generators
+        """
+        return [fg.getName() for fg in self.featureGenerators]
 
 
 class FeatureGeneratorTargetDistribution(FeatureGenerator):
@@ -455,7 +536,7 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
             columns = [columns]
         self.columns = columns
         self.targetColumn = targetColumn
-        self.targetColumnInInputDf = targetColumnInFeaturesDf
+        self.targetColumnInFeaturesDf = targetColumnInFeaturesDf
         self.targetColumnBins = targetColumnBins
         if self.flatten:
             normalisationRuleTemplate = data_transformation.DFTNormalisation.RuleTemplate(skip=True)
@@ -464,13 +545,21 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         super().__init__(normalisationRuleTemplate=normalisationRuleTemplate)
         self._targetColumnValues = None
         # This will hold the mapping: column -> featureValue -> targetValue -> targetValueEmpiricalProbability
-        self._discreteTargetDistributionsByColumn: Dict[str, Dict[Any, Dict[Any, float]]] = None
+        self._discreteTargetDistributionsByColumn: Optional[Dict[str, Dict[Any, Dict[Any, float]]]] = None
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        info["targetColumn"] = self.targetColumn
+        info["targetColumnBins"] = self.targetColumnBins
+        info["flatten"] = self.flatten
+        return info
+
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
         This will persist the empirical target probability distributions for all unique values in the specified columns
         """
-        if self.targetColumnInInputDf:
+        if self.targetColumnInFeaturesDf:
             target = X[self.targetColumn]
         else:
             target = Y[self.targetColumn]
@@ -626,7 +715,7 @@ class FeatureCollector(object):
                 featureGenerators.append(self._registry.getFeatureGenerator(f))
             else:
                 raise ValueError(f"Unexpected type {type(f)} in list of features")
-        return MultiFeatureGenerator(featureGenerators)
+        return MultiFeatureGenerator(*featureGenerators)
 
 
 class FeatureGeneratorFromVectorModel(FeatureGenerator):
@@ -658,7 +747,7 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         self.useTargetFeatureGeneratorForTraining = useTargetFeatureGeneratorForTraining
         self.vectorModel = vectorModel
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         targetDF = self.targetFeatureGenerator.fitGenerate(X, Y)
         if self.inputFeatureGenerator:
             X = self.inputFeatureGenerator.fitGenerate(X, Y)
@@ -673,6 +762,11 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         else:
             log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
+
+    def info(self):
+        info = super().info()
+        info["wrappedModel"] = str(self.vectorModel)
+        return info
 
 
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
@@ -707,4 +801,4 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
         return ChainedFeatureGenerator(fgen, flatteningGenerator)
     else:
         return ChainedFeatureGenerator(fgen,
-            MultiFeatureGenerator([flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)]))
+            MultiFeatureGenerator(flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)))

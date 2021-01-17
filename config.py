@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 __config_instance = None
 
-source_path = os.path.dirname(__file__)
+topLevelDirectory = os.path.dirname(__file__)
 
 
 class __Configuration:
@@ -33,7 +33,7 @@ class __Configuration:
             config_files = ["config.json", "config_local.json"]
         self.config = {}
         for filename in config_files:
-            file_path = os.path.join(source_path, filename)
+            file_path = os.path.join(topLevelDirectory, filename)
             if os.path.exists(file_path):
                 self.log.info("Reading configuration from %s" % file_path)
                 with open(file_path, 'r') as f:

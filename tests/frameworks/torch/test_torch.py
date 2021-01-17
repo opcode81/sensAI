@@ -1,4 +1,5 @@
 import re
+import os
 
 import sklearn
 import torch
@@ -11,13 +12,14 @@ from sensai.torch.torch_base import TorchModelFromModuleFactory
 from sensai.torch.torch_data import TorchDataSetFromTensors
 from sensai.torch.torch_modules import MultiLayerPerceptron
 from sensai.torch.torch_opt import NNLossEvaluatorClassification
+from sensai.featuregen import FeatureGeneratorTakeColumns
 
 
-def test_MLPClassifier(irisDataSet, irisClassificationTestCase):
+def test_MLPClassifier(irisDataSet, irisClassificationTestCase, testResources):
     featureNames = irisDataSet.getInputOutputData().inputs.columns
     dftNorm = DFTNormalisation([DFTNormalisation.Rule(re.escape(f)) for f in featureNames], defaultTransformerFactory=sklearn.preprocessing.StandardScaler)
     model = sensai.torch.models.MultiLayerPerceptronVectorClassificationModel(hiddenDims=(50,25,8), cuda=False, epochs=100, optimiser="adam",
-        batchSize=200, normalisationMode=NormalisationMode.NONE, hidActivationFunction=torch.tanh).withName("torchMLPClassifier").withInputTransformers([dftNorm])
+        batchSize=200, normalisationMode=NormalisationMode.NONE, hidActivationFunction=torch.tanh).withName("torchMLPClassifier").withInputTransformers([dftNorm]).withFeatureGenerator(FeatureGeneratorTakeColumns())
     irisClassificationTestCase.testMinAccuracy(model, 0.8)
 
 
