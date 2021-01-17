@@ -55,10 +55,10 @@ class DataFrameHistoryTracker:
         Returns the change in columns between the first and last entries in the history as string
         """
         initialCols, lastCols = self.columnsHistory[0], self.columnsHistory[-1]
-        if initialCols == lastCols:
+        if list(initialCols) == list(lastCols):
             return "none"
         removedCols, addedCols = self.getRemovedColumns(), self.getAddedColumns()
         if removedCols == addedCols == set():
-            return f"reordered {list(lastCols)}"
+            return f"reordered {lastCols}"
 
         return f"added={list(addedCols)}, removed={list(removedCols)}"

@@ -62,25 +62,10 @@ class DataFrameTransformer(ABC):
         self._dfHistory.update(df)
         return df
 
-    def getChangeInColumnNames(self):
-        """
-        Returns a dict describing the change in column names that was created in the most recent application of
-        the data frame transformers. If apply was never called, returns None.
-        """
-        applyWasNeverCalled = self._dfHistory is None
-        if applyWasNeverCalled:
-            return None
-
-        columnsHistory = self._dfHistory.columnsHistory
-        return {
-            "removedColumns": set(columnsHistory[0]).difference(columnsHistory[-1]),
-            "addedColumns": set(columnsHistory[-1]).difference(columnsHistory[0]),
-        }
-
     def summary(self):
         return {
             "name": self.getName(),
-            "changeInColumnNames": self.getChangeInColumnNames(),
+            "changeInColumnNames": self._dfHistory.columnChangeString() if self._dfHistory is not None else None,
             "isFitted": self.isFitted(),
         }
 
