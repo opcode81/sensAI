@@ -91,13 +91,13 @@ class FeatureGenerator(ABC):
     def setName(self, name):
         self._name = name
 
-    def summary(self):
+    def info(self):
         return {
             "name": self.getName(),
             "categoricalFeatureNames": self.__categoricalFeatureNames,
             "generatedColumnNames": self.getGeneratedColumnNames(),
             "isFitted": self.isFitted(),
-            "normalizationRules": self.getNormalisationRules(),
+            "normalisationRules": self.getNormalisationRules(),
         }
 
     def getNormalisationRules(self, includeGeneratedCategoricalRules=True) -> List[data_transformation.DFTNormalisation.Rule]:
@@ -123,6 +123,15 @@ class FeatureGenerator(ABC):
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        """
+        Fits the feature generator based on the given data
+
+        :param X: the input/features data frame for the learning problem
+        :param Y: the corresponding output data frame for the learning problem
+            (which will typically contain regression or classification target columns)
+        :param ctx: a context object whose functionality may be required for feature generation;
+            this is typically the model instance that this feature generator is to generate inputs for
+        """
         pass
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
@@ -238,7 +247,7 @@ class MultiFeatureGenerator(FeatureGenerator):
     def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
         self.featureGenerators = flattenArguments(featureGenerators)
         if len(self.featureGenerators) == 0:
-            log.info(f"MultiFeatureGenerator instance {self.getName()} is empty")
+            log.info("Creating an empty MultiFeatureGenerator. It will generate a data frame without columns.")
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:
             categoricalFeatureNames = "|".join(categoricalFeatureNameRegexes)
@@ -275,10 +284,10 @@ class MultiFeatureGenerator(FeatureGenerator):
     def isFitted(self):
         return all([fg.isFitted() for fg in self.featureGenerators])
 
-    def summary(self):
-        summary = super(MultiFeatureGenerator, self).summary()
-        summary["featureGeneratorNames"] = self.getNames()
-        return summary
+    def info(self):
+        info = super(MultiFeatureGenerator, self).info()
+        info["featureGeneratorNames"] = self.getNames()
+        return info
 
     def getNames(self) -> List[str]:
         """
@@ -352,11 +361,11 @@ class FeatureGeneratorTakeColumns(RuleBasedFeatureGenerator):
 
         return df[columnsToTake]
 
-    def summary(self):
-        summary = super().summary()
-        summary["columns"] = self.columns
-        summary["exceptColumns"] = self.exceptColumns
-        return summary
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        info["exceptColumns"] = self.exceptColumns
+        return info
 
 
 class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
@@ -399,10 +408,10 @@ class FeatureGeneratorFlattenColumns(RuleBasedFeatureGenerator):
             resultDf[new_columns] = pd.DataFrame(values, index=df.index)
         return resultDf
 
-    def summary(self):
-        summary = super().summary()
-        summary["columns"] = self.columns
-        return summary
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        return info
 
 
 class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
@@ -431,11 +440,11 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
         self.takeInputColumnIfPresent = takeInputColumnIfPresent
         self.columnGen = columnGen
 
-    def summary(self):
-        summary = super().summary()
-        summary["takeInputColumnIfPresent"] = self.takeInputColumnIfPresent
-        summary["generatedColName"] = self.columnGen.generatedColumnName
-        return summary
+    def info(self):
+        info = super().info()
+        info["takeInputColumnIfPresent"] = self.takeInputColumnIfPresent
+        info["generatedColName"] = self.columnGen.generatedColumnName
+        return info
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
@@ -476,9 +485,9 @@ class ChainedFeatureGenerator(FeatureGenerator):
     def isFitted(self):
         return all([fg.isFitted() for fg in self.featureGenerators])
 
-    def summary(self):
-        summary = super().summary()
-        summary["chainedFeatureGeneratorNames"] = self.getNames()
+    def info(self):
+        info = super().info()
+        info["chainedFeatureGeneratorNames"] = self.getNames()
 
     def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
         for fg in self.featureGenerators:
@@ -538,13 +547,13 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
         # This will hold the mapping: column -> featureValue -> targetValue -> targetValueEmpiricalProbability
         self._discreteTargetDistributionsByColumn: Optional[Dict[str, Dict[Any, Dict[Any, float]]]] = None
 
-    def summary(self):
-        summary = super().summary()
-        summary["columns"] = self.columns
-        summary["targetColumn"] = self.targetColumn
-        summary["targetColumnBins"] = self.targetColumnBins
-        summary["flatten"] = self.flatten
-        return summary
+    def info(self):
+        info = super().info()
+        info["columns"] = self.columns
+        info["targetColumn"] = self.targetColumn
+        info["targetColumnBins"] = self.targetColumnBins
+        info["flatten"] = self.flatten
+        return info
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         """
@@ -754,10 +763,10 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
             log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
 
-    def summary(self):
-        summary = super().summary()
-        summary["wrappedModelName"] = self.vectorModel.getName()
-        return summary
+    def info(self):
+        info = super().info()
+        info["wrappedModel"] = str(self.vectorModel)
+        return info
 
 
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,

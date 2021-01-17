@@ -191,18 +191,12 @@ class VectorModel(FittableModel, ABC):
             e.g. in ensemble models.
         """
         super().__init__()
-        self._modelIsFitted = False
+        self._isFitted = False  # Note: this keeps track only of the actual model being fitted, not the pre/postprocessors
         self._predictedVariableNames = None
         self._modelInputVariableNames = None
         self._modelOutputVariableNames = ["UNKNOWN"]
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
-
-    # for backwards compatibility with persisted models based on code prior to commit 7088cbbe
-    def __setstate__(self, d):
-        if "_modelIsFitted" not in d:
-            d["_modelIsFitted"] = d.pop("_isFitted")
-        self.__dict__ = d
 
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
@@ -223,7 +217,7 @@ class VectorModel(FittableModel, ABC):
         return self._targetTransformer
 
     def isFitted(self):
-        result = self._modelIsFitted and self._prePostProcessorsAreFitted()
+        result = self._isFitted and self._prePostProcessorsAreFitted()
         if self._targetTransformer is not None:
             result = result and self._targetTransformer.isFitted()
         return result
@@ -287,7 +281,7 @@ class VectorModel(FittableModel, ABC):
         self._modelOutputVariableNames = list(Y.columns)
         log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
         self._fit(X, Y)
-        self._modelIsFitted = True
+        self._isFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
