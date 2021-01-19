@@ -42,7 +42,7 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
-        Makes the model use the given input transformers.
+        Makes the model use the given input transformers. Call with empty input to remove existing input transformers.
 
         :param inputTransformers: DataFrameTransformers for the transformation of inputs
         :return: self
@@ -52,8 +52,26 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
 
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
-        Makes the model use the given output transformers. For models that can be fitted, they are ignored during
-        the fit phase.
+        Makes the model use the given output transformers. Call with empty input to remove existing output transformers.
+        For models that can be fitted, the transformers are ignored during the fit phase.
+
+        **Important**: The output columns names of the last output transformer should be the same
+        as the first one's input column names. If this fails to hold, an exception will be raised when .predict() is called
+        (fit will run through without problems, though).
+
+        **Note**: Output transformers perform post-processing after the actual predictions have been made. Contrary
+        to invertible target transformers, they are not invoked during the fit phase. Therefore, any losses computed there,
+        including the losses on validation sets (e.g. for early stopping), will be computed on the non-post-processed data.
+        A possible use case for such post-processing is if you know how improve the predictions of your fittable model
+        by some heuristics or by hand-crafted rules.
+
+        **How not to use**: Output transformers are not meant to transform the predictions into something with a
+        different semantic meaning (e.g. normalized into non-normalized or something like that) - you should consider
+        using a targetTransformer for this purpose. Instead, they give the possibility to improve predictions through
+        post processing, when this is desired. E.g. if your model predicts labels, make sure that the output
+        transformers predict the same labels or you might get nasty behaviour during evaluation. Note that for
+        probabilistic classifiers the output transformers will not be applied to the probability vectors
+        but to the actual label predictions, unless explicitly stated otherwise.
 
         :param outputTransformers: DataFrameTransformers for the transformation of outputs
             (after the model has been applied)
@@ -192,9 +210,9 @@ class VectorModel(FittableModel, ABC):
         """
         super().__init__()
         self._isFitted = False  # Note: this keeps track only of the actual model being fitted, not the pre/postprocessors
-        self._predictedVariableNames = None
-        self._modelInputVariableNames = None
-        self._modelOutputVariableNames = ["UNKNOWN"]
+        self._predictedVariableNames: Optional[list] = None
+        self._modelInputVariableNames: Optional[list] = None
+        self._modelOutputVariableNames: Optional[list] = None
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
 
@@ -247,9 +265,19 @@ class VectorModel(FittableModel, ABC):
         x = self._computeInputs(x)
         y = self._predict(x)
         y.index = x.index
-        y = self._outputTransformerChain.apply(y)
         if self._targetTransformer is not None:
             y = self._targetTransformer.applyInverse(y)
+        y = self._outputTransformerChain.apply(y)
+        if list(y.columns) != self.getPredictedVariableNames():
+            raise Exception(
+                f"The model's predicted variable names are not correct. Got "
+                f"{list(y.columns)} but expected {self.getPredictedVariableNames()}. "
+                f"This kind of error can happen if the model's outputTransformerChain changes a data frame's "
+                f"columns (e.g. renames them or changes order). Only output transformer chains that do not change "
+                f"columns are permitted in VectorModel. You can fix this by modifying this instance's outputTransformerChain, "
+                f"e.g. by calling .withOutputTransformers() with the correct input "
+                f"(which can be empty to remove existing output transformers)"
+            )
         return y
 
     @abstractmethod
@@ -262,7 +290,7 @@ class VectorModel(FittableModel, ABC):
 
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
-        :param fitPreprocessors: if False, the model's feature generator and input transformer will not be fitted.
+        :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
             If a preprocessor requires fitting, was not separately fit before and this option is set to False,
             an exception will be raised.
         :param fitTargetTransformer: if False, the model's target transformer will not be fitted.
@@ -290,10 +318,10 @@ class VectorModel(FittableModel, ABC):
     def getModelOutputVariableNames(self):
         """
         Gets the list of variable names predicted by the underlying model.
-        For the case where the final output is transformed by an output transformer which changes column names,
-        the names of the variables prior to the transformation will be returned, i.e. this method
-        always returns the variable names that are actually predicted by the model.
-        For the variable names that are ultimately output by the model (including output transformations),
+        For the case where at training time the ground truth is transformed by a target transformer
+        which changes column names, the names of the variables prior to the transformation will be returned.
+        Thus this method always returns the variable names that are actually predicted by the fitted model alone.
+        For the variable names that are ultimately output by the entire VectorModel instance when calling predict,
         use getPredictedVariableNames.
         """
         return self._modelOutputVariableNames
