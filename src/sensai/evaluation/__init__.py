@@ -3,4 +3,4 @@ from .crossval import VectorClassificationModelCrossValidator, VectorRegressionM
 from .eval_util import RegressionEvaluationUtil, ClassificationEvaluationUtil, MultiDataEvaluationUtil, \
     evalModelViaEvaluator, createEvaluationUtil, createVectorModelEvaluator, createVectorModelCrossValidator
 from .evaluator import VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
-    VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData
+    RegressionModelEvaluationData, ClassificationModelEvaluationData
