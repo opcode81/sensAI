@@ -39,7 +39,7 @@ class PredictorModel(ABC):
         pass
 
 
-# TODO Is this obsolete?
+# TODO Do we need this class?
 class FittableModel(PredictorModel, ABC):
     @abstractmethod
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -169,15 +169,14 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
     def getTargetTransformer(self):
         return self._targetTransformer
 
-    def _applyPostProcessing(self, df: pd.DataFrame):
+    def _applyPostProcessing(self, y: pd.DataFrame):
         if self._targetTransformer is not None:
-            df = self._targetTransformer.applyInverse(df)
-        df = self._outputTransformerChain.apply(df)
+            y = self._targetTransformer.applyInverse(y)
+        y = self._outputTransformerChain.apply(y)
 
-        if list(df.columns) != self.getPredictedVariableNames():
+        if list(y.columns) != self.getPredictedVariableNames():
             raise Exception(
                 f"The model's predicted variable names are not correct. Got "
-                # TODO broken reference
                 f"{list(y.columns)} but expected {self.getPredictedVariableNames()}. "  
                 f"This kind of error can happen if the model's outputTransformerChain changes a data frame's "
                 f"columns (e.g. renames them or changes order). Only output transformer chains that do not change "
@@ -185,7 +184,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
                 f"e.g. by calling .withOutputTransformers() with the correct input "
                 f"(which can be empty to remove existing output transformers)"
             )
-        return df
+        return y
 
     def _prePostProcessorsAreFitted(self):
         result = self._inputTransformerChain.isFitted() and self._outputTransformerChain.isFitted()
@@ -194,10 +193,14 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         return result
 
     def isFitted(self):
-        result = self._isFitted and self._prePostProcessorsAreFitted()
-        if self._targetTransformer is not None:
-            result = result and self._targetTransformer.isFitted()
-        return result
+        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
+        if not underlyingModelIsFitted:
+            return False
+        if not self._prePostProcessorsAreFitted():
+            return False
+        if self._targetTransformer is not None and not self._targetTransformer.isFitted():
+            return False
+        return True
 
     def _checkModelInputColumns(self, modelInput: pd.DataFrame):
         if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
@@ -244,14 +247,21 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         pass
 
+    def _underlyingModelRequiresFitting(self) -> bool:
+        """
+        Designed to be overridden for rule-based models.
+
+        :return: True iff the underlying model requires fitting
+        """
+        return True
+
     def fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
         # no need for fitGenerate if chain is empty
-        # TODO simplify logic
-        if len(self._inputTransformerChain) == 0 and self._featureGenerator is not None:
-            self._featureGenerator.fit(X, Y)
-
-        elif self._featureGenerator is not None:
-            X = self._featureGenerator.fitGenerate(X, Y, self)
+        if self._featureGenerator is not None:
+            if len(self._inputTransformerChain) == 0:
+                self._featureGenerator.fit(X, Y)
+            else:
+                X = self._featureGenerator.fitGenerate(X, Y, self)
         self._inputTransformerChain.fit(X)
 
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame, fitPreprocessors=True, fitTargetTransformer=True):
@@ -269,17 +279,20 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         """
         log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
-        X = self.computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
-        if self._targetTransformer is not None:
-            if fitTargetTransformer:
-                Y = self._targetTransformer.fitApply(Y)
-            else:
-                Y = self._targetTransformer.apply(Y)
-        self._modelInputVariableNames = list(X.columns)
-        self._modelOutputVariableNames = list(Y.columns)
-        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
-        self._fit(X, Y)
-        self._isFitted = True
+        if not self._underlyingModelRequiresFitting():
+            self.fitPreprocessors(X, Y=Y)
+        else:
+            X = self.computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
+            if self._targetTransformer is not None:
+                if fitTargetTransformer:
+                    Y = self._targetTransformer.fitApply(Y)
+                else:
+                    Y = self._targetTransformer.apply(Y)
+            self._modelInputVariableNames = list(X.columns)
+            self._modelOutputVariableNames = list(Y.columns)
+            log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
+            self._fit(X, Y)
+            self._isFitted = True
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -376,7 +389,7 @@ class VectorClassificationModel(VectorModel, ABC):
         """
         modelOutputVariableName = self.getModelOutputVariableNames()[0]
         y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=modelOutputVariableName)
-        # TODO check sanity
+        # TODO check sanity: where should we be applying post-processing?
         y = self._applyPostProcessing(y)
         return y
 
@@ -418,73 +431,27 @@ class VectorClassificationModel(VectorModel, ABC):
         return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
 
 
-class RuleBasedModel(FittableModel, ABC):
-    """
-    Base class for models where the essential prediction logic is based on rules coded by humans
-    and thus does not require fitting. However, the input generation process may use mechanisms
-    such as feature generation or data transformation, which may require fitting.
-    """
+class RuleBasedRegressionModel(VectorRegressionModel):
     def __init__(self):
-        super().__init__()
+        super().__init__(checkInputColumns=False)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
-        self.fitPreprocessors(X, Y=Y)
+    def _underlyingModelRequiresFitting(self):
+        return False
 
-    def isFitted(self):
-        return self._prePostProcessorsAreFitted()
-
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        """
-        Performs a prediction for the given input data frame
-
-        :param x: the input data
-        :return: a DataFrame with the same index as the input
-        """
-        x = self.computeProcessedInputs(x)
-        x = self._predict(x)
-        return x
-
-    @abstractmethod
-    def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
 
-class RuleBasedRegressionModel(RuleBasedModel, ABC):
-    def isRegressionModel(self) -> bool:
-        return True
-
-
-class RuleBasedClassificationModel(ClassificationMixin, RuleBasedModel, ABC):
+class RuleBasedClassificationModel(VectorClassificationModel, ABC):
     def __init__(self, labels: list):
         super(RuleBasedClassificationModel, self).__init__()
         duplicate = getFirstDuplicate(labels)
         if duplicate is not None:
             raise Exception(f"Found duplicate label: {duplicate}")
-        self.labels = labels
+        self._labels = labels
 
-    def getClassLabels(self) -> list:
-        return self.labels
+    def _underlyingModelRequiresFitting(self):
+        return False
 
-    def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
-        """
-        :param x: the input data
-        :return: a data frame where the list of columns is the list of class labels and the values are probabilities
-        """
-        x = self.computeProcessedInputs(x)
-        result = self._predictClassProbabilities(x)
-        self._checkPrediction(result)
-        return result
-
-    @abstractmethod
-    def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Should return a dataframe where the columns list coincides with self.labels
-        """
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
-
-    def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame) -> pd.DataFrame:
-        predictedVariableName = self.getPredictedVariableNames()[0]
-        return self._convertClassProbabilitiesToPredictions(df, predictedVariableName=predictedVariableName)
-
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
