@@ -9,9 +9,9 @@ from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
 from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
-from ..tracking import TrackedExperiment, TrackingMixin
+from ..tracking import TrackingMixin
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
+from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel, FittableModel
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
             self.trainingData = data
             self.testData = testData
 
-    def fitModel(self, model: VectorModel):
+    def fitModel(self, model: FittableModel):
         """Fits the given model's parameters using this evaluator's training data"""
         startTime = time.time()
         model.fit(self.trainingData.inputs, self.trainingData.outputs)

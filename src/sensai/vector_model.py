@@ -14,6 +14,7 @@ import pandas as pd
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
+from .util.sequences import getFirstDuplicate
 
 log = logging.getLogger(__name__)
 
@@ -33,12 +34,43 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         pass
 
     @abstractmethod
-    def getPredictedVariableNames(self):
+    def isRegressionModel(self) -> bool:
         pass
 
     @abstractmethod
-    def isRegressionModel(self) -> bool:
+    def getPredictedVariableNames(self) -> list:
         pass
+
+    def fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+        # no need for fitGenerate if chain is empty
+        if len(self._inputTransformerChain) == 0 and self._featureGenerator is not None:
+            self._featureGenerator.fit(X, Y)
+
+        elif self._featureGenerator is not None:
+            X = self._featureGenerator.fitGenerate(X, Y, self)
+        self._inputTransformerChain.fit(X)
+
+    def computeProcessedInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+        """
+        Returns the dataframe that is passed to the model, i.e. the result of applying preprocessors to X.
+        
+        :param X:
+        :param Y: Only has to be provided if fit is True and preprocessors require Y for fitting
+        :param fit: if True, preprocessors will be fitted before being applied to X
+        :return: 
+        """
+        if fit:
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.fitGenerate(X, Y, self)
+            X = self._inputTransformerChain.fitApply(X)
+        else:        
+            if Y is not None:
+                log.warning(f"Passed an output data frame Y although preprocessors are already fitted. "
+                            f"Y will be ignored in the computation of the processed inputs")
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.generate(X, self)
+            X = self._inputTransformerChain.apply(X)
+        return X
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
@@ -48,36 +80,6 @@ class PredictorModel(PickleLoadSaveMixin, ABC):
         :return: self
         """
         self._inputTransformerChain = DataFrameTransformerChain(*inputTransformers)
-        return self
-
-    def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
-        """
-        Makes the model use the given output transformers. Call with empty input to remove existing output transformers.
-        For models that can be fitted, the transformers are ignored during the fit phase.
-
-        **Important**: The output columns names of the last output transformer should be the same
-        as the first one's input column names. If this fails to hold, an exception will be raised when .predict() is called
-        (fit will run through without problems, though).
-
-        **Note**: Output transformers perform post-processing after the actual predictions have been made. Contrary
-        to invertible target transformers, they are not invoked during the fit phase. Therefore, any losses computed there,
-        including the losses on validation sets (e.g. for early stopping), will be computed on the non-post-processed data.
-        A possible use case for such post-processing is if you know how improve the predictions of your fittable model
-        by some heuristics or by hand-crafted rules.
-
-        **How not to use**: Output transformers are not meant to transform the predictions into something with a
-        different semantic meaning (e.g. normalized into non-normalized or something like that) - you should consider
-        using a targetTransformer for this purpose. Instead, they give the possibility to improve predictions through
-        post processing, when this is desired. E.g. if your model predicts labels, make sure that the output
-        transformers predict the same labels or you might get nasty behaviour during evaluation. Note that for
-        probabilistic classifiers the output transformers will not be applied to the probability vectors
-        but to the actual label predictions, unless explicitly stated otherwise.
-
-        :param outputTransformers: DataFrameTransformers for the transformation of outputs
-            (after the model has been applied)
-        :return: self
-        """
-        self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
         return self
 
     def withFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]) -> __qualname__:
@@ -161,39 +163,61 @@ class FittableModel(PredictorModel, ABC):
         pass
 
 
-class RuleBasedModel(FittableModel, ABC):
-    """
-    Base class for models where the essential prediction logic is based on rules coded by humans
-    and thus does not require fitting. However, the input generation process may use mechanisms
-    such as feature generation or data transformation, which may require fitting.
-    """
-    def __init__(self):
-        super().__init__()
-
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
-        if self._featureGenerator is not None:
-            self._featureGenerator.fit(X, Y=Y, ctx=self)
-        self._inputTransformerChain.fit(X)
-
-    def isFitted(self):
-        return self._prePostProcessorsAreFitted()
-
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        """
-        Performs a prediction for the given input data frame
-
-        :param x: the input data
-        :return: a DataFrame with the same index as the input
-        """
-        if self._featureGenerator is not None:
-            x = self._featureGenerator.generate(x, self)
-        x = self._inputTransformerChain.apply(x)
-        x = self._predict(x)
-        x = self._outputTransformerChain.apply(x)
-        return x
+class ClassificationMixin(ABC):
+    def isRegressionModel(self):
+        return False
 
     @abstractmethod
-    def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
+    def getClassLabels(self) -> list:
+        pass
+
+    @abstractmethod
+    def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        The implementation will typically make use of the private method of the same name as well as
+        previously saved information about the predictions' column name
+        """
+        pass
+
+    def _checkPrediction(self, predictionDf: pd.DataFrame, maxRowsToCheck=5):
+        """
+        Checks whether the column names are correctly set and whether the entries correspond to probabilities
+        """
+        labels = self.getClassLabels()
+        if list(predictionDf.columns) != labels:
+            raise Exception(f"{self} _predictClassProbabilities returned DataFrame with incorrect columns: "
+                            f"expected {labels}, got {predictionDf.columns}")
+
+        dfToCheck = predictionDf.iloc[:maxRowsToCheck]
+        for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
+
+            if not all(0 <= valueSeries) or not all(valueSeries <= 1):
+                log.warning(f"Probabilities data frame may not be correctly normalised, "
+                            f"got probabilities outside the range [0, 1]: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+
+            s = valueSeries.sum()
+            if not np.isclose(s, 1):
+                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+
+    def _convertClassProbabilitiesToPredictions(self, predictedProbaDf: pd.DataFrame, predictedVariableName="predictedLabel"):
+        """
+        Converts from a data frame with probabilities as returned by predictClassProbabilities to a data frame
+        with predicted class labels
+
+        :param predictedProbaDf: the output data frame from predictClassProbabilities
+        :return: an output data frame with a single column named predictedVariableName and containing the predicted classes
+        """
+        labels = self.getClassLabels()
+        dfCols = list(predictedProbaDf.columns)
+        if dfCols != labels:
+            raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
+        yArray = predictedProbaDf.values
+        maxIndices = np.argmax(yArray, axis=1)
+        result = [labels[i] for i in maxIndices]
+        return pd.DataFrame(result, columns=[predictedVariableName])
+
+    @abstractmethod
+    def predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
         pass
 
 
@@ -216,6 +240,36 @@ class VectorModel(FittableModel, ABC):
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
 
+    def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
+        """
+        Makes the model use the given output transformers. Call with empty input to remove existing output transformers.
+        For models that can be fitted, the transformers are ignored during the fit phase.
+
+        **Important**: The output columns names of the last output transformer should be the same
+        as the first one's input column names. If this fails to hold, an exception will be raised when .predict() is called
+        (fit will run through without problems, though).
+
+        **Note**: Output transformers perform post-processing after the actual predictions have been made. Contrary
+        to invertible target transformers, they are not invoked during the fit phase. Therefore, any losses computed there,
+        including the losses on validation sets (e.g. for early stopping), will be computed on the non-post-processed data.
+        A possible use case for such post-processing is if you know how improve the predictions of your fittable model
+        by some heuristics or by hand-crafted rules.
+
+        **How not to use**: Output transformers are not meant to transform the predictions into something with a
+        different semantic meaning (e.g. normalized into non-normalized or something like that) - you should consider
+        using a targetTransformer for this purpose. Instead, they give the possibility to improve predictions through
+        post processing, when this is desired. E.g. if your model predicts labels, make sure that the output
+        transformers predict the same labels or you might get nasty behaviour during evaluation. Note that for
+        probabilistic classifiers the output transformers will not be applied to the probability vectors
+        but to the actual label predictions, unless explicitly stated otherwise.
+
+        :param outputTransformers: DataFrameTransformers for the transformation of outputs
+            (after the model has been applied)
+        :return: self
+        """
+        self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
+        return self
+
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
         Makes the model use the given target transformers.
@@ -234,41 +288,12 @@ class VectorModel(FittableModel, ABC):
     def getTargetTransformer(self):
         return self._targetTransformer
 
-    def isFitted(self):
-        result = self._isFitted and self._prePostProcessorsAreFitted()
+    def _applyPostProcessing(self, df: pd.DataFrame):
         if self._targetTransformer is not None:
-            result = result and self._targetTransformer.isFitted()
-        return result
+            df = self._targetTransformer.applyInverse(df)
+        df = self._outputTransformerChain.apply(df)
 
-    def _computeInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
-        if fit:
-            if self._featureGenerator is not None:
-                X = self._featureGenerator.fitGenerate(X, Y, self)
-            X = self._inputTransformerChain.fitApply(X)
-        else:
-            if not self.isFitted():
-                raise Exception(f"Model has not been fitted")
-            if self._featureGenerator is not None:
-                X = self._featureGenerator.generate(X, self)
-            X = self._inputTransformerChain.apply(X)
-            if self.checkInputColumns and list(X.columns) != self._modelInputVariableNames:
-                raise Exception(f"Inadmissible input data frame: expected columns {self._modelInputVariableNames}, got {list(X.columns)}")
-        return X
-
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        """
-        Performs a prediction for the given input data frame
-
-        :param x: the input data
-        :return: a DataFrame with the same index as the input
-        """
-        x = self._computeInputs(x)
-        y = self._predict(x)
-        y.index = x.index
-        if self._targetTransformer is not None:
-            y = self._targetTransformer.applyInverse(y)
-        y = self._outputTransformerChain.apply(y)
-        if list(y.columns) != self.getPredictedVariableNames():
+        if list(df.columns) != self.getPredictedVariableNames():
             raise Exception(
                 f"The model's predicted variable names are not correct. Got "
                 f"{list(y.columns)} but expected {self.getPredictedVariableNames()}. "
@@ -278,6 +303,31 @@ class VectorModel(FittableModel, ABC):
                 f"e.g. by calling .withOutputTransformers() with the correct input "
                 f"(which can be empty to remove existing output transformers)"
             )
+        return df
+
+    def isFitted(self):
+        result = self._isFitted and self._prePostProcessorsAreFitted()
+        if self._targetTransformer is not None:
+            result = result and self._targetTransformer.isFitted()
+        return result
+
+    def _checkModelInputColumns(self, modelInput: pd.DataFrame):
+        if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
+            raise Exception(f"Inadmissible input data frame: "
+                            f"expected columns {self._modelInputVariableNames}, got {list(modelInput.columns)}")
+
+    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        """
+        Performs a prediction for the given input data frame
+
+        :param x: the input data
+        :return: a DataFrame with the same index as the input
+        """
+        x = self.computeProcessedInputs(x)
+        self._checkModelInputColumns(x)
+        y = self._predict(x)
+        y.index = x.index
+        y = self._applyPostProcessing(y)
         return y
 
     @abstractmethod
@@ -299,7 +349,7 @@ class VectorModel(FittableModel, ABC):
         """
         log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
-        X = self._computeInputs(X, Y=Y, fit=fitPreprocessors)
+        X = self.computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
         if self._targetTransformer is not None:
             if fitTargetTransformer:
                 Y = self._targetTransformer.fitApply(Y)
@@ -312,7 +362,7 @@ class VectorModel(FittableModel, ABC):
         self._isFitted = True
 
     @abstractmethod
-    def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
     def getModelOutputVariableNames(self):
@@ -335,15 +385,10 @@ class VectorRegressionModel(VectorModel, ABC):
         return True
 
 
-class VectorClassificationModel(VectorModel, ABC):
+class VectorClassificationModel(ClassificationMixin, VectorModel, ABC):
     def __init__(self):
-        """
-        """
         super().__init__()
         self._labels = None
-
-    def isRegressionModel(self) -> bool:
-        return False
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         if len(Y.columns) != 1:
@@ -360,41 +405,102 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
         """
-        Converts from a result returned by predictClassProbabilities to a result as return by predict
+        Converts from a result returned by predictClassProbabilities to a result as return by the model
+        prior to application of target and output transformers.
 
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
         """
-        dfCols = list(df.columns)
-        if dfCols != self._labels:
-            raise ValueError(f"Expected data frame with columns {self._labels}, got {dfCols}")
-        yArray = df.values
-        maxIndices = np.argmax(yArray, axis=1)
-        result = [self._labels[i] for i in maxIndices]
-        return pd.DataFrame(result, columns=self.getModelOutputVariableNames())
+        modelOutputVariableName = self.getModelOutputVariableNames()[0]
+        y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=modelOutputVariableName)
+        y = self._applyPostProcessing(y)
+        return y
 
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities
         """
-        x = self._computeInputs(x)
+        x = self.computeProcessedInputs(x)
         result = self._predictClassProbabilities(x)
-
-        # check for correct columns
-        if list(result.columns) != self._labels:
-            raise Exception(f"{self} _predictClassProbabilities returned DataFrame with incorrect columns: expected {self._labels}, got {result.columns}")
-
-        # check for normalisation
-        maxRowsToCheck = 5
-        dfToCheck = result.iloc[:maxRowsToCheck]
-        for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
-            s = valueSeries.sum()
-            if abs(s-1.0) > 0.01:
-                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
-
+        self._checkPrediction(result)
         return result
 
     @abstractmethod
     def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
         pass
+
+    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
+
+
+class RuleBasedModel(FittableModel, ABC):
+    """
+    Base class for models where the essential prediction logic is based on rules coded by humans
+    and thus does not require fitting. However, the input generation process may use mechanisms
+    such as feature generation or data transformation, which may require fitting.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+        self.fitPreprocessors(X, Y=Y)
+
+    def isFitted(self):
+        return self._prePostProcessorsAreFitted()
+
+    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        """
+        Performs a prediction for the given input data frame
+
+        :param x: the input data
+        :return: a DataFrame with the same index as the input
+        """
+        x = self.computeProcessedInputs(x)
+        x = self._predict(x)
+        return x
+
+    @abstractmethod
+    def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+
+class RuleBasedRegressionModel(RuleBasedModel, ABC):
+    def isRegressionModel(self) -> bool:
+        return True
+
+
+class RuleBasedClassificationModel(ClassificationMixin, RuleBasedModel, ABC):
+    def __init__(self, labels: list):
+        super(RuleBasedClassificationModel, self).__init__()
+        duplicate = getFirstDuplicate(labels)
+        if duplicate is not None:
+            raise Exception(f"Found duplicate label: {duplicate}")
+        self.labels = labels
+
+    def getClassLabels(self) -> list:
+        return self.labels
+
+    def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
+        """
+        :param x: the input data
+        :return: a data frame where the list of columns is the list of class labels and the values are probabilities
+        """
+        x = self.computeProcessedInputs(x)
+        result = self._predictClassProbabilities(x)
+        self._checkPrediction(result)
+        return result
+
+    @abstractmethod
+    def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Should return a dataframe where the columns list coincides with self.labels
+        """
+        pass
+
+    def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame) -> pd.DataFrame:
+        predictedVariableName = self.getPredictedVariableNames()[0]
+        return self._convertClassProbabilitiesToPredictions(df, predictedVariableName=predictedVariableName)
+
+    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))

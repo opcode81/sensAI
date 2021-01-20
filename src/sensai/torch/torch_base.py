@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ..normalisation import NormalisationMode
-from ..util.dtype import toFloatArray
-from ..vector_model import VectorRegressionModel, VectorClassificationModel
-from ..util.string import objectRepr
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification
+from ..normalisation import NormalisationMode
+from ..util.dtype import toFloatArray
+from ..util.string import objectRepr
+from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
 log = logging.getLogger(__name__)
 
@@ -332,9 +332,6 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, **self.nnOptimiserParams)
-
-    def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(inputs))
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
         results = []
