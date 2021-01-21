@@ -70,7 +70,6 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         self._modelInputVariableNames: Optional[list] = None
         self._modelOutputVariableNames: Optional[list] = None
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
-        # TODO this was recently (December 6, 2020) introduced and will cause compatibility issues; should be removed
         self.checkInputColumns = checkInputColumns
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
@@ -86,7 +85,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
         Makes the model use the given output transformers. Call with empty input to remove existing output transformers.
-        For models that can be fitted, the transformers are ignored during the fit phase.
+        The transformers are ignored during the fit phase. Not supported for rule based models.
 
         **Important**: The output columns names of the last output transformer should be the same
         as the first one's input column names. If this fails to hold, an exception will be raised when .predict() is called
@@ -110,12 +109,16 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             (after the model has been applied)
         :return: self
         """
+        # Since we have to forbid target transformers for rule based models, we might as well forbid output transformers as well
+        # There is no reason for post processing in rule based models.
+        if not self._underlyingModelRequiresFitting():
+            raise Exception(f"Output transformers are not supported for model of type {self.__class__.__name__}")
         self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
         return self
 
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
-        Makes the model use the given target transformers.
+        Makes the model use the given target transformers. Not supported for rule based models.
 
         NOTE: all feature generators and data frame transformers will be fit on the untransformed target.
         The targetTransformer only affects the fit of the internal model.
@@ -125,6 +128,10 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             the model, i.e. the transformation is completely transparent when applying the model.
         :return: self
         """
+        # Note: it is important to disallow targetTransformers for rule based models since we need
+        # predictedVarNames and modelOutputVarNames to coincide there.
+        if not self._underlyingModelRequiresFitting():
+            raise Exception(f"Target transformers are not supported for model of type {self.__class__.__name__}")
         self._targetTransformer = targetTransformer
         return self
 
@@ -264,12 +271,13 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
                 X = self._featureGenerator.fitGenerate(X, Y, self)
         self._inputTransformerChain.fit(X)
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, fitPreprocessors=True, fitTargetTransformer=True):
+    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True, fitTargetTransformer=True):
         """
         Fits the model using the given data
 
         :param X: a data frame containing input data
-        :param Y: a data frame containing output data
+        :param Y: a data frame containing output data. None may be passed if the underlying model does not require
+            fitting, e.g. with rule based models
         :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
             If a preprocessor requires fitting, was not separately fit before and this option is set to False,
             an exception will be raised.
@@ -282,6 +290,8 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         if not self._underlyingModelRequiresFitting():
             self.fitPreprocessors(X, Y=Y)
         else:
+            if Y is None:
+                raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
             X = self.computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
             if self._targetTransformer is not None:
                 if fitTargetTransformer:
@@ -303,10 +313,13 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         Gets the list of variable names predicted by the underlying model.
         For the case where at training time the ground truth is transformed by a target transformer
         which changes column names, the names of the variables prior to the transformation will be returned.
-        Thus this method always returns the variable names that are actually predicted by the fitted model alone.
+        Thus this method always returns the variable names that are actually predicted by the underlying model alone.
         For the variable names that are ultimately output by the entire VectorModel instance when calling predict,
         use getPredictedVariableNames.
         """
+        # Note that this method is needed in RuleBasedClassificationModel, so we cannot just raise an exception
+        if not self._underlyingModelRequiresFitting():
+            return self.getPredictedVariableNames()
         return self._modelOutputVariableNames
 
     def getPredictedVariableNames(self):
@@ -349,6 +362,9 @@ class VectorClassificationModel(VectorModel, ABC):
         super().__init__()
         self._labels = None
 
+    def isRegressionModel(self) -> bool:
+        return False
+
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         if len(Y.columns) != 1:
             raise ValueError("Classification requires exactly one output column with class labels")
@@ -362,19 +378,20 @@ class VectorClassificationModel(VectorModel, ABC):
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         pass
 
-    def _convertClassProbabilitiesToPredictions(self, predictedProbaDf: pd.DataFrame, predictedVariableName="predictedLabel"):
+    def _convertClassProbabilitiesToPredictions(self, predictedProbabilitiesDf: pd.DataFrame, predictedVariableName="predictedLabel"):
         """
         Converts from a data frame with probabilities as returned by predictClassProbabilities to a data frame
         with predicted class labels
 
-        :param predictedProbaDf: the output data frame from predictClassProbabilities
+        :param predictedProbabilitiesDf: the output data frame from predictClassProbabilities
+        :param predictedVariableName:
         :return: an output data frame with a single column named predictedVariableName and containing the predicted classes
         """
         labels = self.getClassLabels()
-        dfCols = list(predictedProbaDf.columns)
+        dfCols = list(predictedProbabilitiesDf.columns)
         if dfCols != labels:
             raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
-        yArray = predictedProbaDf.values
+        yArray = predictedProbabilitiesDf.values
         maxIndices = np.argmax(yArray, axis=1)
         result = [labels[i] for i in maxIndices]
         return pd.DataFrame(result, columns=[predictedVariableName])
@@ -389,7 +406,6 @@ class VectorClassificationModel(VectorModel, ABC):
         """
         modelOutputVariableName = self.getModelOutputVariableNames()[0]
         y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=modelOutputVariableName)
-        # TODO check sanity: where should we be applying post-processing?
         y = self._applyPostProcessing(y)
         return y
 
@@ -428,12 +444,18 @@ class VectorClassificationModel(VectorModel, ABC):
         pass
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
+        modelOutputVariableName = self.getModelOutputVariableNames()[0]
+        predictedProbabilitiesDf = self._predictClassProbabilities(x)
+        return self._convertClassProbabilitiesToPredictions(predictedProbabilitiesDf, predictedVariableName=modelOutputVariableName)
 
 
-class RuleBasedRegressionModel(VectorRegressionModel):
-    def __init__(self):
+class RuleBasedRegressionModel(VectorRegressionModel, ABC):
+    def __init__(self, predictedVariableNames: list):
+        """
+        :param predictedVariableNames: These are typically known at init time for rule based models
+        """
         super().__init__(checkInputColumns=False)
+        self._predictedVariableNames = predictedVariableNames
 
     def _underlyingModelRequiresFitting(self):
         return False
@@ -441,17 +463,42 @@ class RuleBasedRegressionModel(VectorRegressionModel):
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, **kwargs):
+        """
+        Fits the model using the given data
+
+        :param X: a data frame containing input data
+        :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
+        :param kwargs: for consistency with VectorModel interface, will be ignored
+        """
+        super().fit(X, Y, fitPreprocessors=True, fitTargetTransformer=False)
+
 
 class RuleBasedClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, labels: list):
-        super(RuleBasedClassificationModel, self).__init__()
+    def __init__(self, labels: list, predictedVariableName="predictedLabel"):
+        super().__init__(checkInputColumns=False)
+
         duplicate = getFirstDuplicate(labels)
         if duplicate is not None:
             raise Exception(f"Found duplicate label: {duplicate}")
         self._labels = labels
+        self._predictedVariableNames = [predictedVariableName]
 
     def _underlyingModelRequiresFitting(self):
         return False
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
+
+    def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
+        pass
+
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, **kwargs):
+        """
+        Fits the model using the given data
+
+        :param X: a data frame containing input data
+        :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
+        :param kwargs: for consistency with VectorModel interface, will be ignored
+        """
+        super().fit(X, Y, fitPreprocessors=True, fitTargetTransformer=False)

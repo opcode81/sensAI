@@ -32,6 +32,8 @@ class FittableDFT(InvertibleDataFrameTransformer):
 
 
 class SampleRuleBasedModel(RuleBasedRegressionModel):
+    def __init__(self):
+        super(SampleRuleBasedModel, self).__init__(predictedVariableNames=["prediction"])
 
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=X.index)
