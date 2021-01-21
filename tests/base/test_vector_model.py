@@ -7,7 +7,7 @@ import pytest
 from sensai.data_transformation import DFTDRowFilterOnIndex, \
     InvertibleDataFrameTransformer
 from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureGenerator
-from sensai.vector_model import RuleBasedModel, VectorModel
+from sensai.vector_model import VectorModel, RuleBasedRegressionModel
 
 
 class FittableFgen(FeatureGenerator):
@@ -31,7 +31,7 @@ class FittableDFT(InvertibleDataFrameTransformer):
         return df
 
 
-class SampleRuleBasedModel(RuleBasedModel):
+class SampleRuleBasedModel(RuleBasedRegressionModel):
 
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=X.index)
