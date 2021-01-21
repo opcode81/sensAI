@@ -7,7 +7,7 @@ import pytest
 from sensai.data_transformation import DFTDRowFilterOnIndex, \
     InvertibleDataFrameTransformer
 from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureGenerator
-from sensai.vector_model import VectorModel, RuleBasedRegressionModel
+from sensai.vector_model import VectorModel, RuleBasedVectorRegressionModel
 
 
 class FittableFgen(FeatureGenerator):
@@ -31,9 +31,9 @@ class FittableDFT(InvertibleDataFrameTransformer):
         return df
 
 
-class SampleRuleBasedModel(RuleBasedRegressionModel):
+class SampleRuleBasedVectorModel(RuleBasedVectorRegressionModel):
     def __init__(self):
-        super(SampleRuleBasedModel, self).__init__(predictedVariableNames=["prediction"])
+        super(SampleRuleBasedVectorModel, self).__init__(predictedVariableNames=["prediction"])
 
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=X.index)
@@ -79,7 +79,7 @@ def fittableDFT():
 
 @pytest.fixture()
 def ruleBasedModel():
-    return SampleRuleBasedModel()
+    return SampleRuleBasedVectorModel()
 
 
 @pytest.fixture()
@@ -98,14 +98,14 @@ def fittedVectorModel():
 
 
 class TestIsFitted:
-    @pytest.mark.parametrize("model", [SampleRuleBasedModel(), fittedVectorModel()])
+    @pytest.mark.parametrize("model", [SampleRuleBasedVectorModel(), fittedVectorModel()])
     def test_isFittedWhenPreprocessorsRuleBased(self, model, ruleBasedDFT, ruleBasedFgen):
         assert model.isFitted()
         model.withFeatureGenerator(ruleBasedFgen)
         model.withInputTransformers(ruleBasedDFT)
         assert model.isFitted()
 
-    @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedModel, fittedVectorModel])
+    @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedVectorModel, fittedVectorModel])
     def test_isFittedWithFittableProcessors(self, modelConstructor, fittableDFT, fittableFgen):
         # is fitted after fit with model
         model = modelConstructor().withInputTransformers(fittableDFT)

@@ -39,7 +39,6 @@ class PredictorModel(ABC):
         pass
 
 
-# TODO Do we need this class?
 class FittableModel(PredictorModel, ABC):
     @abstractmethod
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -85,7 +84,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
         Makes the model use the given output transformers. Call with empty input to remove existing output transformers.
-        The transformers are ignored during the fit phase. Not supported for rule based models.
+        The transformers are ignored during the fit phase. Not supported for rule-based models.
 
         **Important**: The output columns names of the last output transformer should be the same
         as the first one's input column names. If this fails to hold, an exception will be raised when .predict() is called
@@ -109,8 +108,8 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             (after the model has been applied)
         :return: self
         """
-        # Since we have to forbid target transformers for rule based models, we might as well forbid output transformers as well
-        # There is no reason for post processing in rule based models.
+        # Since we have to forbid target transformers for rule-based models, we might as well forbid output transformers as well
+        # There is no reason for post processing in rule-based models.
         if not self._underlyingModelRequiresFitting():
             raise Exception(f"Output transformers are not supported for model of type {self.__class__.__name__}")
         self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
@@ -118,7 +117,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
 
     def withTargetTransformer(self, targetTransformer: Optional[InvertibleDataFrameTransformer]) -> __qualname__:
         """
-        Makes the model use the given target transformers. Not supported for rule based models.
+        Makes the model use the given target transformers. Not supported for rule-based models.
 
         NOTE: all feature generators and data frame transformers will be fit on the untransformed target.
         The targetTransformer only affects the fit of the internal model.
@@ -128,7 +127,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             the model, i.e. the transformation is completely transparent when applying the model.
         :return: self
         """
-        # Note: it is important to disallow targetTransformers for rule based models since we need
+        # Note: it is important to disallow targetTransformers for rule-based models since we need
         # predictedVarNames and modelOutputVarNames to coincide there.
         if not self._underlyingModelRequiresFitting():
             raise Exception(f"Target transformers are not supported for model of type {self.__class__.__name__}")
@@ -276,7 +275,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
 
         :param X: a data frame containing input data
         :param Y: a data frame containing output data. None may be passed if the underlying model does not require
-            fitting, e.g. with rule based models
+            fitting, e.g. with rule-based models
         :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
             If a preprocessor requires fitting, was not separately fit before and this option is set to False,
             an exception will be raised.
@@ -316,7 +315,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         For the variable names that are ultimately output by the entire VectorModel instance when calling predict,
         use getPredictedVariableNames.
         """
-        # Note that this method is needed in RuleBasedClassificationModel, so we cannot just raise an exception
+        # Note that this method is needed in RuleBasedVectorClassificationModel, so we cannot just raise an exception
         if not self._underlyingModelRequiresFitting():
             return self.getPredictedVariableNames()
         return self._modelOutputVariableNames
@@ -358,6 +357,8 @@ class VectorRegressionModel(VectorModel, ABC):
 
 class VectorClassificationModel(VectorModel, ABC):
     def __init__(self):
+        """
+        """
         super().__init__()
         self._labels = None
 
@@ -397,8 +398,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
         """
-        Converts from a result returned by predictClassProbabilities to a result as return by the model
-        prior to application of target and output transformers.
+        Converts from a result returned by predictClassProbabilities to a result as return by predict.
 
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
@@ -448,10 +448,10 @@ class VectorClassificationModel(VectorModel, ABC):
         return self._convertClassProbabilitiesToPredictions(predictedProbabilitiesDf, predictedVariableName=modelOutputVariableName)
 
 
-class RuleBasedRegressionModel(VectorRegressionModel, ABC):
+class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
     def __init__(self, predictedVariableNames: list):
         """
-        :param predictedVariableNames: These are typically known at init time for rule based models
+        :param predictedVariableNames: These are typically known at init time for rule-based models
         """
         super().__init__(checkInputColumns=False)
         self._predictedVariableNames = predictedVariableNames
@@ -473,7 +473,7 @@ class RuleBasedRegressionModel(VectorRegressionModel, ABC):
         super().fit(X, Y, fitPreprocessors=True, fitTargetTransformer=False)
 
 
-class RuleBasedClassificationModel(VectorClassificationModel, ABC):
+class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
     def __init__(self, labels: list, predictedVariableName="predictedLabel"):
         super().__init__(checkInputColumns=False)
 
