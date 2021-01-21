@@ -214,10 +214,16 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             raise Exception(f"Inadmissible input data frame: "
                             f"expected columns {self._modelInputVariableNames}, got {list(modelInput.columns)}")
 
-    def computeProcessedInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+    def computeModelInputs(self, X):
         """
         Returns the dataframe that is passed to the model, i.e. the result of applying preprocessors to X.
+        """
+        if self._featureGenerator is not None:
+            X = self._featureGenerator.generate(X, self)
+        return self._inputTransformerChain.apply(X)
 
+    def _computeProcessedInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+        """
         :param X:
         :param Y: Only has to be provided if fit is True and preprocessors require Y for fitting
         :param fit: if True, preprocessors will be fitted before being applied to X
@@ -226,15 +232,8 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         if fit:
             if self._featureGenerator is not None:
                 X = self._featureGenerator.fitGenerate(X, Y, self)
-            X = self._inputTransformerChain.fitApply(X)
-        else:
-            if Y is not None:
-                log.warning(f"Passed an output data frame Y although preprocessors are already fitted. "
-                f"Y will be ignored in the computation of the processed inputs")
-            if self._featureGenerator is not None:
-                X = self._featureGenerator.generate(X, self)
-            X = self._inputTransformerChain.apply(X)
-        return X
+            return self._inputTransformerChain.fitApply(X)
+        return self.computeModelInputs(X)
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
@@ -243,7 +242,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
-        x = self.computeProcessedInputs(x)
+        x = self._computeProcessedInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
         y.index = x.index
@@ -262,7 +261,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         """
         return True
 
-    def fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+    def _fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
         # no need for fitGenerate if chain is empty
         if self._featureGenerator is not None:
             if len(self._inputTransformerChain) == 0:
@@ -288,11 +287,11 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         if not self._underlyingModelRequiresFitting():
-            self.fitPreprocessors(X, Y=Y)
+            self._fitPreprocessors(X, Y=Y)
         else:
             if Y is None:
                 raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
-            X = self.computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
+            X = self._computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
             if self._targetTransformer is not None:
                 if fitTargetTransformer:
                     Y = self._targetTransformer.fitApply(Y)
@@ -414,7 +413,7 @@ class VectorClassificationModel(VectorModel, ABC):
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities
         """
-        x = self.computeProcessedInputs(x)
+        x = self._computeProcessedInputs(x)
         result = self._predictClassProbabilities(x)
         self._checkPrediction(result)
         return result
