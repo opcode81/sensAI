@@ -217,11 +217,9 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         """
         Returns the dataframe that is passed to the model, i.e. the result of applying preprocessors to X.
         """
-        if self._featureGenerator is not None:
-            X = self._featureGenerator.generate(X, self)
-        return self._inputTransformerChain.apply(X)
+        return self._computeModelInputs(X)
 
-    def _computeProcessedInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+    def _computeModelInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
         """
         :param X:
         :param Y: Only has to be provided if fit is True and preprocessors require Y for fitting
@@ -231,8 +229,12 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         if fit:
             if self._featureGenerator is not None:
                 X = self._featureGenerator.fitGenerate(X, Y, self)
-            return self._inputTransformerChain.fitApply(X)
-        return self.computeModelInputs(X)
+            X = self._inputTransformerChain.fitApply(X)
+        else:
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.generate(X, self)
+            X = self._inputTransformerChain.apply(X)
+        return X
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
@@ -241,7 +243,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
-        x = self._computeProcessedInputs(x)
+        x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
         y.index = x.index
@@ -290,7 +292,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         else:
             if Y is None:
                 raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
-            X = self._computeProcessedInputs(X, Y=Y, fit=fitPreprocessors)
+            X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
             if self._targetTransformer is not None:
                 if fitTargetTransformer:
                     Y = self._targetTransformer.fitApply(Y)
@@ -413,7 +415,7 @@ class VectorClassificationModel(VectorModel, ABC):
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities
         """
-        x = self._computeProcessedInputs(x)
+        x = self._computeModelInputs(x)
         result = self._predictClassProbabilities(x)
         self._checkPrediction(result)
         return result
