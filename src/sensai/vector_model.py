@@ -408,25 +408,6 @@ class VectorClassificationModel(VectorModel, ABC):
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         pass
 
-    def _convertClassProbabilitiesToPredictions(self, predictedProbabilitiesDf: pd.DataFrame,
-                                                predictedVariableName="predictedLabel"):
-        """
-        Converts from a data frame with probabilities as returned by predictClassProbabilities to a data frame
-        with predicted class labels
-
-        :param predictedProbabilitiesDf: the output data frame from predictClassProbabilities
-        :param predictedVariableName:
-        :return: an output data frame with a single column named predictedVariableName and containing the predicted classes
-        """
-        labels = self.getClassLabels()
-        dfCols = list(predictedProbabilitiesDf.columns)
-        if dfCols != labels:
-            raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
-        yArray = predictedProbabilitiesDf.values
-        maxIndices = np.argmax(yArray, axis=1)
-        result = [labels[i] for i in maxIndices]
-        return pd.DataFrame(result, columns=[predictedVariableName])
-
     def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
         """
         Converts from a result returned by predictClassProbabilities to a result as return by predict.
@@ -434,9 +415,14 @@ class VectorClassificationModel(VectorModel, ABC):
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
         """
-        predictedVariableName = self.getPredictedVariableNames()[0]
-        y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=predictedVariableName)
-        return y
+        labels = self.getClassLabels()
+        dfCols = list(df.columns)
+        if dfCols != labels:
+            raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
+        yArray = df.values
+        maxIndices = np.argmax(yArray, axis=1)
+        result = [labels[i] for i in maxIndices]
+        return pd.DataFrame(result, columns=self.getPredictedVariableNames())
 
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         """
