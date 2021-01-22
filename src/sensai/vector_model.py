@@ -108,8 +108,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             (after the model has been applied)
         :return: self
         """
-        # Since we have to forbid target transformers for rule-based models, we might as well forbid output transformers as well
-        # There is no reason for post processing in rule-based models.
+        # There is no reason for post processing in rule-based models
         if not self._underlyingModelRequiresFitting():
             raise Exception(f"Output transformers are not supported for model of type {self.__class__.__name__}")
         self._outputTransformerChain = DataFrameTransformerChain(*outputTransformers)
@@ -127,8 +126,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             the model, i.e. the transformation is completely transparent when applying the model.
         :return: self
         """
-        # Note: it is important to disallow targetTransformers for rule-based models since we need
-        # predictedVarNames and modelOutputVarNames to coincide there.
+        # Disabled for rule-based models which do not apply fitting and therefore cannot make use of transformed targets
         if not self._underlyingModelRequiresFitting():
             raise Exception(f"Target transformers are not supported for model of type {self.__class__.__name__}")
         self._targetTransformer = targetTransformer
@@ -317,9 +315,6 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         For the variable names that are ultimately output by the entire VectorModel instance when calling predict,
         use getPredictedVariableNames.
         """
-        # Note that this method is needed in RuleBasedVectorClassificationModel, so we cannot just raise an exception
-        if not self._underlyingModelRequiresFitting():
-            return self.getPredictedVariableNames()
         return self._modelOutputVariableNames
 
     def getPredictedVariableNames(self):
@@ -457,6 +452,8 @@ class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
         """
         super().__init__(checkInputColumns=False)
         self._predictedVariableNames = predictedVariableNames
+        # guaranteed to be the same as predictedVariableNames since target transformers and output transformers are disallowed
+        self._modelOutputVariableNames = predictedVariableNames
 
     def _underlyingModelRequiresFitting(self):
         return False
@@ -484,6 +481,8 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
             raise Exception(f"Found duplicate label: {duplicate}")
         self._labels = labels
         self._predictedVariableNames = [predictedVariableName]
+        # guaranteed to be the same as predictedVariableNames since target transformers and output transformers are disallowed
+        self._modelOutputVariableNames = self._predictedVariableNames
 
     def _underlyingModelRequiresFitting(self):
         return False
