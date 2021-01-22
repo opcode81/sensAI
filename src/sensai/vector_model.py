@@ -507,6 +507,10 @@ class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
 
 class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
     def __init__(self, labels: list, predictedVariableName="predictedLabel"):
+        """
+        :param labels:
+        :param predictedVariableName:
+        """
         super().__init__(checkInputColumns=False)
 
         duplicate = getFirstDuplicate(labels)
