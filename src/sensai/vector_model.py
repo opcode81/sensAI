@@ -23,6 +23,7 @@ class PredictorModel(ABC):
     """
     Base class for models that map data frames to predictions
     """
+
     def __init__(self):
         self._name = None
 
@@ -53,6 +54,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
     """
     Base class for models that map data frames to predictions and can be fitted on data frames
     """
+
     def __init__(self, checkInputColumns=True):
         """
         :param checkInputColumns: Whether to check if the input column list (after feature generation)
@@ -63,12 +65,9 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         super().__init__()
         self._featureGenerator: Optional[FeatureGenerator] = None
         self._inputTransformerChain = DataFrameTransformerChain()
-        self._outputTransformerChain = DataFrameTransformerChain()
         self._isFitted = False  # Note: this keeps track only of the actual model being fitted, not the pre/postprocessors
         self._predictedVariableNames: Optional[list] = None
         self._modelInputVariableNames: Optional[list] = None
-        self._modelOutputVariableNames: Optional[list] = None
-        self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
         self.checkInputColumns = checkInputColumns
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
@@ -80,6 +79,192 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         """
         self._inputTransformerChain = DataFrameTransformerChain(*inputTransformers)
         return self
+
+    def withFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]) -> __qualname__:
+        """
+        Makes the model use the given feature generator, which shall be used to compute
+        the actual inputs of the model from the data frame that is given.
+        Cannot be used in conjunction with withFeatureCollector
+
+        Note: Feature computation takes place before input transformation.
+
+        :param featureGenerator: the feature generator to use for input computation
+        :return: self
+        """
+        self._featureGenerator = featureGenerator
+        return self
+
+    def withFeatureCollector(self, featureCollector: FeatureCollector) -> __qualname__:
+        """
+        Makes the model use the given feature collector's multi-feature generator
+        in order compute the actual inputs of the model from the data frame that is given.
+        Cannot be used in conjunction with withFeatureGenerator.
+
+        Note: Feature computation takes place before input transformation.
+
+        :param featureCollector: the feature collector whose feature generator shall be used for input computation
+        :return: self
+        """
+        self._featureGenerator = featureCollector.getMultiFeatureGenerator()
+        return self
+
+    def withName(self, name: str):
+        """
+        Sets the model's name.
+
+        :param name: the name
+        :return: self
+        """
+        self.setName(name)
+        return self
+
+    def _preProcessorsAreFitted(self):
+        result = self._inputTransformerChain.isFitted()
+        if self.getFeatureGenerator() is not None:
+            result = result and self.getFeatureGenerator().isFitted()
+        return result
+
+    def isFitted(self):
+        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
+        if not underlyingModelIsFitted:
+            return False
+        if not self._preProcessorsAreFitted():
+            return False
+        return True
+
+    def _checkModelInputColumns(self, modelInput: pd.DataFrame):
+        if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
+            raise Exception(f"Inadmissible input data frame: "
+                            f"expected columns {self._modelInputVariableNames}, got {list(modelInput.columns)}")
+
+    def computeModelInputs(self, X):
+        """
+        Returns the dataframe that is passed to the model, i.e. the result of applying preprocessors to X.
+        """
+        return self._computeModelInputs(X)
+
+    def _computeModelInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+        """
+        :param X:
+        :param Y: Only has to be provided if fit is True and preprocessors require Y for fitting
+        :param fit: if True, preprocessors will be fitted before being applied to X
+        :return:
+        """
+        if fit:
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.fitGenerate(X, Y, self)
+            X = self._inputTransformerChain.fitApply(X)
+        else:
+            if self._featureGenerator is not None:
+                X = self._featureGenerator.generate(X, self)
+            X = self._inputTransformerChain.apply(X)
+        return X
+
+    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        """
+        Performs a prediction for the given input data frame
+
+        :param x: the input data
+        :return: a DataFrame with the same index as the input
+        """
+        x = self._computeModelInputs(x)
+        self._checkModelInputColumns(x)
+        y = self._predict(x)
+        y.index = x.index
+        return y
+
+    @abstractmethod
+    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    def _underlyingModelRequiresFitting(self) -> bool:
+        """
+        Designed to be overridden for rule-based models.
+
+        :return: True iff the underlying model requires fitting
+        """
+        return True
+
+    def _fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+        # no need for fitGenerate if chain is empty
+        if self._featureGenerator is not None:
+            if len(self._inputTransformerChain) == 0:
+                self._featureGenerator.fit(X, Y)
+            else:
+                X = self._featureGenerator.fitGenerate(X, Y, self)
+        self._inputTransformerChain.fit(X)
+
+    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True):
+        """
+        Fits the model using the given data
+
+        :param X: a data frame containing input data
+        :param Y: a data frame containing output data. None may be passed if the underlying model does not require
+            fitting, e.g. with rule-based models
+        :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
+            If a preprocessor requires fitting, was not separately fit before and this option is set to False,
+            an exception will be raised.
+        """
+        log.info(f"Training {self.__class__.__name__}")
+        self._predictedVariableNames = list(Y.columns)
+        if not self._underlyingModelRequiresFitting():
+            self._fitPreprocessors(X, Y=Y)
+        else:
+            if Y is None:
+                raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
+            X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
+            self._modelInputVariableNames = list(X.columns)
+            log.info(
+                f"Training with outputs[{len(Y.columns)}]={list(Y.columns)}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
+            self._fit(X, Y)
+            self._isFitted = True
+
+    @abstractmethod
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
+        pass
+
+    def getPredictedVariableNames(self):
+        return self._predictedVariableNames
+
+    def getInputTransformer(self, cls: Type[DataFrameTransformer]):
+        for it in self._inputTransformerChain.dataFrameTransformers:
+            if isinstance(it, cls):
+                return it
+        return None
+
+    def getInputTransformerChain(self):
+        return self._inputTransformerChain
+
+    def setName(self, name):
+        self._name = name
+
+    def getName(self):
+        if self._name is None:
+            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
+        return self._name
+
+    def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
+        self.withFeatureGenerator(featureGenerator)
+
+    def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
+        return self._featureGenerator
+
+
+class VectorRegressionModel(VectorModel, ABC):
+    def __init__(self, checkInputColumns=True):
+        """
+        :param checkInputColumns: Whether to check if the input column list (after feature generation)
+            during inference coincides with the input column list during fit.
+            This should be disabled if feature generation is not performed by the model itself,
+            e.g. in ensemble models.
+        """
+        super().__init__(checkInputColumns=checkInputColumns)
+        self._outputTransformerChain = DataFrameTransformerChain()
+        self._modelOutputVariableNames: Optional[list] = None
+        self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
+
+    def isRegressionModel(self) -> bool:
+        return True
 
     def withOutputTransformers(self, *outputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """
@@ -132,46 +317,11 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         self._targetTransformer = targetTransformer
         return self
 
-    def withFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]) -> __qualname__:
-        """
-        Makes the model use the given feature generator, which shall be used to compute
-        the actual inputs of the model from the data frame that is given.
-        Cannot be used in conjunction with withFeatureCollector
-
-        Note: Feature computation takes place before input transformation.
-
-        :param featureGenerator: the feature generator to use for input computation
-        :return: self
-        """
-        self._featureGenerator = featureGenerator
-        return self
-
-    def withFeatureCollector(self, featureCollector: FeatureCollector) -> __qualname__:
-        """
-        Makes the model use the given feature collector's multi-feature generator
-        in order compute the actual inputs of the model from the data frame that is given.
-        Cannot be used in conjunction with withFeatureGenerator.
-
-        Note: Feature computation takes place before input transformation.
-
-        :param featureCollector: the feature collector whose feature generator shall be used for input computation
-        :return: self
-        """
-        self._featureGenerator = featureCollector.getMultiFeatureGenerator()
-        return self
-
-    def withName(self, name: str):
-        """
-        Sets the model's name.
-
-        :param name: the name
-        :return: self
-        """
-        self.setName(name)
-        return self
-
     def getTargetTransformer(self):
         return self._targetTransformer
+
+    def getOutputTransformerChain(self):
+        return self._outputTransformerChain
 
     def _applyPostProcessing(self, y: pd.DataFrame):
         if self._targetTransformer is not None:
@@ -181,7 +331,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         if list(y.columns) != self.getPredictedVariableNames():
             raise Exception(
                 f"The model's predicted variable names are not correct. Got "
-                f"{list(y.columns)} but expected {self.getPredictedVariableNames()}. "  
+                f"{list(y.columns)} but expected {self.getPredictedVariableNames()}. "
                 f"This kind of error can happen if the model's outputTransformerChain changes a data frame's "
                 f"columns (e.g. renames them or changes order). Only output transformer chains that do not change "
                 f"columns are permitted in VectorModel. You can fix this by modifying this instance's outputTransformerChain, "
@@ -190,86 +340,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
             )
         return y
 
-    def _prePostProcessorsAreFitted(self):
-        result = self._inputTransformerChain.isFitted() and self._outputTransformerChain.isFitted()
-        if self.getFeatureGenerator() is not None:
-            result = result and self.getFeatureGenerator().isFitted()
-        return result
-
-    def isFitted(self):
-        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
-        if not underlyingModelIsFitted:
-            return False
-        if not self._prePostProcessorsAreFitted():
-            return False
-        if self._targetTransformer is not None and not self._targetTransformer.isFitted():
-            return False
-        return True
-
-    def _checkModelInputColumns(self, modelInput: pd.DataFrame):
-        if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
-            raise Exception(f"Inadmissible input data frame: "
-                            f"expected columns {self._modelInputVariableNames}, got {list(modelInput.columns)}")
-
-    def computeModelInputs(self, X):
-        """
-        Returns the dataframe that is passed to the model, i.e. the result of applying preprocessors to X.
-        """
-        return self._computeModelInputs(X)
-
-    def _computeModelInputs(self, X: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
-        """
-        :param X:
-        :param Y: Only has to be provided if fit is True and preprocessors require Y for fitting
-        :param fit: if True, preprocessors will be fitted before being applied to X
-        :return:
-        """
-        if fit:
-            if self._featureGenerator is not None:
-                X = self._featureGenerator.fitGenerate(X, Y, self)
-            X = self._inputTransformerChain.fitApply(X)
-        else:
-            if self._featureGenerator is not None:
-                X = self._featureGenerator.generate(X, self)
-            X = self._inputTransformerChain.apply(X)
-        return X
-
-    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        """
-        Performs a prediction for the given input data frame
-
-        :param x: the input data
-        :return: a DataFrame with the same index as the input
-        """
-        x = self._computeModelInputs(x)
-        self._checkModelInputColumns(x)
-        y = self._predict(x)
-        y.index = x.index
-        y = self._applyPostProcessing(y)
-        return y
-
-    @abstractmethod
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    def _underlyingModelRequiresFitting(self) -> bool:
-        """
-        Designed to be overridden for rule-based models.
-
-        :return: True iff the underlying model requires fitting
-        """
-        return True
-
-    def _fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
-        # no need for fitGenerate if chain is empty
-        if self._featureGenerator is not None:
-            if len(self._inputTransformerChain) == 0:
-                self._featureGenerator.fit(X, Y)
-            else:
-                X = self._featureGenerator.fitGenerate(X, Y, self)
-        self._inputTransformerChain.fit(X)
-
-    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True, fitTargetTransformer=True):
+    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True):
         """
         Fits the model using the given data
 
@@ -279,32 +350,24 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
             If a preprocessor requires fitting, was not separately fit before and this option is set to False,
             an exception will be raised.
-        :param fitTargetTransformer: if False, the model's target transformer will not be fitted.
-            If it requires fitting, was not separately fit before and this option is set to False,
-            an exception will be raised.
         """
-        log.info(f"Training {self.__class__.__name__}")
-        self._predictedVariableNames = list(Y.columns)
-        if not self._underlyingModelRequiresFitting():
-            self._fitPreprocessors(X, Y=Y)
-        else:
-            if Y is None:
-                raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
-            X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
-            if self._targetTransformer is not None:
-                if fitTargetTransformer:
-                    Y = self._targetTransformer.fitApply(Y)
-                else:
-                    Y = self._targetTransformer.apply(Y)
-            self._modelInputVariableNames = list(X.columns)
-            self._modelOutputVariableNames = list(Y.columns)
-            log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
-            self._fit(X, Y)
-            self._isFitted = True
+        if self._targetTransformer is not None:
+            Y = self._targetTransformer.fitApply(Y)
+        self._modelOutputVariableNames = list(Y.columns)
+        super().fit(X, Y, fitPreprocessors=fitPreprocessors)
 
-    @abstractmethod
-    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
-        pass
+    def predict(self, x: pd.DataFrame) -> pd.DataFrame:
+        y = super().predict(x)
+        return self._applyPostProcessing(y)
+
+    def isFitted(self):
+        if not super().isFitted():
+            return False
+        if self._targetTransformer is not None and not self._targetTransformer.isFitted():
+            return False
+        if not self._outputTransformerChain.isFitted():
+            return False
+        return True
 
     def getModelOutputVariableNames(self):
         """
@@ -316,40 +379,6 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         use getPredictedVariableNames.
         """
         return self._modelOutputVariableNames
-
-    def getPredictedVariableNames(self):
-        return self._predictedVariableNames
-
-    def getInputTransformer(self, cls: Type[DataFrameTransformer]):
-        for it in self._inputTransformerChain.dataFrameTransformers:
-            if isinstance(it, cls):
-                return it
-        return None
-
-    def getInputTransformerChain(self):
-        return self._inputTransformerChain
-
-    def getOutputTransformerChain(self):
-        return self._outputTransformerChain
-
-    def setName(self, name):
-        self._name = name
-
-    def getName(self):
-        if self._name is None:
-            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
-        return self._name
-
-    def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
-        self.withFeatureGenerator(featureGenerator)
-
-    def getFeatureGenerator(self) -> Optional[FeatureGenerator]:
-        return self._featureGenerator
-
-
-class VectorRegressionModel(VectorModel, ABC):
-    def isRegressionModel(self) -> bool:
-        return True
 
 
 class VectorClassificationModel(VectorModel, ABC):
@@ -379,7 +408,8 @@ class VectorClassificationModel(VectorModel, ABC):
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         pass
 
-    def _convertClassProbabilitiesToPredictions(self, predictedProbabilitiesDf: pd.DataFrame, predictedVariableName="predictedLabel"):
+    def _convertClassProbabilitiesToPredictions(self, predictedProbabilitiesDf: pd.DataFrame,
+                                                predictedVariableName="predictedLabel"):
         """
         Converts from a data frame with probabilities as returned by predictClassProbabilities to a data frame
         with predicted class labels
@@ -404,9 +434,8 @@ class VectorClassificationModel(VectorModel, ABC):
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
         """
-        modelOutputVariableName = self.getModelOutputVariableNames()[0]
-        y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=modelOutputVariableName)
-        y = self._applyPostProcessing(y)
+        predictedVariableName = self.getPredictedVariableNames()[0]
+        y = self._convertClassProbabilitiesToPredictions(df, predictedVariableName=predictedVariableName)
         return y
 
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -437,16 +466,16 @@ class VectorClassificationModel(VectorModel, ABC):
 
             s = valueSeries.sum()
             if not np.isclose(s, 1, rtol=1e-2, ltol=1e-2):
-                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+                log.warning(
+                    f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
     @abstractmethod
     def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
         pass
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        modelOutputVariableName = self.getModelOutputVariableNames()[0]
         predictedProbabilitiesDf = self._predictClassProbabilities(x)
-        return self._convertClassProbabilitiesToPredictions(predictedProbabilitiesDf, predictedVariableName=modelOutputVariableName)
+        return self.convertClassProbabilitiesToPredictions(predictedProbabilitiesDf)
 
 
 class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
@@ -473,7 +502,7 @@ class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
         :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
         :param kwargs: for consistency with VectorModel interface, will be ignored
         """
-        super().fit(X, Y, fitPreprocessors=True, fitTargetTransformer=False)
+        super().fit(X, Y, fitPreprocessors=True)
 
 
 class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
@@ -485,8 +514,6 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
             raise Exception(f"Found duplicate label: {duplicate}")
         self._labels = labels
         self._predictedVariableNames = [predictedVariableName]
-        # guaranteed to be the same as predictedVariableNames since target transformers and output transformers are disallowed
-        self._modelOutputVariableNames = self._predictedVariableNames
 
     def _underlyingModelRequiresFitting(self):
         return False
@@ -505,4 +532,4 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
         :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
         :param kwargs: for consistency with VectorModel interface, will be ignored
         """
-        super().fit(X, Y, fitPreprocessors=True, fitTargetTransformer=False)
+        super().fit(X, Y, fitPreprocessors=True)
