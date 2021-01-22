@@ -284,10 +284,7 @@ class VectorRegressionModel(VectorModel, ABC):
         **How not to use**: Output transformers are not meant to transform the predictions into something with a
         different semantic meaning (e.g. normalized into non-normalized or something like that) - you should consider
         using a targetTransformer for this purpose. Instead, they give the possibility to improve predictions through
-        post processing, when this is desired. E.g. if your model predicts labels, make sure that the output
-        transformers predict the same labels or you might get nasty behaviour during evaluation. Note that for
-        probabilistic classifiers the output transformers will not be applied to the probability vectors
-        but to the actual label predictions, unless explicitly stated otherwise.
+        post processing, when this is desired.
 
         :param outputTransformers: DataFrameTransformers for the transformation of outputs
             (after the model has been applied)
@@ -417,7 +414,7 @@ class VectorClassificationModel(VectorModel, ABC):
         """
         labels = self.getClassLabels()
         dfCols = list(df.columns)
-        if dfCols != labels:
+        if sorted(dfCols) != labels:
             raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
         yArray = df.values
         maxIndices = np.argmax(yArray, axis=1)
@@ -427,7 +424,8 @@ class VectorClassificationModel(VectorModel, ABC):
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         :param x: the input data
-        :return: a data frame where the list of columns is the list of class labels and the values are probabilities
+        :return: a data frame where the list of columns is the list of class labels and the values are probabilities.
+            Returns None if the classifier cannot predict probabilities.
         """
         x = self._computeModelInputs(x)
         result = self._predictClassProbabilities(x)
@@ -457,10 +455,23 @@ class VectorClassificationModel(VectorModel, ABC):
 
     @abstractmethod
     def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
-        pass
+        """
+        If you are implementing a probabilistic classifier, this method has to return a data frame with probabilities
+        (one column per label). The default implementation of _predict will then use the output of
+        this method and convert it to predicted labels (via argmax).
+
+        In case you want to predict labels only or have a more efficient implementation of predicting labels than
+        using argmax, your will have to override _predict in your implementation. In the former case of a
+        non-probabilistic classifier, the implementation of this method should raise an exception, like the one below.
+        """
+        raise NotImplementedError(f"Model {self.__class__.__name__} does not support prediction of probabilities")
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        predictedProbabilitiesDf = self._predictClassProbabilities(x)
+        try:
+            predictedProbabilitiesDf = self._predictClassProbabilities(x)
+        except Exception:
+            raise Exception(f"Wrong implementation of {self.__class__.__name__}. For non-probabilistic classifiers "
+                            "_predict has to be overrode!")
         return self.convertClassProbabilitiesToPredictions(predictedProbabilitiesDf)
 
 
@@ -502,7 +513,7 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
         duplicate = getFirstDuplicate(labels)
         if duplicate is not None:
             raise Exception(f"Found duplicate label: {duplicate}")
-        self._labels = labels
+        self._labels = sorted(labels)
         self._predictedVariableNames = [predictedVariableName]
 
     def _underlyingModelRequiresFitting(self):

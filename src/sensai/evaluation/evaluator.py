@@ -221,8 +221,6 @@ class VectorClassificationModelEvaluator(PredictorModelEvaluator[ClassificationM
         """
         if self.computeProbabilities:
             classProbabilities = model.predictClassProbabilities(inputOutputData.inputs)
-            if classProbabilities is None:
-                raise Exception(f"Requested computation of class probabilities for a model which does not support it: {model} returned None")
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:
             classProbabilities = None
