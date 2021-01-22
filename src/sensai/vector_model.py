@@ -39,6 +39,24 @@ class PredictorModel(ABC):
     def getPredictedVariableNames(self) -> list:
         pass
 
+    def withName(self, name: str):
+        """
+        Sets the model's name.
+
+        :param name: the name
+        :return: self
+        """
+        self.setName(name)
+        return self
+
+    def setName(self, name):
+        self._name = name
+
+    def getName(self):
+        if self._name is None:
+            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
+        return self._name
+
 
 class FittableModel(PredictorModel, ABC):
     @abstractmethod
@@ -106,16 +124,6 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :return: self
         """
         self._featureGenerator = featureCollector.getMultiFeatureGenerator()
-        return self
-
-    def withName(self, name: str):
-        """
-        Sets the model's name.
-
-        :param name: the name
-        :return: self
-        """
-        self.setName(name)
         return self
 
     def _preProcessorsAreFitted(self):
@@ -234,14 +242,6 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
 
     def getInputTransformerChain(self):
         return self._inputTransformerChain
-
-    def setName(self, name):
-        self._name = name
-
-    def getName(self):
-        if self._name is None:
-            return "unnamed-%s-%x" % (self.__class__.__name__, id(self))
-        return self._name
 
     def setFeatureGenerator(self, featureGenerator: Optional[FeatureGenerator]):
         self.withFeatureGenerator(featureGenerator)
