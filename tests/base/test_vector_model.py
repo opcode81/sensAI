@@ -7,7 +7,7 @@ import pytest
 from sensai.data_transformation import DFTDRowFilterOnIndex, \
     InvertibleDataFrameTransformer
 from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureGenerator
-from sensai.vector_model import RuleBasedModel, VectorModel
+from sensai.vector_model import RuleBasedVectorRegressionModel, VectorRegressionModel
 
 
 class FittableFgen(FeatureGenerator):
@@ -31,7 +31,9 @@ class FittableDFT(InvertibleDataFrameTransformer):
         return df
 
 
-class SampleRuleBasedModel(RuleBasedModel):
+class SampleRuleBasedVectorModel(RuleBasedVectorRegressionModel):
+    def __init__(self):
+        super(SampleRuleBasedVectorModel, self).__init__(predictedVariableNames=["prediction"])
 
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=X.index)
@@ -43,16 +45,13 @@ class SampleRuleBasedModel(RuleBasedModel):
         return True
 
 
-class SampleVectorModel(VectorModel):
+class SampleVectorModel(VectorRegressionModel):
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=x.index)
 
     def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
         pass
-
-    def isRegressionModel(self) -> bool:
-        return True
 
 
 @pytest.fixture()
@@ -77,7 +76,7 @@ def fittableDFT():
 
 @pytest.fixture()
 def ruleBasedModel():
-    return SampleRuleBasedModel()
+    return SampleRuleBasedVectorModel()
 
 
 @pytest.fixture()
@@ -96,14 +95,14 @@ def fittedVectorModel():
 
 
 class TestIsFitted:
-    @pytest.mark.parametrize("model", [SampleRuleBasedModel(), fittedVectorModel()])
+    @pytest.mark.parametrize("model", [SampleRuleBasedVectorModel(), fittedVectorModel()])
     def test_isFittedWhenPreprocessorsRuleBased(self, model, ruleBasedDFT, ruleBasedFgen):
         assert model.isFitted()
         model.withFeatureGenerator(ruleBasedFgen)
         model.withInputTransformers(ruleBasedDFT)
         assert model.isFitted()
 
-    @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedModel, fittedVectorModel])
+    @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedVectorModel, fittedVectorModel])
     def test_isFittedWithFittableProcessors(self, modelConstructor, fittableDFT, fittableFgen):
         # is fitted after fit with model
         model = modelConstructor().withInputTransformers(fittableDFT)

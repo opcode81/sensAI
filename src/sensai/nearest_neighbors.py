@@ -267,9 +267,6 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def findNeighbors(self, namedTuple):
         return self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
 
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
-
     def __str__(self):
         return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 

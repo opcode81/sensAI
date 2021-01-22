@@ -1,18 +1,17 @@
 import collections
+import logging
 import re
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from typing import Optional
-import logging
-
 import torch
 
-from ..util.string import objectRepr
 from . import torch_modules
 from .torch_base import VectorTorchModel, TorchVectorRegressionModel, TorchVectorClassificationModel
 from .torch_data import TorchDataSetProviderFromDataUtil, DataUtil, TensorScaler, TensorScalerIdentity
 from ..normalisation import NormalisationMode
-
+from ..util.string import objectRepr
 
 log = logging.getLogger(__name__)
 
@@ -148,8 +147,8 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
         result = super()._predictOutputsForInputDataFrame(inputs)
         return np.squeeze(result, 2)
 
-    def _computeInputs(self, x: pd.DataFrame, y=None, fit=False) -> pd.DataFrame:
-        x = super()._computeInputs(x, Y=y, fit=fit)
+    def _computeModelInputs(self, x: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
+        x = super()._computeModelInputs(x, Y=Y, fit=fit)
 
         # sort input data frame columns by name
         x = x[sorted(x.columns)]

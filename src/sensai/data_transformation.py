@@ -112,6 +112,9 @@ class DataFrameTransformerChain(DataFrameTransformer):
         super().__init__()
         self.dataFrameTransformers = flattenArguments(dataFrameTransformers)
 
+    def __len__(self):
+        return len(self.dataFrameTransformers)
+
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         for transformer in self.dataFrameTransformers:
             df = transformer.apply(df)
@@ -136,6 +139,7 @@ class DataFrameTransformerChain(DataFrameTransformer):
     def info(self):
         info = super().info()
         info["chainedDFTTransformerNames"] = self.getNames()
+        info["length"] = len(self)
         return info
 
 
