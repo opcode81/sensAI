@@ -353,10 +353,14 @@ class VectorRegressionModel(VectorModel, ABC):
 
 
 class VectorClassificationModel(VectorModel, ABC):
-    def __init__(self):
+    def __init__(self, checkInputColumns=True):
         """
+        :param checkInputColumns: Whether to check if the input column list (after feature generation)
+            during inference coincides with the input column list during fit.
+            This should be disabled if feature generation is not performed by the model itself,
+            e.g. in ensemble models.
         """
-        super().__init__()
+        super().__init__(checkInputColumns=checkInputColumns)
         self._labels = None
 
     def isRegressionModel(self) -> bool:
