@@ -175,6 +175,10 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
+        if not self.isFitted():
+            # TODO: raise an Exception instead?
+            log.warning(f"Calling predict with unfitted model. "
+                        f"This might lead to errors down the line, especially if input/output checks are enabled")
         x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
@@ -427,6 +431,10 @@ class VectorClassificationModel(VectorModel, ABC):
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities.
             Returns None if the classifier cannot predict probabilities.
         """
+        if not self.isFitted():
+            # TODO: raise an Exception instead?
+            log.warning(f"Calling predict with unfitted model. "
+                        f"This might lead to errors down the line, especially if input/output checks are enabled")
         x = self._computeModelInputs(x)
         result = self._predictClassProbabilities(x)
         self._checkPrediction(result)

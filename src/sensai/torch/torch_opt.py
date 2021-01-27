@@ -360,7 +360,7 @@ class NNOptimiser:
         :param gpu: index of the gpu to be used, if parameter cuda is True
         :param optimiser: the optimizer to be used; defaults to "adam"
         :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
-        :param optimiserLR: the optimizer's learning rate decay
+        :param optimiserLR: the optimiser's learning rate decay
         :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
             If no validation is to be performed, pass 1.0.
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
