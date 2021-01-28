@@ -411,7 +411,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
         """
-        Converts from a result returned by predictClassProbabilities to a result as return by predict.
+        Converts from a data frame as returned by predictClassProbabilities to a result as return by predict.
 
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
@@ -429,7 +429,7 @@ class VectorClassificationModel(VectorModel, ABC):
         """
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities.
-            Returns None if the classifier cannot predict probabilities.
+            Raises an exception if the classifier cannot predict probabilities.
         """
         if not self.isFitted():
             # TODO: raise an Exception instead?
@@ -442,7 +442,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def _checkPrediction(self, predictionDf: pd.DataFrame, maxRowsToCheck=5):
         """
-        Checks whether the column names are correctly set and whether the entries correspond to probabilities
+        Checks whether the column names are correctly set, sorted and whether the entries correspond to probabilities
         """
         labels = self.getClassLabels()
         if list(predictionDf.columns) != labels:
