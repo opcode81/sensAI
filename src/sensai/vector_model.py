@@ -422,7 +422,7 @@ class VectorClassificationModel(VectorModel, ABC):
             raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
         yArray = df.values
         maxIndices = np.argmax(yArray, axis=1)
-        result = [labels[i] for i in maxIndices]
+        result = [dfCols[i] for i in maxIndices]
         return pd.DataFrame(result, columns=self.getPredictedVariableNames())
 
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
