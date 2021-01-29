@@ -1,6 +1,7 @@
 import logging
-import sys
 import os
+import sys
+
 import pandas as pd
 import pytest
 import sklearn.datasets

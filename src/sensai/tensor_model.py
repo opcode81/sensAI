@@ -221,7 +221,7 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         self._fitTensorModel(X, Y)
 
-    def isRegressionModel(self) -> bool:
+    def isRegressionModel(self) -> bool:d
         return False
 
     def getNumPredictedClasses(self):
