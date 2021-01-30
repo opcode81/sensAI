@@ -79,11 +79,8 @@ TInputOutputData = TypeVar("TInputOutputData", bound=BaseInputOutputData)
 
 class DataSplitter(ABC):
     @abstractmethod
-    def split(self, data: TInputOutputData) -> Tuple[InputOutputDataFrames, InputOutputDataFrames]:
+    def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
         pass
-
-
-IOData = TypeVar("IOData", bound=InputOutputData)
 
 
 class DataSplitterFractional(DataSplitter):
@@ -94,7 +91,7 @@ class DataSplitterFractional(DataSplitter):
         self.shuffle = shuffle
         self.randomSeed = randomSeed
 
-    def split(self, data: IOData) -> Tuple[IOData, IOData]:
+    def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
         numDataPoints = len(data)
         splitIndex = int(numDataPoints * self.fractionalSizeOfFirstSet)
         rand = np.random.RandomState(self.randomSeed)
