@@ -62,8 +62,8 @@ def createVectorModelCrossValidator(data: InputOutputData, model: VectorModel = 
     return cons(data, folds=folds, **kwargs)
 
 
-def createEvaluationUtil(data: InputOutputData, model: VectorModel = None,
-        isRegression: bool = None, evaluatorParams: Optional[Dict[str, Any]] = None,
+def createEvaluationUtil(data: InputOutputData, model: VectorModel = None, isRegression: bool = None,
+        evaluatorParams: Optional[Dict[str, Any]] = None,
         crossValidatorParams: Optional[Dict[str, Any]] = None) \
             -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
     cons = RegressionEvaluationUtil if _isRegression(model, isRegression) else ClassificationEvaluationUtil

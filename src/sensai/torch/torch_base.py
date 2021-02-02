@@ -29,7 +29,7 @@ class TorchModel(ABC):
 
     def __init__(self, cuda=True):
         self.cuda = cuda
-        self.module: torch.nn.Module = None
+        self.module: Optional[torch.nn.Module] = None
         self.outputScaler: Optional[TensorScaler] = None
         self.inputScaler: Optional[TensorScaler] = None
         self.bestEpoch = None

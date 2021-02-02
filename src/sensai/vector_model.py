@@ -175,6 +175,9 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :param x: the input data
         :return: a DataFrame with the same index as the input
         """
+        if not self.isFitted():
+            raise Exception(f"Calling predict with unfitted model. "
+                            f"This might lead to errors down the line, especially if input/output checks are enabled")
         x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
@@ -407,7 +410,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def convertClassProbabilitiesToPredictions(self, df: pd.DataFrame):
         """
-        Converts from a result returned by predictClassProbabilities to a result as return by predict.
+        Converts from a data frame as returned by predictClassProbabilities to a result as return by predict.
 
         :param df: the output data frame from predictClassProbabilities
         :return: an output data frame as it would be returned by predict
@@ -418,15 +421,18 @@ class VectorClassificationModel(VectorModel, ABC):
             raise ValueError(f"Expected data frame with columns {labels}, got {dfCols}")
         yArray = df.values
         maxIndices = np.argmax(yArray, axis=1)
-        result = [labels[i] for i in maxIndices]
+        result = [dfCols[i] for i in maxIndices]
         return pd.DataFrame(result, columns=self.getPredictedVariableNames())
 
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         :param x: the input data
         :return: a data frame where the list of columns is the list of class labels and the values are probabilities.
-            Returns None if the classifier cannot predict probabilities.
+            Raises an exception if the classifier cannot predict probabilities.
         """
+        if not self.isFitted():
+            raise Exception(f"Calling predict with unfitted model. "
+                            f"This might lead to errors down the line, especially if input/output checks are enabled")
         x = self._computeModelInputs(x)
         result = self._predictClassProbabilities(x)
         self._checkPrediction(result)
@@ -434,7 +440,7 @@ class VectorClassificationModel(VectorModel, ABC):
 
     def _checkPrediction(self, predictionDf: pd.DataFrame, maxRowsToCheck=5):
         """
-        Checks whether the column names are correctly set and whether the entries correspond to probabilities
+        Checks whether the column names are correctly set, sorted and whether the entries correspond to probabilities
         """
         labels = self.getClassLabels()
         if list(predictionDf.columns) != labels:
@@ -449,7 +455,7 @@ class VectorClassificationModel(VectorModel, ABC):
                             f"got probabilities outside the range [0, 1]: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
             s = valueSeries.sum()
-            if not np.isclose(s, 1, rtol=1e-2, ltol=1e-2):
+            if not np.isclose(s, 1, atol=1e-2):
                 log.warning(
                     f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
