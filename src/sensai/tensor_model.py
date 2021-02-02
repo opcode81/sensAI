@@ -44,15 +44,14 @@ def _checkDfShape(df: pd.DataFrame, desiredShape: tuple):
         raise InvalidShapeError(f"Wrong input shape for data point. Expected {desiredShape} but got {datapointShape}")
 
 
-# This has to be implemented as a mixin because there can be no functional common class for tensor models.
+# This is implemented as a mixin because there can be no functional common class for all tensor models.
 # The reason is that actual implementations need to inherit from Vector-Regression/Classification-Model
 # (or duplicate a lot of code) and thus it is not possible to inherit from something like TensorModel(VectorModel)
-# without getting into a mess. Despite that, we want things to "be a TensorModel", hence this class.
+# without getting into a mess.
 class TensorModel(ABC):
-    # will be set during _fitToTensorModel. None is immutable so it is safe to set the default on class level
-    # We avoid using an init here to ensure the mixin-like nature of this class. Unfortunately, it is a bit hacky...
-    _modelInputShape = None
-    _modelOutputShape = None
+    def __init__(self):
+        self._modelInputShape = None
+        self._modelOutputShape = None
 
     @abstractmethod
     def _fitToArray(self, X: np.ndarray, Y: np.ndarray):
@@ -131,7 +130,8 @@ class TensorToScalarRegressionModel(VectorRegressionModel, TensorModel, ABC):
             to be disabled
         :param checkInputColumns: Whether to check if input columns at predict time coincide with those at fit time
         """
-        super().__init__(checkInputColumns=checkInputColumns)
+        VectorRegressionModel.__init__(self, checkInputColumns=checkInputColumns)
+        TensorModel.__init__(self)
         self.checkInputShape = checkInputShape
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
@@ -157,7 +157,8 @@ class TensorToScalarClassificationModel(VectorClassificationModel, TensorModel, 
             to be disabled
         :param checkInputColumns: Whether to check if input columns at predict time coincide with those at fit time
         """
-        super().__init__(checkInputColumns=checkInputColumns)
+        VectorClassificationModel.__init__(self, checkInputColumns=checkInputColumns)
+        TensorModel.__init__(self)
         self.checkInputShape = checkInputShape
 
     def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -208,7 +209,8 @@ class TensorToTensorRegressionModel(VectorRegressionModel, TensorModel, ABC):
             to be disabled
         :param checkInputColumns: Whether to check if input columns at predict time coincide with those at fit time
         """
-        super().__init__(checkInputColumns=checkInputColumns)
+        VectorRegressionModel.__init__(self, checkInputColumns=checkInputColumns)
+        TensorModel.__init__(self)
         self.checkInputShape = checkInputShape
         self.checkOutputShape = checkOutputShape
 
@@ -245,7 +247,8 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
             to be disabled
         :param checkInputColumns: Whether to check if input columns at predict time coincide with those at fit time
         """
-        super().__init__(checkInputColumns=checkInputColumns)
+        VectorModel.__init__(self, checkInputColumns=checkInputColumns)
+        TensorModel.__init__(self)
         self.checkInputShape = checkInputShape
         self.checkOutputShape = checkOutputShape
         self._numPredictedClasses: Optional[int] = None
@@ -253,7 +256,7 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         self._fitTensorModel(X, Y)
 
-    def isRegressionModel(self) -> bool:d
+    def isRegressionModel(self) -> bool:
         return False
 
     def getNumPredictedClasses(self):
