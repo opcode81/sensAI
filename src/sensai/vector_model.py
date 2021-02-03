@@ -9,7 +9,7 @@ import scipy.stats
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 T = TypeVar('T')
@@ -212,7 +212,7 @@ class VectorModel(PredictorModel, ABC):
         :param X: a data frame containing input data
         :param Y: a data frame containing output data
         """
-        log.info(f"Training {self.__class__.__name__}")
+        _log.info(f"Training {self.__class__.__name__}")
         self._predictedVariableNames = list(Y.columns)
         X = self._computeInputs(X, y=Y)
         if self._targetTransformer is not None:
@@ -220,7 +220,7 @@ class VectorModel(PredictorModel, ABC):
             Y = self._targetTransformer.apply(Y)
         self._modelInputVariableNames = list(X.columns)
         self._modelOutputVariableNames = list(Y.columns)
-        log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]={self._modelInputVariableNames}")
+        _log.info(f"Training with outputs[{len(self._modelOutputVariableNames)}]={self._modelOutputVariableNames}, inputs[{len(self._modelInputVariableNames)}]={self._modelInputVariableNames}")
         self._fit(X, Y)
         self._isFitted = True
 
@@ -326,7 +326,7 @@ class VectorClassificationModel(VectorModel, ABC):
         for i, (_, valueSeries) in enumerate(dfToCheck.iterrows(), start=1):
             s = valueSeries.sum()
             if abs(s-1.0) > 0.01:
-                log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
+                _log.warning(f"Probabilities data frame may not be correctly normalised: checked row {i}/{maxRowsToCheck} contains {list(valueSeries)}")
 
         return result
 

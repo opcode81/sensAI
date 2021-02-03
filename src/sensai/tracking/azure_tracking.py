@@ -1,4 +1,3 @@
-from abc import ABC
 from typing import Union, Dict, Any
 from azureml.core import Experiment, Workspace
 
@@ -7,7 +6,7 @@ from ..evaluation import VectorModelEvaluator, VectorModelCrossValidator
 from .tracking_base import TrackedExperiment
 
 
-class TrackedAzureMLEvaluation(ABC):
+class TrackedAzureMLEvaluation:
     """
     Class to automatically track parameters, metrics and artifacts for a single model with azureml-sdk
     """
@@ -22,8 +21,8 @@ class TrackedAzureMLEvaluation(ABC):
         self.evaluator = evaluator
         self.experiment = Experiment(workspace=workspace, name=experimentName)
 
-    def evalModel(self, model: VectorModel, additionalLoggingValuesDict: dict = None):
-        with self.experiment.start_logging() as run:
+    def evalModel(self, model: VectorModel, additionalLoggingValuesDict: dict = None, **startLoggingKwargs):
+        with self.experiment.start_logging(**startLoggingKwargs) as run:
             valuesDict = evaluation.computeEvaluationMetricsDict(model, self.evaluator)
             valuesDict['str(model)'] = str(model)
             if additionalLoggingValuesDict is not None:

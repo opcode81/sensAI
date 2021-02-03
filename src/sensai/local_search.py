@@ -459,7 +459,7 @@ class SAChain:
                 costChangeValue = costChange.value()
                 p, T = self.schedule.probability(degreeOfCompletion, costChangeValue)
                 makeMove = r.random() <= p
-                self.log.debug(f'p: {p}, T: {T}, costDelta: {costChangeValue}, move: {makeMove}')
+                self._log.debug(f'p: {p}, T: {T}, costDelta: {costChangeValue}, move: {makeMove}')
                 if self.collectStats:
                     self.loggedSeries["temperatures"].append(T)
                     self.loggedSeries["probabilities"].append(p)
@@ -475,8 +475,8 @@ class SAChain:
 
         self.stepsTaken += 1
 
-        if self.log.isEnabledFor(logging.DEBUG):
-            self.log.debug(f"Step {self.stepsTaken}: cost={self.state.cost}; best cost={self.bestCost}")
+        if self._log.isEnabledFor(logging.DEBUG):
+            self._log.debug(f"Step {self.stepsTaken}: cost={self.state.cost}; best cost={self.bestCost}")
 
     def logStats(self):
         stats = {"useless moves total (None params)": f"{self.countNoneParams}/{self.stepsTaken}"}
@@ -492,8 +492,8 @@ class SAChain:
                 if positiveCostDeltas:
                     stats["positive cost delta"] = "mean=%.3f +- %.3f, max=%.3f" % (np.mean(positiveCostDeltas), np.std(positiveCostDeltas), np.max(positiveCostDeltas))
         statsJoin = "\n    " if self.collectStats else "; "
-        self.log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
-        self.log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
+        self._log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
+        self._log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
 
     def applyBestState(self):
         """Writes the best state found in this chain to the result object"""
@@ -559,7 +559,7 @@ class SimulatedAnnealing:
         :param stateFactory: the factory with which to create the (initial) state
         """
         chain = SAChain(stateFactory, self.scheduleFactory(), opsAndWeights=self.opsAndWeights, randomSeed=self.randomSeed, collectStats=self.collectStats)
-        self.log.info(f"Running simulated annealing with {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
+        self._log.info(f"Running simulated annealing with {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
         startTime = time.time()
         while True:
             timeElapsed = time.time() - startTime
@@ -570,7 +570,7 @@ class SimulatedAnnealing:
             else:
                 degreeOfCompletion = timeElapsed / self.duration
             chain.step(degreeOfCompletion)
-        self.log.info(f"Simulated annealing completed after {time.time()-startTime:.1f} seconds, {chain.stepsTaken} steps")
+        self._log.info(f"Simulated annealing completed after {time.time()-startTime:.1f} seconds, {chain.stepsTaken} steps")
         chain.logStats()
         chain.applyBestState()
         if self.collectStats:
@@ -652,13 +652,13 @@ class ParallelTempering:
 
         :param stateFactory: the factory with which to create the states for all chains
         """
-        self.log.info(f"Running parallel tempering with {self.numChains} chains, {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
+        self._log.info(f"Running parallel tempering with {self.numChains} chains, {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
 
         r = random.Random(self.randomSeed)
         chains = []
         costProgressions = []
         for i, schedule in enumerate(self._createSchedules(), start=1):
-            self.log.info(f"Chain {i} uses {schedule}")
+            self._log.info(f"Chain {i} uses {schedule}")
             chains.append(SAChain(stateFactory, schedule, opsAndWeights=self.opsAndWeights, randomSeed=r.randint(0, 1000)))
             costProgressions.append([])
 
@@ -694,7 +694,7 @@ class ParallelTempering:
 
             step += 1
 
-        self.log.info(f"Number of chain swaps: {numChainSwaps}")
+        self._log.info(f"Number of chain swaps: {numChainSwaps}")
         if self.logCostProgression: self._costProgressions = costProgressions
 
         # apply best solution

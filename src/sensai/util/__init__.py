@@ -1,6 +1,8 @@
 from typing import Sequence, TypeVar, List
 
 from . import cache
+from . import cache_mysql
+from . import cache_azure
 
 T = TypeVar("T")
 
