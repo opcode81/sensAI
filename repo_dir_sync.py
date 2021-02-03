@@ -14,10 +14,20 @@ def call(cmd):
     return p.stdout.read().decode("utf-8")
 
 
-def execute(cmd):
+def execute(cmd, exceptionOnError=True):
+    """
+    :param cmd: the command to execute
+    :param exceptionOnError: if True, raise on exception on error (return code not 0); if False return
+        whether the call was successful
+    :return: True if the call was successful, False otherwise (if exceptionOnError==False)
+    """
     ret = os.system(cmd)
-    if ret != 0:
-        raise Exception("Command failed: %s" % cmd)
+    success = ret == 0
+    if exceptionOnError:
+        if not success:
+            raise Exception("Command failed: %s" % cmd)
+    else:
+        return success
 
 
 def gitLog(path, arg):
@@ -36,12 +46,13 @@ def gitCommit(msg):
 
 
 LIB_DIRECTORY = os.path.join("src", "sensai")
-LIB_NAME = "sensai"
+LIB_NAME = "sensAI"
 
 
 class OtherRepo:
     SYNC_COMMIT_ID_FILE_LIB_REPO = ".syncCommitId.remote"
     SYNC_COMMIT_ID_FILE_THIS_REPO = ".syncCommitId.this"
+    SYNC_COMMIT_MESSAGE = f"Updated {LIB_NAME} sync commit identifiers"
     
     def __init__(self, name, branch, pathToBasicModels):
         self.pathToLibInThisRepo = os.path.abspath(pathToBasicModels)
@@ -49,15 +60,23 @@ class OtherRepo:
             raise ValueError(f"Repository directory '{self.pathToLibInThisRepo}' does not exist")
         self.name = name
         self.branch = branch
+
+    def isSyncEstablished(self):
+        return os.path.exists(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO))
     
     def lastSyncIdThisRepo(self):
         with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_THIS_REPO), "r") as f:
             commitId = f.read().strip()
         return commitId
-    
+
+    def lastSyncIdLibRepo(self):
+        with open(os.path.join(self.pathToLibInThisRepo, self.SYNC_COMMIT_ID_FILE_LIB_REPO), "r") as f:
+            commitId = f.read().strip()
+        return commitId
+
     def gitLogThisRepoSinceLastSync(self):
         lg = gitLog(self.pathToLibInThisRepo, '--name-only HEAD "^%s" .' % self.lastSyncIdThisRepo())
-        lg = re.sub(r'commit [0-9a-z]{8,40}\n.*\n.*\n\s*\n.*\n\s*\n.*\.syncCommitId\.this', r"", lg, flags=re.MULTILINE)  # remove commits with sync commit id update
+        lg = re.sub(r'commit [0-9a-z]{8,40}\n.*\n.*\n\s*\n.*\n\s*(\n.*\.syncCommitId\.(this|remote))+', r"", lg, flags=re.MULTILINE)  # remove commits with sync commit id update
         indent = "  "
         lg = indent + lg.replace("\n", "\n" + indent)
         return lg
@@ -74,18 +93,41 @@ class OtherRepo:
         lg = indent + lg.replace("\n", "\n" + indent)
         return "\n\n" + lg
 
+    def _userInputYesNo(self, question) -> bool:
+        result = None
+        while result not in ("y", "n"):
+            result = input(question + " [y|n]: ").strip()
+        return result == "y"
+
     def pull(self, libRepo: "LibRepo"):
         """
         Pulls in changes from this repository into the lib repo
         """
+        # switch to branch in lib repo
+        os.chdir(libRepo.rootPath)
+        execute("git checkout %s" % self.branch)
+
+        # check if the branch contains the commit that is referenced as the remote commit
+        remoteCommitId = self.lastSyncIdLibRepo()
+        remoteCommitExists = execute("git rev-list HEAD..%s" % remoteCommitId, exceptionOnError=False)
+        if not remoteCommitExists:
+            if not self._userInputYesNo(f"\nWARNING: The referenced remote commit {remoteCommitId} does not exist "
+                                        f"in your {LIB_NAME} branch '{self.branch}'!\nSomeone else may have "
+                                        f"pulled/pushed in the meantime.\nIt is recommended that you do not continue. "
+                                        f"Continue?"):
+                return
+
+        # get log with relevant commits in this repo that are to be pulled
+        lg = self.gitLogThisRepoSinceLastSync()
+
+        print("Relevant commits:\n\n" + lg + "\n\n")
+        if not self._userInputYesNo(f"The above changes will be pulled from {self.name}. Continue?"):
+            return
+
         os.chdir(libRepo.rootPath)
 
-        # switch to branch in lib repo and remove library tree
-        execute("git checkout %s" % self.branch)
+        # remove library tree in lib repo
         shutil.rmtree(LIB_DIRECTORY)
-
-        # get log with relevant commits in this repo
-        lg = self.gitLogThisRepoSinceLastSync()
 
         # copy tree from this repo to lib repo
         shutil.copytree(self.pathToLibInThisRepo, LIB_DIRECTORY)
@@ -107,28 +149,40 @@ class OtherRepo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(newSyncCommitIdThisRepo)
         execute('git add %s %s' % (self.SYNC_COMMIT_ID_FILE_LIB_REPO, self.SYNC_COMMIT_ID_FILE_THIS_REPO))
-        execute('git commit -m "Updated sync commit identifiers (pull)"')
+        execute(f'git commit -m "{self.SYNC_COMMIT_MESSAGE} (pull)"')
 
-        print(f"\n\nIf everything was successful, you should now try to merge '{self.branch}' into master:\ngit push\ngit checkout master; git merge {self.branch}\ngit push")
+        print(f"\n\nIf everything was successful, you should now push your changes to branch "
+              f"'{self.branch}'\nand get your branch merged into develop (issuing a pull request where appropriate)")
         
     def push(self, libRepo: "LibRepo"):
         """
         Pushes changes from the lib repo to this repo
         """
-
-        # get change log since last sync
-        libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
-
         os.chdir(libRepo.rootPath)
 
-        # check if this repo's branch in the source repo was merged into master
-        unmergedBranches = call("git branch --no-merged master")
-        if self.branch in unmergedBranches:
-            raise Exception(f"Branch {self.branch} has not been merged into master")
-
-        # switch to the source repo branch and merge master into it (to make sure it's up to date)
+        # switch to the source repo branch and merge develop into it (to make sure it's up to date)
         execute(f"git checkout {self.branch}")
-        execute("git merge master")
+        execute("git merge develop")
+
+        if self.isSyncEstablished():
+
+            # check if there are any commits that have not yet been pulled
+            unpulledCommits = self.gitLogThisRepoSinceLastSync().strip()
+            if unpulledCommits != "":
+                print(f"\n{unpulledCommits}\n\n")
+                if not self._userInputYesNo(f"WARNING: The above changes in repository '{self.name}' have not"
+                                            f" yet been pulled.\nYou might want to pull them.\n"
+                                            f"If you continue with the push, they will be lost. Continue?"):
+                    return
+
+            # get change log in lib repo since last sync
+            libLogSinceLastSync = self.gitLogLibRepoSinceLastSync(libRepo)
+
+            print("Relevant commits:\n\n" + libLogSinceLastSync + "\n\n")
+            if not self._userInputYesNo("The above changes will be pushed. Continue?"):
+                return
+        else:
+            libLogSinceLastSync = ""
 
         # remove the target repo tree and update it with the tree from the source repo
         shutil.rmtree(self.pathToLibInThisRepo)
@@ -151,7 +205,7 @@ class OtherRepo:
         with open(self.SYNC_COMMIT_ID_FILE_THIS_REPO, "w") as f:
             f.write(commitId)
         execute("git add %s" % self.SYNC_COMMIT_ID_FILE_THIS_REPO)
-        execute('git commit -m "Updated sync commit identifier (push)"')
+        execute(f'git commit -m "{self.SYNC_COMMIT_MESSAGE} (push)"')
 
         os.chdir(libRepo.rootPath)
         

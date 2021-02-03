@@ -13,8 +13,6 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
     """
     def __init__(self, pseudoCount=0.1):
         """
-        :param inputTransformers: the sequence of input transformers
-        :param inputTransformers: the sequence of output transformers
         :param pseudoCount: the count to add to each empirical count in order to avoid overfitting
         """
         super().__init__()
@@ -64,4 +62,4 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
                     bestLp = lp
                     bestCls = cls
             results.append(bestCls)
-        return pd.DataFrame(results, columns=self.getModelOutputVariableNames())
+        return pd.DataFrame(results, columns=self.getPredictedVariableNames())

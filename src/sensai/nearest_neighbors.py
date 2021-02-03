@@ -1,20 +1,19 @@
 import collections
-import typing
-
 import datetime
 import logging
+import typing
 from abc import ABC, abstractmethod
-from typing import Callable, List, Iterable
+from typing import Callable, List, Iterable, Optional
 
 import numpy as np
 import pandas as pd
 
 from . import distance_metric, util, data_transformation
-from .vector_model import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
 from .featuregen import FeatureGeneratorFromNamedTuples
 from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
+from .vector_model import VectorClassificationModel, VectorRegressionModel
 
 _log = logging.getLogger(__name__)
 
@@ -268,9 +267,6 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def findNeighbors(self, namedTuple):
         return self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
 
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
-
     def __str__(self):
         return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 
@@ -361,7 +357,7 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
         self.distanceMetric = distanceMetric
         self.neighborProviderFactory = neighborProviderFactory
         self.numNeighbors = numNeighbors
-        self._knnFinder: KNearestNeighboursFinder = None
+        self._knnFinder: Optional[KNearestNeighboursFinder] = None
         self._trainX = None
 
     def _generate(self, df: pd.DataFrame, ctx=None):
@@ -380,5 +376,5 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
                 result[f"n{i}_{attr}"] = getattr(neighbor.value, attr)
         return result
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         self._trainX = X

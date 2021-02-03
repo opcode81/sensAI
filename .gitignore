@@ -9,4 +9,11 @@
 docs/_build
 /sync.py
 dist
-*.egg-info.*
+*.egg-info*
+/temp
+/default_console.py
+/build
+/git-split.sh
+/.pytest_cache
+data
+.coverage
