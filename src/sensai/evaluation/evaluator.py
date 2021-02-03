@@ -229,7 +229,7 @@ class VectorClassificationModelEvaluator(PredictorModelEvaluator[VectorClassific
         return predictions, classProbabilities, groundTruth
 
 
-class RuleBasedClassificationModelEvaluator(VectorClassificationModelEvaluator):
+class RuleBasedVectorClassificationModelEvaluator(VectorClassificationModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
@@ -250,8 +250,7 @@ class RuleBasedClassificationModelEvaluator(VectorClassificationModelEvaluator):
         return super().evalModel(model)
 
 
-# TODO: once we update to python 3.8 and have access to generic types at runtime, we can reduce this code duplication
-class RuleBasedRegressionModelEvaluator(VectorRegressionModelEvaluator):
+class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
