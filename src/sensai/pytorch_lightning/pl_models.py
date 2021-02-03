@@ -2,8 +2,8 @@ import numpy as np
 from pytorch_lightning import Trainer, LightningModule
 from torch import tensor
 
-import sensai.tensor_model as tm
-from sensai.data_ingest import InputOutputArrays, DataSplitterFractional
+from .. import tensor_model as tm
+from ..data import InputOutputArrays, DataSplitterFractional
 
 
 def _fitModelWithTrainer(model: LightningModule, trainer: Trainer, inputOutputData,
