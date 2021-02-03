@@ -23,7 +23,7 @@ from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
 from .evaluator import PredictorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
     RegressionModelEvaluationData, VectorClassificationModelEvaluator, ClassificationModelEvaluationData
-from ..data_ingest import InputOutputData
+from ..data import InputOutputData
 from ..util.io import ResultWriter
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
 

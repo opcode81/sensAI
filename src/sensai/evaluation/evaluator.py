@@ -8,7 +8,7 @@ import pandas as pd
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
-from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
+from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..tracking import TrackingMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel, FittableModel

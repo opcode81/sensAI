@@ -12,7 +12,7 @@ from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEva
 from .evaluator import RegressionModelEvaluationData, ClassificationModelEvaluationData, \
     PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     MetricsDictProvider
-from ..data_ingest import InputOutputData
+from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
 
