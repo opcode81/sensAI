@@ -4,3 +4,6 @@ from .eval_util import RegressionEvaluationUtil, ClassificationEvaluationUtil, M
     evalModelViaEvaluator, createEvaluationUtil, createVectorModelEvaluator, createVectorModelCrossValidator
 from .evaluator import VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     RegressionModelEvaluationData, ClassificationModelEvaluationData, RuleBasedClassificationModelEvaluator, RuleBasedRegressionModelEvaluator
+
+# imports required for backward compatibility
+from ..data import DataSplitter, DataSplitterFractional

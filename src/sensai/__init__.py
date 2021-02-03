@@ -14,7 +14,7 @@ from .evaluation.eval_stats import eval_stats_classification, eval_stats_regress
 from .normalisation import NormalisationMode
 from .tensor_model import TensorToTensorRegressionModel, TensorToScalarRegressionModel, \
     TensorToTensorClassificationModel, TensorToScalarClassificationModel
-from .vector_model import VectorModel, VectorRegressionModel, VectorClassificationModel
+from .vector_model import PredictorModel, VectorModel, VectorRegressionModel, VectorClassificationModel
 
 __version__ = "0.0.5.dev0"
 
