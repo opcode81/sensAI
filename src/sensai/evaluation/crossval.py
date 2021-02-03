@@ -9,7 +9,7 @@ import numpy as np
 from .eval_stats.eval_stats_base import PredictionEvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationEvalStatsCollection
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
-from .evaluator import RegressionModelEvaluationData, ClassificationModelEvaluationData, \
+from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
     PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     MetricsDictProvider
 from ..data import InputOutputData
@@ -116,7 +116,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
         return data.getEvalStatsCollection().aggStats()
 
 
-class VectorRegressionModelCrossValidationData(PredictorModelCrossValidationData[VectorRegressionModel, RegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
+class VectorRegressionModelCrossValidationData(PredictorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[RegressionEvalStats]) -> RegressionEvalStatsCollection:
         return RegressionEvalStatsCollection(l)
 
@@ -130,7 +130,7 @@ class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegres
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
 
 
-class VectorClassificationModelCrossValidationData(PredictorModelCrossValidationData[VectorClassificationModel, ClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
+class VectorClassificationModelCrossValidationData(PredictorModelCrossValidationData[VectorClassificationModel, VectorClassificationModelEvaluationData, ClassificationEvalStats, ClassificationEvalStatsCollection]):
     def _createEvalStatsCollection(self, l: List[ClassificationEvalStats]) -> ClassificationEvalStatsCollection:
         return ClassificationEvalStatsCollection(l)
 

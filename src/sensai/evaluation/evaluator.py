@@ -78,7 +78,7 @@ class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
             yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-class RegressionModelEvaluationData(PredictorModelEvaluationData[RegressionEvalStats]):
+class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[RegressionEvalStats]):
     def getEvalStatsCollection(self):
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
@@ -143,13 +143,13 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
 
-class VectorRegressionModelEvaluator(PredictorModelEvaluator[RegressionModelEvaluationData]):
+class VectorRegressionModelEvaluator(PredictorModelEvaluator[VectorRegressionModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
             additionalMetrics: Sequence[RegressionMetric] = None):
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.additionalMetrics = additionalMetrics
 
-    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> RegressionModelEvaluationData:
+    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
@@ -158,7 +158,7 @@ class VectorRegressionModelEvaluator(PredictorModelEvaluator[RegressionModelEval
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
                 additionalMetrics=self.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
-        return RegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
 
     def computeTestDataOutputs(self, model: PredictorModel) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -182,25 +182,25 @@ class VectorRegressionModelEvaluator(PredictorModelEvaluator[RegressionModelEval
         return predictions, groundTruth
 
 
-class ClassificationModelEvaluationData(PredictorModelEvaluationData[ClassificationEvalStats]):
+class VectorClassificationModelEvaluationData(PredictorModelEvaluationData[ClassificationEvalStats]):
     pass
 
 
-class VectorClassificationModelEvaluator(PredictorModelEvaluator[ClassificationModelEvaluationData]):
+class VectorClassificationModelEvaluator(PredictorModelEvaluator[VectorClassificationModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
             randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities
         self.additionalMetrics = additionalMetrics
 
-    def _evalModel(self, model: VectorClassificationModel, data: InputOutputData) -> ClassificationModelEvaluationData:
+    def _evalModel(self, model: VectorClassificationModel, data: InputOutputData) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, data)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
             labels=model.getClassLabels(), additionalMetrics=self.additionalMetrics)
         predictedVarName = model.getPredictedVariableNames()[0]
-        return ClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
 
     def computeTestDataOutputs(self, model) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
@@ -233,7 +233,7 @@ class RuleBasedClassificationModelEvaluator(VectorClassificationModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> ClassificationModelEvaluationData:
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
@@ -255,7 +255,7 @@ class RuleBasedRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> RegressionModelEvaluationData:
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
