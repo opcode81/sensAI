@@ -7,11 +7,11 @@ from matplotlib import pyplot as plt
 import pandas as pd
 
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class ResultWriter:
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, resultDir, filenamePrefix=""):
         self.resultDir = resultDir
@@ -59,14 +59,14 @@ class ResultWriter:
 
     def writeTextFile(self, filenameSuffix, content):
         p = self.path(filenameSuffix, extensionToAdd="txt")
-        self._log.info(f"Saving text file {p}")
+        self.log.info(f"Saving text file {p}")
         with open(p, "w") as f:
             f.write(content)
         return p
 
     def writeDataFrameTextFile(self, filenameSuffix, df: pd.DataFrame):
         p = self.path(filenameSuffix, extensionToAdd="df.txt", validOtherExtensions="txt")
-        self._log.info(f"Saving data frame text file {p}")
+        self.log.info(f"Saving data frame text file {p}")
         with open(p, "w") as f:
             f.write(df.to_string())
         return p
@@ -79,7 +79,7 @@ class ResultWriter:
         :return: the path to the file that was written
         """
         p = self.path(filenameSuffix, extensionToAdd="png", validOtherExtensions=("jpg",))
-        self._log.info(f"Saving figure {p}")
+        self.log.info(f"Saving figure {p}")
         fig.savefig(p)
         if closeFigure:
             plt.close(fig)

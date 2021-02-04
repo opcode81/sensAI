@@ -9,7 +9,7 @@ import sklearn.svm
 from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
 
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):

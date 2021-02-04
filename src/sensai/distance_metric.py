@@ -12,7 +12,8 @@ from .util.cache import DelayedUpdateHook
 from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
 
-_log = logging.getLogger(__name__)
+
+log = logging.getLogger(__name__)
 
 
 class DistanceMetric(ABC):
@@ -48,10 +49,10 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
         self.picklePath = picklePath
         if os.path.exists(self.picklePath):
             self.distanceDf = pd.read_pickle(self.picklePath)
-            _log.info(f"Successfully loaded dataframe of shape {self.shape()} from cache. "
+            log.info(f"Successfully loaded dataframe of shape {self.shape()} from cache. "
                      f"There are {self.numUnfilledEntries()} unfilled entries")
         else:
-            _log.info(f"No cached distance dataframe found in {picklePath}")
+            log.info(f"No cached distance dataframe found in {picklePath}")
             self.distanceDf = pd.DataFrame()
         self.cachedIdToPosDict = {identifier: pos for pos, identifier in enumerate(self.distanceDf.index)}
         self._updateHook = DelayedUpdateHook(self.save, deferredSaveDelaySecs)
@@ -68,17 +69,17 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
         self._assertTuple(key)
         for identifier in key:
             if identifier not in self.distanceDf.columns:
-                _log.info(f"Adding new column and row for identifier {identifier}")
+                log.info(f"Adding new column and row for identifier {identifier}")
                 self.distanceDf[identifier] = np.nan
                 self.distanceDf.loc[identifier] = np.nan
         i1, i2 = key
-        _log.debug(f"Adding distance value for identifiers {i1}, {i2}")
+        log.debug(f"Adding distance value for identifiers {i1}, {i2}")
         self.distanceDf.loc[i1, i2] = self.distanceDf.loc[i2, i1] = value
         if self.saveOnUpdate:
             self._updateHook.handleUpdate()
 
     def save(self):
-        _log.info(f"Saving new distance matrix to {self.picklePath}")
+        log.info(f"Saving new distance matrix to {self.picklePath}")
         os.makedirs(os.path.dirname(self.picklePath), exist_ok=True)
         self.distanceDf.to_pickle(self.picklePath)
 
@@ -133,7 +134,7 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
         """
         for position, valueA in enumerate(dfIndexedById.itertuples()):
             if position % 10 == 0:
-                _log.info(f"Processed {round(100 * position / len(dfIndexedById), 2)}%")
+                log.info(f"Processed {round(100 * position / len(dfIndexedById), 2)}%")
             for valueB in dfIndexedById[position + 1:].itertuples():
                 self.distance(valueA, valueB)
 

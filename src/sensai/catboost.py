@@ -7,12 +7,12 @@ import catboost
 from .util.string import orRegexGroup
 from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class CatBoostVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
 
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None, random_state=42, num_leaves=31, **modelArgs):
         """
@@ -41,12 +41,12 @@ class CatBoostVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
             categoricalFeatureNames = [col for col in cols if re.match(self._categoricalFeatureNameRegex, col)]
             colIndices = [cols.index(f) for f in categoricalFeatureNames]
             args = {"cat_features": colIndices}
-            self._log.info(f"Updating model parameters with {args}")
+            self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
 
 
 class CatBoostVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
         """
@@ -76,5 +76,5 @@ class CatBoostVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             categoricalFeatureNames = [col for col in cols if re.match(self._categoricalFeatureNameRegex, col)]
             colIndices = [cols.index(f) for f in categoricalFeatureNames]
             args = {"cat_features": colIndices}
-            self._log.info(f"Updating model parameters with {args}")
+            self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)

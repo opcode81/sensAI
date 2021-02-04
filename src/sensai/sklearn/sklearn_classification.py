@@ -8,7 +8,7 @@ import sklearn.tree
 from .sklearn_base import AbstractSkLearnVectorClassificationModel
 
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
