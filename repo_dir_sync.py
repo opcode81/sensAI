@@ -167,9 +167,8 @@ class OtherRepo:
         """
         os.chdir(libRepo.rootPath)
 
-        # switch to the source repo branch and merge develop into it (to make sure it's up to date)
+        # switch to the source repo branch
         execute(f"git checkout {self.branch}")
-        execute("git merge develop")
 
         if self.isSyncEstablished():
 
