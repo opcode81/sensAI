@@ -449,10 +449,10 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         colName = self.columnGen.generatedColumnName
         if self.takeInputColumnIfPresent and colName in df.columns:
-            self._log.debug(f"Taking column '{colName}' from input data frame")
+            self.log.debug(f"Taking column '{colName}' from input data frame")
             series = df[colName]
         else:
-            self._log.debug(f"Generating column '{colName}' via {self.columnGen}")
+            self.log.debug(f"Generating column '{colName}' via {self.columnGen}")
             series = self.columnGen.generateColumn(df)
         return pd.DataFrame({colName: series})
 
