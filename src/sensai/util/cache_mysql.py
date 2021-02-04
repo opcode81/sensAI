@@ -5,21 +5,19 @@ import threading
 import time
 import pandas as pd
 
-import MySQLdb
-
 from .cache import PersistentKeyValueCache
-
 
 _log = logging.getLogger(__name__)
 
 
 class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
+
     class ValueType(enum.Enum):
         DOUBLE = ("DOUBLE", False)  # (SQL data type, isCachedValuePickled)
         BLOB = ("BLOB", True)
 
     def __init__(self, host, db, user, pw, valueType: ValueType, tableName="cache", deferredCommitDelaySecs=1.0, inMemory=False):
-
+        import MySQLdb
         self.conn = MySQLdb.connect(host=host, database=db, user=user, password=pw)
         self.tableName = tableName
         self.maxKeyLength = 255
