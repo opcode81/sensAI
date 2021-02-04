@@ -1,15 +1,13 @@
 import enum
 import logging
 import pickle
-import threading
-import time
 
 import MySQLdb
 
-from .cache import PersistentKeyValueCache
+from .cache import PersistentKeyValueCache, DelayedUpdateHook
 
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
@@ -21,9 +19,7 @@ class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
         self.conn = MySQLdb.connect(host, db, user, pw)
         self.tableName = tableName
         self.maxKeyLength = 255
-        self.deferredCommitDelaySecs = deferredCommitDelaySecs
-        self._commitThread = None
-        self._commitThreadSemaphore = threading.Semaphore()
+        self._updateHook = DelayedUpdateHook(self._commit, deferredCommitDelaySecs)
         self._numEntriesToBeCommitted = 0
 
         cacheValueSqlType, self.isCacheValuePickled = valueType.value
@@ -47,8 +43,7 @@ class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
         else:
             cursor.execute(f"UPDATE {self.tableName} SET cache_value=%s WHERE cache_key=%s", (storedValue, key))
         self._numEntriesToBeCommitted += 1
-        self._commitDeferred()
-        #self.conn.commit()
+        self._updateHook.handleUpdate()
         cursor.close()
 
     def get(self, key):
@@ -61,22 +56,7 @@ class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
         value = pickle.loads(storedValue) if self.isCacheValuePickled else storedValue
         return value
 
-    def _commitDeferred(self):
-        self._lastUpdateTime = time.time()
-
-        def doCommit():
-            while True:
-                time.sleep(self.deferredCommitDelaySecs)
-                timePassedSinceLastUpdate = time.time() - self._lastUpdateTime
-                if timePassedSinceLastUpdate >= self.deferredCommitDelaySecs:
-                    _log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the database")
-                    self.conn.commit()
-                    self._numEntriesToBeCommitted = 0
-                    return
-
-        if self._commitThread is None or not self._commitThread.is_alive():
-            self._commitThreadSemaphore.acquire()
-            if self._commitThread is None or not self._commitThread.is_alive():
-                self._commitThread = threading.Thread(target=doCommit, daemon=False)
-                self._commitThread.start()
-            self._commitThreadSemaphore.release()
+    def _commit(self):
+        log.info(f"Committing {self._numEntriesToBeCommitted} cache entries to the database")
+        self.conn.commit()
+        self._numEntriesToBeCommitted = 0
