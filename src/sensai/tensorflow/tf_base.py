@@ -9,7 +9,7 @@ import tensorflow as tf
 from .. import normalisation
 from ..vector_model import VectorRegressionModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class TensorFlowSession:
@@ -35,7 +35,7 @@ class TensorFlowSession:
         """
         if cls.session is None:
             if allowDefault:
-                _log.info("No TensorFlow session was configured. Creating a new session with default values.")
+                log.info("No TensorFlow session was configured. Creating a new session with default values.")
                 cls.configureSession()
             else:
                 raise Exception(f"The session has not yet been configured. Call {cls.__name__}.{cls.configureSession.__name__} beforehand")

@@ -245,7 +245,7 @@ class MultiFeatureGenerator(FeatureGenerator):
     returns the concatenation of their outputs
     """
     def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
-        self.featureGenerators = flattenArguments(featureGenerators)
+        self.featureGenerators = featureGenerators = flattenArguments(featureGenerators)
         if len(self.featureGenerators) == 0:
             log.info("Creating an empty MultiFeatureGenerator. It will generate a data frame without columns.")
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]

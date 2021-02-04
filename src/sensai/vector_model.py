@@ -16,6 +16,11 @@ from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
 from .util.sequences import getFirstDuplicate
 
+# imports for backward compatibility (and mark as used)
+from .data import InputOutputData
+if InputOutputData:
+    pass
+
 log = logging.getLogger(__name__)
 
 
