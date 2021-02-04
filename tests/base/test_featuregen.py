@@ -19,16 +19,15 @@ def test_take_columns():
     with pytest.raises(Exception):
         fgen4.generate(inputDf)
 
-
 def test_flatten_columns():
     inputDf = pd.DataFrame({"a": [np.array([1, 2])], "b": [np.array([5, 6])]})
     fgen1 = FeatureGeneratorFlattenColumns("a")
     fgen2 = FeatureGeneratorFlattenColumns()
     fgen3 = FeatureGeneratorFlattenColumns(["a"])
     fgen4 = FeatureGeneratorFlattenColumns("c")
-    assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": [1], "a_1": [2]}))
-    assert fgen2.generate(inputDf).equals(pd.DataFrame({"a_0": [1], "a_1": [2], "b_0": [5], "b_1": [6]}))
-    assert fgen3.generate(inputDf).equals(pd.DataFrame({"a_0": [1], "a_1": [2]}))
+    assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": np.array([1]), "a_1": np.array([2])}))
+    assert fgen2.generate(inputDf).equals(pd.DataFrame({"a_0": np.array([1]), "a_1": np.array([2]), "b_0": np.array([5]), "b_1": np.array([6])}))
+    assert fgen3.generate(inputDf).equals(pd.DataFrame({"a_0": np.array([1]), "a_1": np.array([2])}))
     with pytest.raises(Exception):
         assert fgen4.generate(inputDf)
 
@@ -36,7 +35,7 @@ def test_flatten_columns():
 def test_getFlattenedFeatureGenerator():
     inputDf = pd.DataFrame({"a": [np.array([1, 2])], "b": [np.array([5, 6])]})
     fgen1 = flattenedFeatureGenerator(FeatureGeneratorTakeColumns("a"))
-    assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": [1], "a_1": [2]}))
+    assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": np.array([1]), "a_1": np.array([2])}))
 
 
 class TestFgen(FeatureGenerator):
