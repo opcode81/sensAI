@@ -4,7 +4,6 @@ from typing import Sequence, TypeVar, List, Union
 
 from . import cache
 from . import cache_mysql
-from . import cache_azure
 
 T = TypeVar("T")
 log = logging.getLogger(__name__)

@@ -78,7 +78,7 @@ class MySQLPersistentKeyValueCache(PersistentKeyValueCache):
         try:
             return self._inMemoryDf["cache_value"][str(key)]
         except Exception as e:
-            _log.debug(f"Unable to load value for key {str(key)} from in-memory dataframe: {e}")
+            log.debug(f"Unable to load value for key {str(key)} from in-memory dataframe: {e}")
             return None
 
     def _commit(self):

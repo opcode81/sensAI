@@ -95,11 +95,15 @@ class DelayedUpdateHook:
     Ensures that a given function is executed after an update happens, but delay the execution until
     there are no further updates for a certain time period
     """
-    def __init__(self, fn: Callable[[], Any], timePeriodSecs):
+    def __init__(self, fn: Callable[[], Any], timePeriodSecs, periodicallyExecutedFn: Optional[Callable[[], Any]] = None):
         """
         :param fn: the function to eventually call after an update
         :param timePeriodSecs: the time that must pass while not receiving further updates for fn to be called
+        :param periodicallyExecutedFn: a function to execute periodically (every timePeriodSecs seconds) in the busy waiting loop,
+            which may, for example, log information or apply additional executions, which must not interfere with the correctness of
+            the execution of fn
         """
+        self.periodicallyExecutedFn = periodicallyExecutedFn
         self.fn = fn
         self.timePeriodSecs = timePeriodSecs
         self._lastUpdateTime = None
@@ -117,6 +121,8 @@ class DelayedUpdateHook:
             while True:
                 time.sleep(self.timePeriodSecs)
                 timePassedSinceLastUpdate = time.time() - self._lastUpdateTime
+                if self.periodicallyExecutedFn is not None:
+                    self.periodicallyExecutedFn()
                 if timePassedSinceLastUpdate >= self.timePeriodSecs:
                     self.fn()
                     return
