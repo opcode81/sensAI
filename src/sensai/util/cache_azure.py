@@ -17,7 +17,7 @@ from azure.storage.blob import BlockBlobService
 import pandas as pd
 import numpy as np
 
-from .cache import PersistentKeyValueCache, DelayedUpdateHook
+from .cache import PersistentKeyValueCache, PeriodicUpdateHook
 
 AZURE_ALLOWED_TABLE_NAME_PATTERN = re.compile("^[A-Za-z][A-Za-z0-9]{2,62}$")
 AZURE_ALLOWED_TABLE_BATCH_SIZE = 100
@@ -658,7 +658,7 @@ class AzureTablePersistentKeyValueCache(PersistentKeyValueCache):
         self._batchCommitTable = AzureLazyBatchCommitTable(tableName, tableService, propertyLoaders=propertyLoaders)
         self._minSizeForPeriodicCommit = minSizeForPeriodicCommit
         self._maxBatchSize = maxBatchSize
-        self._updateHook = DelayedUpdateHook(self._commit, deferredCommitDelaySecs, periodicallyExecutedFn=self._periodicallyCommit)
+        self._updateHook = PeriodicUpdateHook(deferredCommitDelaySecs, noUpdateFn=self._commit, periodicFn=self._periodicallyCommit)
 
         self._inMemoryCache = None
 
