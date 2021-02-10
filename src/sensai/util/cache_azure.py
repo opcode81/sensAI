@@ -700,7 +700,7 @@ class AzureTablePersistentKeyValueCache(PersistentKeyValueCache):
         return self._batchCommitTable.tableName if self._partitionKeyGenerator is None else self._partitionKeyGenerator(key)
 
     def _commit(self):
-        self._batchCommitTable.commitBlockingUntilEmpty(self._maxBatchSize)
+        self._batchCommitTable.commitNonBlockingCurrentQueueState(self._maxBatchSize)
 
     def _periodicallyCommit(self):
         self._batchCommitTable.commitBlockingLargestPartitionFromQueue(self._maxBatchSize, self._minSizeForPeriodicCommit)
