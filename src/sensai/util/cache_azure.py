@@ -19,9 +19,6 @@ import numpy as np
 
 from .cache import PersistentKeyValueCache, PeriodicUpdateHook
 
-AZURE_ALLOWED_TABLE_NAME_PATTERN = re.compile("^[A-Za-z][A-Za-z0-9]{2,62}$")
-AZURE_ALLOWED_TABLE_BATCH_SIZE = 100
-
 _log = logging.getLogger(__name__)
 
 
@@ -147,7 +144,7 @@ class BlobPerKeyAzureTableBlobBackend(AzureTableBlobBackend, ABC):
         return self._getBlobValue(containerName, blobName)
 
     def getValueReference(self, partitionKey: str, rowKey: str, valueName: str, blobNamePrefix: str = None) -> str:
-        blobName = self._getBlobNameFromKeys(blobNamePrefix, partitionKey, rowKey, valueName)
+        blobName = self._getBlobNameFromKeys(partitionKey, rowKey, valueName, blobPrefix=blobNamePrefix)
         return self.blockBlobService.make_blob_url(self.containerName, blobName)
 
     def setValueForReference(self, valueIdentifier: str, value):
@@ -339,6 +336,9 @@ class AzureLazyBatchCommitTable:
     To execute insertions, call :func:`LazyBatchCommitTable.commit`
     """
 
+    AZURE_ALLOWED_TABLE_NAME_PATTERN = re.compile("^[A-Za-z][A-Za-z0-9]{2,62}$")
+    AZURE_ALLOWED_TABLE_BATCH_SIZE = 100
+
     class PartitionCommandsPriorityQueue:
 
         class PartitionCommands:
@@ -424,7 +424,7 @@ class AzureLazyBatchCommitTable:
         :param propertyLoaders:
         """
 
-        if not AZURE_ALLOWED_TABLE_NAME_PATTERN.match(tableName):
+        if not self.AZURE_ALLOWED_TABLE_NAME_PATTERN.match(tableName):
             raise ValueError(f"Invalid table name {tableName}, see: https://docs.microsoft.com/en-us/rest/api/storageservices/Understanding-the-Table-Service-Data-Model")
 
         self.tableService = tableService
@@ -516,11 +516,10 @@ class AzureLazyBatchCommitTable:
         if commands is not None:
             commands.execute(self._contextManager, maxBatchSize)
 
-    @staticmethod
-    def _validateMaxBatchSize(maxBatchSize):
-        if maxBatchSize > AZURE_ALLOWED_TABLE_BATCH_SIZE:
-            _log.warning(f"Provided maxBatchSize is larger than allowed size {AZURE_ALLOWED_TABLE_BATCH_SIZE}. Will use maxBatchSize {AZURE_ALLOWED_TABLE_BATCH_SIZE} instead.")
-            maxBatchSize = AZURE_ALLOWED_TABLE_BATCH_SIZE
+    def _validateMaxBatchSize(self, maxBatchSize):
+        if maxBatchSize > self.AZURE_ALLOWED_TABLE_BATCH_SIZE:
+            _log.warning(f"Provided maxBatchSize is larger than allowed size {self.AZURE_ALLOWED_TABLE_BATCH_SIZE}. Will use maxBatchSize {self.AZURE_ALLOWED_TABLE_BATCH_SIZE} instead.")
+            maxBatchSize = self.AZURE_ALLOWED_TABLE_BATCH_SIZE
         return maxBatchSize
 
     def loadTableToDataFrame(self, columns: List[str] = None, rowFilterQuery: str = None, numRecords: int = None):

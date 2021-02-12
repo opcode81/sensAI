@@ -140,9 +140,11 @@ class PeriodicUpdateHook:
     Periodically checks whether a function shall be called as a result of an update, the function potentially
     being non-atomic (i.e. it may take a long time to execute such that new updates may come in while it is
     executing). Two function all mechanisms are in place:
+
         * a function which is called if there has not been a new update for a certain time period (which may be called
           several times if updates come in while the function is being executed)
         * a function which is called periodically
+
     """
     def __init__(self, checkIntervalSecs: float, noUpdateTimePeriodSecs: float = None, noUpdateFn: Callable[[], Any] = None,
             periodicFn: Optional[Callable[[], Any]] = None):
