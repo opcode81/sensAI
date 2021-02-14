@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 # TODO at some point in the future: generalize to other input and deal with algorithms that allow prediction of labels
-class ClusteringModel(PickleLoadSaveMixin, ABC):
+class EuclideanClusterer(PickleLoadSaveMixin, ABC):
     """
     Base class for all clustering algorithms. Supports noise clusters and relabelling of identified clusters as noise
     based on their size.
@@ -175,7 +175,7 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         pass
 
 
-class SKLearnClustererProtocol(Protocol):
+class SkLearnClustererProtocol(Protocol):
     """
     Only used for type hints, do not instantiate
     """
@@ -184,7 +184,7 @@ class SKLearnClustererProtocol(Protocol):
     labels_: np.ndarray
 
 
-class SKLearnClusteringModel(ClusteringModel):
+class SkLearnEuclideanClusterer(EuclideanClusterer):
     """
     Wrapper around an sklearn-type clustering algorithm
 
@@ -194,7 +194,7 @@ class SKLearnClusteringModel(ClusteringModel):
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
 
-    def __init__(self, clusterer: SKLearnClustererProtocol, noiseLabel=-1,
+    def __init__(self, clusterer: SkLearnClustererProtocol, noiseLabel=-1,
              minClusterSize: int = None, maxClusterSize: int = None):
         super().__init__(noiseLabel=noiseLabel, minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
         self.clusterer = clusterer

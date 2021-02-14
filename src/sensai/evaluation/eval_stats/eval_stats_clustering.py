@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple
 
 from .eval_stats_base import EvalStats, TMetric
 from ..eval_stats import Metric, abstractmethod, Sequence, ABC
-from ...clustering import ClusteringModel
+from ...clustering import EuclideanClusterer
 
 
 class ClusterLabelsEvalStats(EvalStats[TMetric], ABC):
@@ -124,7 +124,7 @@ class ClusteringUnsupervisedEvalStats(ClusterLabelsEvalStats[ClusteringUnsupervi
         self.noiseDatapoints = self.datapoints[self.noiseLabelsMask]
 
     @classmethod
-    def fromModel(cls, clusteringModel: ClusteringModel):
+    def fromModel(cls, clusteringModel: EuclideanClusterer):
         return cls(clusteringModel.datapoints, clusteringModel.labels, noiseLabel=clusteringModel.noiseLabel)
 
 
@@ -202,7 +202,7 @@ class ClusteringSupervisedEvalStats(ClusterLabelsEvalStats[ClusteringSupervisedM
         super().__init__(labels, noiseLabel, metrics, additionalMetrics=additionalMetrics)
 
     @classmethod
-    def fromModel(cls, clusteringModel: ClusteringModel, trueLabels: Sequence[int]):
+    def fromModel(cls, clusteringModel: EuclideanClusterer, trueLabels: Sequence[int]):
         return cls(clusteringModel.labels, trueLabels, noiseLabel=clusteringModel.noiseLabel)
 
     def labelsWithRemovedCommonNoise(self) -> Tuple[np.ndarray, np.ndarray]:

@@ -1,1 +1,1 @@
-from .clustering import ClusteringModel
+from .clustering import EuclideanClusterer
