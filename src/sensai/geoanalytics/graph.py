@@ -4,6 +4,8 @@ import scipy
 from itertools import combinations
 from scipy.spatial.distance import euclidean
 from typing import Callable, Dict
+from shapely.geometry import MultiLineString
+import geopandas as gp
 
 from .coordinates import extractCoordinatesArray, GeoDataFrameWrapper
 
