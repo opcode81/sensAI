@@ -7,7 +7,7 @@ from shapely.geometry import MultiLineString, Polygon
 from shapely.ops import polygonize, unary_union
 
 from sensai.geoanalytics.coordinates import extractCoordinatesArray, TCoordinates
-from sensai.util.graph import delaunayGraph
+from sensai.geoanalytics.graph import delaunayGraph
 
 log = logging.getLogger(__name__)
 

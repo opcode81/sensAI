@@ -5,7 +5,7 @@ from itertools import combinations
 from scipy.spatial.distance import euclidean
 from typing import Callable, Dict
 
-from sensai.geoanalytics.coordinates import extractCoordinatesArray
+from sensai.geoanalytics.coordinates import extractCoordinatesArray, GeoDataFrameWrapper
 
 
 def delaunayGraph(data: np.ndarray, edge_weight: Callable[[np.ndarray, np.ndarray], float] = euclidean):
@@ -65,3 +65,25 @@ class SpanningTree:
             "totalWeight": self.totalWeight(),
             "meanEdgeWeight": self.meanEdgeWeight()
         }
+
+
+class CoordinateSpanningTree(SpanningTree, GeoDataFrameWrapper):
+    """
+    Wrapper around a tree-finding algorithm that will be applied on the Delaunay graph of the coordinates.
+    Enhances the :class:`SpanningTree` class by adding methods and validation specific to geospatial coordinates.
+    """
+    def __init__(self, datapoints: np.ndarray, tree_finder: Callable[[nx.Graph], nx.Graph] = nx.minimum_spanning_tree):
+        datapoints = extractCoordinatesArray(datapoints)
+        super().__init__(datapoints, tree_finder=tree_finder)
+
+    def multiLineString(self):
+        return MultiLineString(self.coordinatePairs)
+
+    def toGeoDF(self, crs='epsg:3857'):
+        """
+        :param crs: projection. By default pseudo-mercator
+        :return: GeoDataFrame of length 1 with the tree as MultiLineString instance
+        """
+        gdf = gp.GeoDataFrame({"geometry": [self.multiLineString()]})
+        gdf.crs = crs
+        return gdf
