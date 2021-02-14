@@ -4,7 +4,7 @@ import numpy as np
 from shapely.geometry import MultiPoint
 from typing import Callable, Union, Iterable
 
-from .base.clustering import EuclideanClusterer, SkLearnClustererProtocol, SkLearnEuclideanClusterer
+from sensai.clustering.clustering_base import EuclideanClusterer, SkLearnClustererProtocol, SkLearnEuclideanClusterer
 from ..util.cache import LoadSaveInterface
 from ..util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ..util.tracking import timed
