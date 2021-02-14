@@ -8,7 +8,7 @@ from sensai.clustering.clustering_base import EuclideanClusterer
 from sensai.clustering import SkLearnEuclideanClusterer
 from sensai.clustering.sklearn_clustering import SkLearnClustererProtocol
 from sensai.util.cache import LoadSaveInterface
-from sensai.util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
+from sensai.geoanalytics.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from sensai.util.tracking import timed
 
 log = logging.getLogger(__name__)

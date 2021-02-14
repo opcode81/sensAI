@@ -6,8 +6,8 @@ from scipy.spatial.qhull import Delaunay
 from shapely.geometry import MultiLineString, Polygon
 from shapely.ops import polygonize, unary_union
 
-from .coordinates import extractCoordinatesArray, TCoordinates
-from .graph import delaunayGraph
+from sensai.geoanalytics.coordinates import extractCoordinatesArray, TCoordinates
+from sensai.util.graph import delaunayGraph
 
 log = logging.getLogger(__name__)
 

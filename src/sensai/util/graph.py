@@ -7,7 +7,7 @@ from scipy.spatial.distance import euclidean
 from shapely.geometry import MultiLineString
 from typing import Callable, Dict
 
-from .coordinates import extractCoordinatesArray, GeoDataFrameWrapper
+from sensai.geoanalytics.coordinates import extractCoordinatesArray, GeoDataFrameWrapper
 
 
 def delaunayGraph(data: np.ndarray, edge_weight: Callable[[np.ndarray, np.ndarray], float] = euclidean):
