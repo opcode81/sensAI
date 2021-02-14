@@ -118,7 +118,7 @@ autodoc_mock_imports = [
     "catboost",
     "clearml",
     "azure",
-    "geopandas"
+    "geopandas",
     "shapely",
     "networkx"
 ]
