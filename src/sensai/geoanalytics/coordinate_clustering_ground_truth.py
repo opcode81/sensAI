@@ -9,7 +9,7 @@ from geopandas import GeoDataFrame
 from shapely.geometry import Polygon, MultiPoint, MultiPolygon
 from typing import Sequence, Union, Optional
 
-from sensai.geoanalytics.coordinates import extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
+from .coordinates import extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 
 log = logging.getLogger(__name__)
 

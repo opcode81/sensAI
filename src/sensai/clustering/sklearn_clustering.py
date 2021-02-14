@@ -1,7 +1,7 @@
 import numpy as np
 from typing_extensions import Protocol
 
-from sensai.clustering import EuclideanClusterer
+from . import EuclideanClusterer
 
 
 class SkLearnClustererProtocol(Protocol):

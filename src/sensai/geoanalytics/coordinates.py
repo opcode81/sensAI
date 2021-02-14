@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from shapely.geometry import MultiPoint
 from typing import Union
 
-from sensai.clustering import EuclideanClusterer
+from ..clustering import EuclideanClusterer
 
 TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame, EuclideanClusterer.Cluster]
 

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import distance_matrix
 
-from sensai.util.cache import PickleLoadSaveMixin
+from ..util.cache import PickleLoadSaveMixin
 
 log = logging.getLogger(__name__)
 

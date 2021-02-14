@@ -5,7 +5,7 @@ from itertools import combinations
 from scipy.spatial.distance import euclidean
 from typing import Callable, Dict
 
-from sensai.geoanalytics.coordinates import extractCoordinatesArray, GeoDataFrameWrapper
+from .coordinates import extractCoordinatesArray, GeoDataFrameWrapper
 
 
 def delaunayGraph(data: np.ndarray, edge_weight: Callable[[np.ndarray, np.ndarray], float] = euclidean):
