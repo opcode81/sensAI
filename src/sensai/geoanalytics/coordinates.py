@@ -2,9 +2,10 @@ import geopandas as gp
 import numpy as np
 from abc import ABC, abstractmethod
 from shapely.geometry import MultiPoint
-from typing import Union
+from typing import Union, Callable
 
 from sensai.clustering import EuclideanClusterer
+from sensai.util.graph import SpanningTree
 
 TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame, EuclideanClusterer.Cluster]
 
@@ -40,3 +41,25 @@ class GeoDataFrameWrapper(ABC):
 
     def plot(self, *args, **kwargs):
         self.toGeoDF().plot(*args, **kwargs)
+
+
+class CoordinateSpanningTree(SpanningTree, GeoDataFrameWrapper):
+    """
+    Wrapper around a tree-finding algorithm that will be applied on the Delaunay graph of the coordinates.
+    Enhances the :class:`SpanningTree` class by adding methods and validation specific to geospatial coordinates.
+    """
+    def __init__(self, datapoints: np.ndarray, tree_finder: Callable[[nx.Graph], nx.Graph] = nx.minimum_spanning_tree):
+        datapoints = extractCoordinatesArray(datapoints)
+        super().__init__(datapoints, tree_finder=tree_finder)
+
+    def multiLineString(self):
+        return MultiLineString(self.coordinatePairs)
+
+    def toGeoDF(self, crs='epsg:3857'):
+        """
+        :param crs: projection. By default pseudo-mercator
+        :return: GeoDataFrame of length 1 with the tree as MultiLineString instance
+        """
+        gdf = gp.GeoDataFrame({"geometry": [self.multiLineString()]})
+        gdf.crs = crs
+        return gdf
