@@ -382,7 +382,7 @@ class DFTNormalisation(DataFrameTransformer):
     """
 
     class RuleTemplate:
-        def __init__(self, skip=False, unsupported=False, transformer: Callable = None):
+        def __init__(self, skip=False, unsupported=False, transformer=None):
             """
             :param skip: flag indicating whether no transformation shall be performed on all of the columns
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)

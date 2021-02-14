@@ -117,6 +117,7 @@ autodoc_mock_imports = [
     "MySQLdb",
     "catboost",
     "clearml",
+    "azure"
 ]
 
 # Render docu of __init__ methods

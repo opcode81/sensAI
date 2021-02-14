@@ -575,7 +575,7 @@ class SimulatedAnnealing:
             else:
                 degreeOfCompletion = timeElapsed / self.duration
             chain.step(degreeOfCompletion)
-        self.log.info(f"Simulated annealing completed after {time.time() - startTime:.1f} seconds, {chain.stepsTaken} steps")
+        self.log.info(f"Simulated annealing completed after {time.time()-startTime:.1f} seconds, {chain.stepsTaken} steps")
         chain.logStats()
         chain.applyBestState()
         if self.collectStats:

@@ -2,7 +2,7 @@ import copy
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Generator, Generic, TypeVar, List
+from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union
 
 import numpy as np
 
@@ -86,6 +86,12 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndices = permutedIndices[testStartIdx:testEndIdx]
             trainIndices = np.concatenate((permutedIndices[:testStartIdx], permutedIndices[testEndIdx:]))
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
+
+    @staticmethod
+    def forModel(model: VectorModel, data: InputOutputData, folds=5, **kwargs) \
+            -> Union["VectorClassificationModelCrossValidator", "VectorRegressionModelCrossValidator"]:
+        cons = VectorRegressionModelCrossValidator if model.isRegressionModel() else VectorClassificationModelCrossValidator
+        return cons(data, folds=folds, **kwargs)
 
     @abstractmethod
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):

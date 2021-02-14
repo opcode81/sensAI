@@ -3,6 +3,7 @@ import time
 from typing import Sequence, TypeVar, List, Union
 
 from . import cache
+from . import cache_mysql
 
 T = TypeVar("T")
 log = logging.getLogger(__name__)
