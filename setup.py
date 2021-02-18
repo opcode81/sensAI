@@ -8,7 +8,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     include_package_data=True,
-    version='0.0.8',
+    version='0.0.9.dev0',
     description='Library for sensible AI',
     install_requires=[
         line
