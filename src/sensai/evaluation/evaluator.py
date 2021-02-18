@@ -8,10 +8,10 @@ import pandas as pd
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
-from ..data_ingest import DataSplitter, DataSplitterFractional, InputOutputData
-from ..tracking import TrackedExperiment
+from ..data import DataSplitter, DataSplitterFractional, InputOutputData
+from ..tracking import TrackingMixin
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel
+from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel, FittableModel
 
 log = logging.getLogger(__name__)
 
@@ -20,28 +20,18 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 
 
-class MetricsDictProvider(ABC):
-    def __init__(self):
-        self.trackedExperiment: Optional[TrackedExperiment] = None
-
+class MetricsDictProvider(TrackingMixin, ABC):
     @abstractmethod
-    def computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
         pass
 
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        self.trackedExperiment = trackedExperiment
-
-    def unsetTrackedExperiment(self):
-        self.trackedExperiment = None
-
-    def computeAndTrack(self, model, returnResult=True, **kwargs) -> Optional[Dict[str, float]]:
-        if self.trackedExperiment is None:
-            raise Exception("Cannot track results: trackedExperiment is not set.")
-        valuesDict = self.computeMetrics(model, **kwargs)
-        valuesDict["str(model)"] = str(model)
-        self.trackedExperiment.trackValues(valuesDict)
-        if returnResult:
-            return valuesDict
+    def computeMetrics(self, model, **kwargs) -> Optional[Dict[str, float]]:
+        valuesDict = self._computeMetrics(model, **kwargs)
+        if self.trackedExperiment is not None:
+            trackedDict = valuesDict.copy()
+            trackedDict["str(model)"] = str(model)
+            self.trackedExperiment.trackValues(trackedDict)
+        return valuesDict
 
 
 class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -93,12 +83,15 @@ class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[Regressio
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
-class VectorModelEvaluator(MetricsDictProvider, ABC):
+TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
+
+
+class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
-            testFraction=None, randomSeed=42, shuffle=True):
+            testFraction: float = None, randomSeed=42, shuffle=True):
         """
         Constructs an evaluator with test and training data.
-        Exactly one of the parameters {testFraction, testData, } must be given
+        Exactly one of the parameters {testData, dataSplitter, testFraction} must be given
 
         :param data: the full data set, or, if testData is given, the training data
         :param testData: the data to use for testing/evaluation; if None, must specify either dataSplitter testFraction or dataSplitter
@@ -111,6 +104,9 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         """
         if (testData, dataSplitter, testFraction).count(None) != 2:
             raise ValueError("Exactly one of {testData, dataSplitter, testFraction} must be given")
+        if testFraction is not None:
+            if not 0 <= testFraction <= 1:
+                raise Exception(f"testFraction has to be None or within the interval [0, 1]. Instead got: {testFraction}")
         if testData is None:
             if dataSplitter is None:
                 dataSplitter = DataSplitterFractional(1 - testFraction, shuffle=shuffle, randomSeed=randomSeed)
@@ -118,16 +114,8 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         else:
             self.trainingData = data
             self.testData = testData
-        super().__init__()
 
-    def fitModel(self, model: VectorModel):
-        """Fits the given model's parameters using this evaluator's training data"""
-        startTime = time.time()
-        model.fit(self.trainingData.inputs, self.trainingData.outputs)
-        log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
-
-    @abstractmethod
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> PredictorModelEvaluationData:
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> TEvalData:
         """
         Evaluates the given model
 
@@ -135,30 +123,42 @@ class VectorModelEvaluator(MetricsDictProvider, ABC):
         :param onTrainingData: if True, evaluate on this evaluator's training data rather than the held-out test data
         :return: the evaluation result
         """
+        data = self.trainingData if onTrainingData else self.testData
+        return self._evalModel(model, data)
+
+    @abstractmethod
+    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> TEvalData:
         pass
 
-    def computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
-        evalData = self.evalModel(model)
+    def _computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+        evalData = self.evalModel(model, onTrainingData=onTrainingData)
         return evalData.getEvalStats().getAll()
 
+    def fitModel(self, model: FittableModel):
+        """Fits the given model's parameters using this evaluator's training data"""
+        if self.trainingData is None:
+            raise Exception(f"Cannot fit model with evaluator {self.__class__.__name__}: no training data provided")
+        startTime = time.time()
+        model.fit(self.trainingData.inputs, self.trainingData.outputs)
+        log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
-class VectorRegressionModelEvaluator(VectorModelEvaluator):
+
+class VectorRegressionModelEvaluator(PredictorModelEvaluator[VectorRegressionModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
             additionalMetrics: Sequence[RegressionMetric] = None):
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.additionalMetrics = additionalMetrics
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
+    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
-        inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, groundTruth = self._computeOutputs(model, inputOutputData)
+        predictions, groundTruth = self._computeOutputs(model, data)
         for predictedVarName in model.getPredictedVariableNames():
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
                 additionalMetrics=self.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
-        return VectorRegressionModelEvaluationData(evalStatsByVarName, inputOutputData.inputs, model)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
 
     def computeTestDataOutputs(self, model: PredictorModel) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -169,7 +169,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator):
         """
         return self._computeOutputs(model, self.testData)
 
-    def _computeOutputs(self, model, inputOutputData: InputOutputData):
+    def _computeOutputs(self, model: PredictorModel, inputOutputData: InputOutputData):
         """
         Applies the given model to the given data
 
@@ -186,24 +186,23 @@ class VectorClassificationModelEvaluationData(PredictorModelEvaluationData[Class
     pass
 
 
-class VectorClassificationModelEvaluator(VectorModelEvaluator):
+class VectorClassificationModelEvaluator(PredictorModelEvaluator[VectorClassificationModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
             randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities
         self.additionalMetrics = additionalMetrics
 
-    def evalModel(self, model: VectorClassificationModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
+    def _evalModel(self, model: VectorClassificationModel, data: InputOutputData) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
-        inputOutputData = self.trainingData if onTrainingData else self.testData
-        predictions, predictions_proba, groundTruth = self._computeOutputs(model, inputOutputData)
+        predictions, predictions_proba, groundTruth = self._computeOutputs(model, data)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
             labels=model.getClassLabels(), additionalMetrics=self.additionalMetrics)
         predictedVarName = model.getPredictedVariableNames()[0]
-        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, inputOutputData.inputs, model)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
 
-    def computeTestDataOutputs(self, model: VectorClassificationModel) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def computeTestDataOutputs(self, model) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Applies the given model to the test data
 
@@ -222,11 +221,51 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator):
         """
         if self.computeProbabilities:
             classProbabilities = model.predictClassProbabilities(inputOutputData.inputs)
-            if classProbabilities is None:
-                raise Exception(f"Requested computation of class probabilities for a model which does not support it: {model} returned None")
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:
             classProbabilities = None
             predictions = model.predict(inputOutputData.inputs)
         groundTruth = inputOutputData.outputs
         return predictions, classProbabilities, groundTruth
+
+
+class RuleBasedVectorClassificationModelEvaluator(VectorClassificationModelEvaluator):
+    def __init__(self, data: InputOutputData):
+        super().__init__(data, testData=data)
+
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
+        """
+        Evaluate the rule based model. The training data and test data coincide, thus fitting the model
+        will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
+        same data set.
+
+        :param model:
+        :param onTrainingData: has to be False here. Setting to True is not supported and will lead to an
+            exception
+        :return:
+        """
+        if onTrainingData:
+            raise Exception("Evaluating rule based models on training data is not supported. In this evaluator"
+                            "training and test data coincide.")
+        return super().evalModel(model)
+
+
+class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
+    def __init__(self, data: InputOutputData):
+        super().__init__(data, testData=data)
+
+    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
+        """
+        Evaluate the rule based model. The training data and test data coincide, thus fitting the model
+        will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
+        same data set.
+
+        :param model:
+        :param onTrainingData: has to be False here. Setting to True is not supported and will lead to an
+            exception
+        :return:
+        """
+        if onTrainingData:
+            raise Exception("Evaluating rule based models on training data is not supported. In this evaluator"
+                            "training and test data coincide.")
+        return super().evalModel(model)

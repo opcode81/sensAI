@@ -95,11 +95,15 @@ class DelayedUpdateHook:
     Ensures that a given function is executed after an update happens, but delay the execution until
     there are no further updates for a certain time period
     """
-    def __init__(self, fn: Callable[[], Any], timePeriodSecs):
+    def __init__(self, fn: Callable[[], Any], timePeriodSecs, periodicallyExecutedFn: Optional[Callable[[], Any]] = None):
         """
         :param fn: the function to eventually call after an update
         :param timePeriodSecs: the time that must pass while not receiving further updates for fn to be called
+        :param periodicallyExecutedFn: a function to execute periodically (every timePeriodSecs seconds) in the busy waiting loop,
+            which may, for example, log information or apply additional executions, which must not interfere with the correctness of
+            the execution of fn
         """
+        self.periodicallyExecutedFn = periodicallyExecutedFn
         self.fn = fn
         self.timePeriodSecs = timePeriodSecs
         self._lastUpdateTime = None
@@ -117,9 +121,73 @@ class DelayedUpdateHook:
             while True:
                 time.sleep(self.timePeriodSecs)
                 timePassedSinceLastUpdate = time.time() - self._lastUpdateTime
+                if self.periodicallyExecutedFn is not None:
+                    self.periodicallyExecutedFn()
                 if timePassedSinceLastUpdate >= self.timePeriodSecs:
                     self.fn()
                     return
+
+        if self._thread is None or not self._thread.is_alive():
+            self._threadLock.acquire()
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=doPeriodicCheck, daemon=False)
+                self._thread.start()
+            self._threadLock.release()
+
+
+class PeriodicUpdateHook:
+    """
+    Periodically checks whether a function shall be called as a result of an update, the function potentially
+    being non-atomic (i.e. it may take a long time to execute such that new updates may come in while it is
+    executing). Two function all mechanisms are in place:
+
+        * a function which is called if there has not been a new update for a certain time period (which may be called
+          several times if updates come in while the function is being executed)
+        * a function which is called periodically
+
+    """
+    def __init__(self, checkIntervalSecs: float, noUpdateTimePeriodSecs: float = None, noUpdateFn: Callable[[], Any] = None,
+            periodicFn: Optional[Callable[[], Any]] = None):
+        """
+        :param checkIntervalSecs: the time period, in seconds, between checks
+        :param noUpdateTimePeriodSecs: the time period after which to execute noUpdateFn if no further updates have come in.
+            This must be at least as large as checkIntervalSecs. If None, use checkIntervalSecs.
+        :param noUpdateFn: the function to call if there have been no further updates for noUpdateTimePeriodSecs seconds
+        :param periodicFn: a function to execute periodically (every checkIntervalSecs seconds) in the busy waiting loop,
+            which may, for example, log information or apply additional executions, which must not interfere with the correctness of
+            the execution of fn
+        """
+        if noUpdateTimePeriodSecs is None:
+            noUpdateTimePeriodSecs = checkIntervalSecs
+        elif noUpdateTimePeriodSecs < checkIntervalSecs:
+            raise ValueError("noUpdateTimePeriodSecs must be at least as large as checkIntervalSecs")
+        self._periodicFn = periodicFn
+        self._checkIntervalSecs = checkIntervalSecs
+        self._noUpdateTimePeriodSecs = noUpdateTimePeriodSecs
+        self._noUpdateFn = noUpdateFn
+        self._lastUpdateTime = None
+        self._thread = None
+        self._threadLock = threading.Lock()
+
+    def handleUpdate(self):
+        """
+        Notifies of an update, making sure the functions given at construction will be called as specified
+        """
+        self._lastUpdateTime = time.time()
+
+        def doPeriodicCheck():
+            while True:
+                time.sleep(self._checkIntervalSecs)
+                checkTime = time.time()
+                if self._periodicFn is not None:
+                    self._periodicFn()
+                timePassedSinceLastUpdate = checkTime - self._lastUpdateTime
+                if timePassedSinceLastUpdate >= self._noUpdateTimePeriodSecs:
+                    if self._noUpdateFn is not None:
+                        self._noUpdateFn()
+                    # if no further updates have come in, we terminate the thread
+                    if self._lastUpdateTime < checkTime:
+                        return
 
         if self._thread is None or not self._thread.is_alive():
             self._threadLock.acquire()

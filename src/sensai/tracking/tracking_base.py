@@ -21,7 +21,16 @@ class TrackedExperiment(ABC):
         pass
 
 
-class TrackedExperimentDataProvider(ABC):
-    @abstractmethod
+class TrackingMixin(ABC):
+    # hackidy hack
+    _trackedExperimentAttributeName = "_trackedExperiment"
+
     def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        pass
+        setattr(self, self._trackedExperimentAttributeName, trackedExperiment)
+
+    def unsetTrackedExperiment(self):
+        setattr(self, self._trackedExperimentAttributeName, None)
+
+    @property
+    def trackedExperiment(self):
+        return getattr(self, self._trackedExperimentAttributeName, None)

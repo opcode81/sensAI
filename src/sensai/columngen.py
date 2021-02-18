@@ -8,7 +8,7 @@ import pandas as pd
 from .util.cache import PersistentKeyValueCache
 
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class ColumnGenerator:
@@ -55,7 +55,7 @@ class IndexCachedColumnGenerator(ColumnGenerator):
     ColumnGenerator the use of ColumnGeneratorCachedByIndex is encouraged.
     """
 
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, columnGenerator: ColumnGenerator, cache: PersistentKeyValueCache):
         """
@@ -73,7 +73,7 @@ class IndexCachedColumnGenerator(ColumnGenerator):
 
         # compute missing values (if any) via wrapped generator, storing them in the cache
         missingValuesDF = df[~df.index.isin(cacheSeries.index)]
-        self._log.info(f"Retrieved {len(cacheSeries)} values from the cache, {len(missingValuesDF)} still to be computed by {self.columnGenerator}")
+        self.log.info(f"Retrieved {len(cacheSeries)} values from the cache, {len(missingValuesDF)} still to be computed by {self.columnGenerator}")
         if len(missingValuesDF) == 0:
             return cacheSeries
         else:
@@ -89,7 +89,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
     Cache keys are given by the input data frame's index.
     """
 
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, generatedColumnName: str, cache: Optional[PersistentKeyValueCache], persistCache=False):
         """
@@ -102,7 +102,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         self.persistCache = persistCache
 
     def _generateColumn(self, df: pd.DataFrame) -> Union[pd.Series, list, np.ndarray]:
-        self._log.info(f"Generating column {self.generatedColumnName} with {self.__class__.__name__}")
+        self.log.info(f"Generating column {self.generatedColumnName} with {self.__class__.__name__}")
         values = []
         cacheHits = 0
         columnLength = len(df)
@@ -110,7 +110,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
         for i, namedTuple in enumerate(df.itertuples()):
             percentageGenerated = int(100*i/columnLength)
             if percentageGenerated == percentageToLog:
-                self._log.debug(f"Processed {percentageToLog}% of {self.generatedColumnName}")
+                self.log.debug(f"Processed {percentageToLog}% of {self.generatedColumnName}")
                 percentageToLog += 5
 
             key = namedTuple.Index
@@ -125,7 +125,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
                 value = self._generateValue(namedTuple)
             values.append(value)
         if self.cache is not None:
-            self._log.info(f"Cached column generation resulted in {cacheHits}/{columnLength} cache hits")
+            self.log.info(f"Cached column generation resulted in {cacheHits}/{columnLength} cache hits")
         return values
 
     def __getstate__(self):

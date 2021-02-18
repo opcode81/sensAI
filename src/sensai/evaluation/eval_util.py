@@ -21,9 +21,9 @@ from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCr
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
-from .evaluator import VectorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
+from .evaluator import PredictorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
-from ..data_ingest import InputOutputData
+from ..data import InputOutputData
 from ..util.io import ResultWriter
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
 
@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 TModel = TypeVar("TModel", bound=VectorModel)
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
-TEvaluator = TypeVar("TEvaluator", bound=VectorModelEvaluator)
+TEvaluator = TypeVar("TEvaluator", bound=PredictorModelEvaluator)
 TCrossValidator = TypeVar("TCrossValidator", bound=VectorModelCrossValidator)
 TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
 TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
@@ -62,8 +62,8 @@ def createVectorModelCrossValidator(data: InputOutputData, model: VectorModel = 
     return cons(data, folds=folds, **kwargs)
 
 
-def createEvaluationUtil(data: InputOutputData, model: VectorModel = None,
-        isRegression: bool = None, evaluatorParams: Optional[Dict[str, Any]] = None,
+def createEvaluationUtil(data: InputOutputData, model: VectorModel = None, isRegression: bool = None,
+        evaluatorParams: Optional[Dict[str, Any]] = None,
         crossValidatorParams: Optional[Dict[str, Any]] = None) \
             -> Union["ClassificationEvaluationUtil", "RegressionEvaluationUtil"]:
     cons = RegressionEvaluationUtil if _isRegression(model, isRegression) else ClassificationEvaluationUtil

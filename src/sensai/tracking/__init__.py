@@ -1,1 +1,1 @@
-from .tracking_base import TrackedExperiment, TrackedExperimentDataProvider
+from .tracking_base import TrackedExperiment, TrackingMixin

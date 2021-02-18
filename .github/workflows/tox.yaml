@@ -29,6 +29,7 @@ jobs:
       - name: Checkout LFS Objects
         run: git lfs pull
       - name: Merge develop into current branch
+        if: github.ref != 'refs/heads/develop'
         run: |
           git fetch origin develop:develop --update-head-ok
           git merge develop

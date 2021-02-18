@@ -1,22 +1,21 @@
 import collections
-import typing
-
 import datetime
 import logging
+import typing
 from abc import ABC, abstractmethod
-from typing import Callable, List, Iterable
+from typing import Callable, List, Iterable, Optional
 
 import numpy as np
 import pandas as pd
 
 from . import distance_metric, util, data_transformation
-from .vector_model import VectorClassificationModel, VectorRegressionModel
 from .distance_metric import DistanceMetric
 from .featuregen import FeatureGeneratorFromNamedTuples
 from .util.string import objectRepr
 from .util.typing import PandasNamedTuple
+from .vector_model import VectorClassificationModel, VectorRegressionModel
 
-_log = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Neighbor:
@@ -110,7 +109,7 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
     its component distance metrics are cached, such that weights in the linear combination can be varied
     without necessitating recomputations.
     """
-    _log = _log.getChild(__qualname__)
+    log = log.getChild(__qualname__)
 
     def __init__(self, cache: 'CachingKNearestNeighboursFinder.DistanceMetricCache', distanceMetric: DistanceMetric,
             neighborProvider: NeighborProvider):
@@ -131,7 +130,7 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
         The cache can be passed (consecutively) to multiple KNN models in order to speed up computations for the
         same test data points. If the cache is reused, it is assumed that the neighbor provider remains the same.
         """
-        _log = _log.getChild(__qualname__)
+        log = log.getChild(__qualname__)
 
         def __init__(self):
             self._cachedMetricsByName = {}
@@ -140,11 +139,11 @@ class CachingKNearestNeighboursFinder(AbstractKnnFinder):
             key = str(distanceMetric)
             cachedMetric = self._cachedMetricsByName.get(key)
             if cachedMetric is None:
-                self._log.info(f"Creating new cached metric for key '{key}'")
+                self.log.info(f"Creating new cached metric for key '{key}'")
                 cachedMetric = CachingKNearestNeighboursFinder.CachedSeriesDistanceMetric(distanceMetric)
                 self._cachedMetricsByName[key] = cachedMetric
             else:
-                self._log.info(f"Reusing cached metric for key '{key}'")
+                self.log.info(f"Reusing cached metric for key '{key}'")
             return cachedMetric
 
     class CachedSeriesDistanceMetric:
@@ -196,7 +195,7 @@ class KNearestNeighboursFinder(AbstractKnnFinder):
 
     def findNeighbors(self, namedTuple: PandasNamedTuple, n_neighbors=20) -> List[Neighbor]:
         result = []
-        _log.debug(f"Finding neighbors for {namedTuple.Index}")
+        log.debug(f"Finding neighbors for {namedTuple.Index}")
         for neighborTuple in self.neighborProvider.iterPotentialNeighbors(namedTuple):
             distance = self.distanceMetric.distance(namedTuple, neighborTuple)
             result.append(Neighbor(neighborTuple, distance))
@@ -240,7 +239,7 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
             self.knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
         else:
             self.knnFinder = CachingKNearestNeighboursFinder(self.distanceMetricCache, self.distanceMetric, neighborProvider)
-        _log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
+        log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
 
     def _predictClassProbabilities(self, X: pd.DataFrame):
         outputDf = pd.DataFrame({label: np.nan for label in self._labels}, index=X.index)
@@ -267,9 +266,6 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
 
     def findNeighbors(self, namedTuple):
         return self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
-
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        return self.convertClassProbabilitiesToPredictions(self._predictClassProbabilities(x))
 
     def __str__(self):
         return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
@@ -311,7 +307,7 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
             self.knnFinder = KNearestNeighboursFinder(self.distanceMetric, neighborProvider)
         else:
             self.knnFinder = CachingKNearestNeighboursFinder(self.distanceMetricCache, self.distanceMetric, neighborProvider)
-        _log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
+        log.info(f"Using neighbor provider of type {self.knnFinder.__class__.__name__}")
 
     def _getTarget(self, neighbor: Neighbor):
         return self.y.iloc[:, 0].loc[neighbor.identifier]
@@ -361,7 +357,7 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
         self.distanceMetric = distanceMetric
         self.neighborProviderFactory = neighborProviderFactory
         self.numNeighbors = numNeighbors
-        self._knnFinder: KNearestNeighboursFinder = None
+        self._knnFinder: Optional[KNearestNeighboursFinder] = None
         self._trainX = None
 
     def _generate(self, df: pd.DataFrame, ctx=None):
@@ -380,5 +376,5 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
                 result[f"n{i}_{attr}"] = getattr(neighbor.value, attr)
         return result
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, ctx=None):
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
         self._trainX = X

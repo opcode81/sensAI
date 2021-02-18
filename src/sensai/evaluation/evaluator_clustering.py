@@ -12,7 +12,7 @@ TClusteringEvalStats = TypeVar("TClusteringEvalStats", bound=ClusterLabelsEvalSt
 
 class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats], ABC):
     @timed
-    def computeMetrics(self, model: ClusteringModel, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model: ClusteringModel, **kwargs) -> Dict[str, float]:
         """
         Evaluate the model and return the results as dict
 
@@ -31,7 +31,6 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
 class ClusteringModelUnsupervisedEvaluator(ClusteringModelEvaluator[ClusteringUnsupervisedEvalStats]):
     def __init__(self, datapoints):
         self.datapoints = datapoints
-        super().__init__()
 
     def evalModel(self, model: ClusteringModel, fit=True):
         """
@@ -59,7 +58,6 @@ class ClusteringModelSupervisedEvaluator(ClusteringModelEvaluator[ClusteringSupe
         self.datapoints = datapoints
         self.trueLabels = trueLabels
         self.noiseLabel = noiseLabel
-        super().__init__()
 
     def evalModel(self, model: ClusteringModel, fit=True):
         """

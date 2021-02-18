@@ -525,11 +525,12 @@ class SAChain:
 
 
 class SimulatedAnnealing:
-    log = log.getChild(__qualname__)
-
     """
     The simulated annealing algorithm for discrete optimisation (cost minimisation)
     """
+
+    log = log.getChild(__qualname__)
+
     def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]],
             maxSteps: int = None, duration: float = None, randomSeed=42, collectStats=False):
         """
@@ -574,7 +575,7 @@ class SimulatedAnnealing:
             else:
                 degreeOfCompletion = timeElapsed / self.duration
             chain.step(degreeOfCompletion)
-        self.log.info(f"Simulated annealing completed after {time.time() - startTime:.1f} seconds, {chain.stepsTaken} steps")
+        self.log.info(f"Simulated annealing completed after {time.time()-startTime:.1f} seconds, {chain.stepsTaken} steps")
         chain.logStats()
         chain.applyBestState()
         if self.collectStats:
@@ -590,11 +591,12 @@ class SimulatedAnnealing:
 
 
 class ParallelTempering:
-    log = log.getChild(__qualname__)
-
     """
     The parallel tempering algorithm for discrete optimisation (cost minimisation)
     """
+
+    log = log.getChild(__qualname__)
+
     def __init__(self, numChains, opsAndWeights: Sequence[Tuple[Type[SAOperator], float]],
                  schedule: SATemperatureSchedule = None, probabilityFunction: SAProbabilityFunction = None,
                  maxSteps: int = None, duration: float = None, randomSeed=42, logCostProgression=False):

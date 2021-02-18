@@ -117,6 +117,13 @@ class OtherRepo:
                                         f"Continue?"):
                 return
 
+        # check if this branch is clean
+        lgLib = self.gitLogLibRepoSinceLastSync(libRepo).strip()
+        if lgLib != "":
+            print(f"The following changes have been added to this branch in the library:\n\n{lgLib}\n\n")
+            print(f"ERROR: You must push these changes before you can pull or reset this branch to {remoteCommitId}")
+            sys.exit(1)
+
         # get log with relevant commits in this repo that are to be pulled
         lg = self.gitLogThisRepoSinceLastSync()
 
@@ -160,9 +167,8 @@ class OtherRepo:
         """
         os.chdir(libRepo.rootPath)
 
-        # switch to the source repo branch and merge develop into it (to make sure it's up to date)
+        # switch to the source repo branch
         execute(f"git checkout {self.branch}")
-        execute("git merge develop")
 
         if self.isSyncEstablished():
 

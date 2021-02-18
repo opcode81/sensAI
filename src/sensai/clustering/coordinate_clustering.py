@@ -141,7 +141,7 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         return super().noiseCluster()
 
     def clusters(self, condition: Callable[[Cluster], bool] = None) -> Iterable[Cluster]:
-        return super().clusters()
+        return super().clusters(condition=condition)
 
 
 class SKLearnCoordinateClustering(CoordinateClusteringModel):

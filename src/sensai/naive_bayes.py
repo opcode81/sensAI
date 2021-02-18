@@ -62,4 +62,4 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
                     bestLp = lp
                     bestCls = cls
             results.append(bestCls)
-        return pd.DataFrame(results, columns=self.getModelOutputVariableNames())
+        return pd.DataFrame(results, columns=self.getPredictedVariableNames())
