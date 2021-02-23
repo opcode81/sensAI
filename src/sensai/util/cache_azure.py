@@ -670,17 +670,20 @@ class AzureTablePersistentKeyValueCache(PersistentKeyValueCache):
         keyAsString = str(key)
         partitionKey = self._getPartitionKeyForRowKey(keyAsString)
         entity = {'PartitionKey': partitionKey, 'RowKey': keyAsString, self.CACHE_VALUE_IDENTIFIER: value}
-        self._batchCommitTable.insertOrReplaceEntity(entity)
-        self._updateHook.handleUpdate()
 
         if self._inMemoryCache is not None:
             self._inMemoryCache[keyAsString] = value
+
+        self._batchCommitTable.insertOrReplaceEntity(entity)
+        self._updateHook.handleUpdate()
 
     def get(self, key):
         keyAsString = str(key)
         value = self._getFromInMemoryCache(keyAsString)
         if value is None:
             value = self._getFromTable(keyAsString)
+            if value is not None and self._inMemoryCache is not None:
+                self._inMemoryCache[keyAsString] = value
         return value
 
     def _getFromTable(self, key: str):
@@ -693,7 +696,7 @@ class AzureTablePersistentKeyValueCache(PersistentKeyValueCache):
     def _getFromInMemoryCache(self, key):
         if self._inMemoryCache is None:
             return None
-        return self._inMemoryCache.get(str(key), None)
+        return self._inMemoryCache.get(key, None)
 
     def _getPartitionKeyForRowKey(self, key: str):
         return self._batchCommitTable.tableName if self._partitionKeyGenerator is None else self._partitionKeyGenerator(key)

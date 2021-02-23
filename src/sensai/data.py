@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, TypeVar
+from typing import Tuple, Sequence, TypeVar, Callable, List, Any, Iterator, Generic, Hashable
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,10 @@ class BaseInputOutputData(ABC):
 
 class InputOutputArrays(BaseInputOutputData):
     def __init__(self, inputs: np.ndarray, outputs: np.ndarray):
+
+        if inputs.shape[0] != outputs.shape[0]:
+            raise ValueError(f"First dimension of inputs array is not the same as first dimension of outputs array")
+
         super().__init__(inputs, outputs)
 
     def filterIndices(self, indices: Sequence[int]) -> __qualname__:
@@ -47,12 +51,24 @@ class InputOutputArrays(BaseInputOutputData):
 # TODO: Rename to InputOutputDataFrames when the time for breaking changes has come
 class InputOutputData(BaseInputOutputData):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+
+        if not inputs.index.equals(outputs.index):
+            raise ValueError(f"Input dataframe index not the same as output dataframe index")
+
         super().__init__(inputs, outputs)
 
     def filterIndices(self, indices: Sequence[int]) -> __qualname__:
         inputs = self.inputs.iloc[indices]
         outputs = self.outputs.iloc[indices]
         return InputOutputData(inputs, outputs)
+
+    def filterDataFrameIndices(self, indices: Sequence[Hashable]) -> __qualname__:
+        inputs = self.inputs.loc[indices]
+        outputs = self.outputs.loc[indices]
+        return InputOutputData(inputs, outputs)
+
+    def iterDataFrameIndex(self) -> Iterator[Any]:
+        yield from self.outputs.index
 
     @property
     def inputDim(self):
@@ -77,7 +93,7 @@ class InputOutputData(BaseInputOutputData):
 TInputOutputData = TypeVar("TInputOutputData", bound=BaseInputOutputData)
 
 
-class DataSplitter(ABC):
+class DataSplitter(Generic[TInputOutputData], ABC):
     @abstractmethod
     def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
         pass
@@ -104,3 +120,20 @@ class DataSplitterFractional(DataSplitter):
         A = data.filterIndices(list(indicesA))
         B = data.filterIndices(list(indicesB))
         return A, B
+
+
+class ComplementBasedInputOutputDataSplitter(DataSplitter[InputOutputData], ABC):
+
+    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
+        firstSetIndices = self._determineFirstSetIndices(data)
+        firstSetIndicesSet = set(firstSetIndices)
+        secondSetIndices = [idx for idx in data.inputs.index if idx not in firstSetIndicesSet]
+
+        firstSet = data.filterDataFrameIndices(firstSetIndices)
+        secondSet = data.filterDataFrameIndices(secondSetIndices)
+        
+        return firstSet, secondSet
+
+    @abstractmethod
+    def _determineFirstSetIndices(self, data: InputOutputData) -> List[Hashable]:
+        pass
