@@ -331,9 +331,14 @@ class BlobBackedSerialisedPropertyLoader(BlobBackedPropertyLoader, SerialisedPro
 
 class AzureLazyBatchCommitTable:
     """
-    Wrapper for an Azure table, which allow for convenient insertion via lazy batch execution per partition.
+    Wrapper for an Azure table, which allows for convenient insertion via lazy batch execution per partition.
     Uses a priority queue to manage order of partitions to be committed.
-    To execute insertions, call :func:`LazyBatchCommitTable.commit`
+    To execute insertions, call one of the methods
+
+        * :func:`AzureLazyBatchCommitTable.commitBlockingUntilEmpty`
+        * :func:`AzureLazyBatchCommitTable.commitBlockingLargestPartitionFromQueue`
+        * :func:`AzureLazyBatchCommitTable.commitNonBlockingCurrentQueueState`
+
     """
 
     AZURE_ALLOWED_TABLE_NAME_PATTERN = re.compile("^[A-Za-z][A-Za-z0-9]{2,62}$")
