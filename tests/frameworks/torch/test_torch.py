@@ -11,7 +11,7 @@ from sensai.torch import NNOptimiser
 from sensai.torch.torch_base import TorchModelFromModuleFactory
 from sensai.torch.torch_data import TorchDataSetFromTensors
 from sensai.torch.torch_modules import MultiLayerPerceptron
-from sensai.torch.torch_opt import NNLossEvaluatorClassification
+from sensai.torch.torch_opt import NNLossEvaluatorClassification, NNOptimiserParams
 from sensai.featuregen import FeatureGeneratorTakeColumns
 
 
@@ -37,8 +37,8 @@ def test_NNOptimiserWithoutValidation_MLPClassifier(irisDataSet):
     dataSet = TorchDataSetFromTensors(inputTensor, outputTensor, False)
     model = TorchModelFromModuleFactory(lambda: MultiLayerPerceptron(inputTensor.shape[1], len(classLabels),
             (4, 3), hidActivationFn=torch.tanh, outputActivationFn=torch.nn.Softmax()), cuda=False)
-    NNOptimiser(lossEvaluator=NNLossEvaluatorClassification(), cuda=False, trainFraction=1.0, epochs=300,
-            optimiser="adam").fit(model, dataSet)
+    NNOptimiser(NNOptimiserParams(lossEvaluator=NNLossEvaluatorClassification(), trainFraction=1.0, epochs=300,
+            optimiser="adam")).fit(model, dataSet)
     modelOutputs = model.apply(inputTensor, asNumpy=False)
     accuracy = torch.sum(torch.argmax(modelOutputs, 1) == outputTensor).item() / len(outputTensor)
     assert accuracy > 0.9
