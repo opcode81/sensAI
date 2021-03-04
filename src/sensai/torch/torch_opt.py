@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Callable, TYPE_CHECKING
+from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple
 
 import numpy as np
 import torch
@@ -179,7 +179,6 @@ class NNLossEvaluator(ABC):
 
             :param output: the model's output
             :param groundTruth: the corresponding ground truth
-            :return:
             """
             pass
 
@@ -404,14 +403,22 @@ class NNOptimiser:
             f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
             f"optimiserArgs={self.optimiserArgs}]"
 
-    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, TorchDataSet]):
+    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, List[TorchDataSetProvider],
+            TorchDataSet, List[TorchDataSet], Tuple[TorchDataSet, TorchDataSet], List[Tuple[TorchDataSet, TorchDataSet]]],
+            createTorchModule=True):
         """
-        Fits the parameters of the given model to the given data.
+        Fits the parameters of the given model to the given data, which can be a list of or single instance of one of the following:
+
+            * a `DataUtil` or `TorchDataSetProvider` (from which a training set and validation set will be obtained according to
+              the `trainFraction` parameter of this object)
+            * a `TorchDataSet` which shall be used as the training set (for the case where no validation set shall be used)
+            * a tuple with two `TorchDataSet` instances, where the first shall be used as the training set and the second as
+              the validation set
 
         :param model: the model to be fitted
-        :param data: the data to use, which can either be given via a TorchDataSetProvider or one or more DataUtil instances.
-            For the case where only training data is required (i.e. no validation, trainFraction=1.0), a TorchDataSet
-            instance can also be passed.
+        :param data: the data to use (see variants above)
+        :param createTorchModule: whether to newly create the torch module that is to be trained from the model's factory.
+            If False, (re-)train the existing module.
         """
         self.log.info(f"Preparing parameter learning of {model} via {self}")
 
@@ -423,7 +430,7 @@ class NNOptimiser:
             elif isinstance(d, DataUtil):
                 return TorchDataSetProviderFromDataUtil(d, self.cuda)
             else:
-                raise ValueError()
+                raise ValueError(f"Cannot create a TorchDataSetProvider from {d}")
 
         # initialise data to be generated
         self.trainingLog = []
@@ -447,26 +454,31 @@ class NNOptimiser:
         validationSets = []
         trainingSets = []
         outputScalers = []
-        if isinstance(data, TorchDataSet):
-            if useValidation:
-                raise ValueError("Passing a TorchDataSet instance is not admissible when validation is enabled (trainFraction != 1.0). Pass a TorchDataSetProvider instead.")
-            trainingSets.append(data)
-            outputScalers.append(TensorScalerIdentity())
-        else:
-            if type(data) != list:
-                dataSetProviders = [toDataSetProvider(data)]
+        if type(data) != list:
+            data = [data]
+        self.log.info("Obtaining input/output training instances")
+        for idxDataItem, dataItem in enumerate(data):
+            if isinstance(dataItem, TorchDataSet):
+                if useValidation:
+                    raise ValueError("Passing a TorchDataSet instance is not admissible when validation is enabled (trainFraction != 1.0). Pass a TorchDataSetProvider or another representation that supports validation instead.")
+                trainingSet = dataItem
+                validationSet = None
+                outputScaler = TensorScalerIdentity()
+            elif type(dataItem) == tuple:
+                trainingSet, validationSet = dataItem
+                outputScaler = TensorScalerIdentity()
             else:
-                dataSetProviders = [toDataSetProvider(item) for item in data]
-            self.log.info("Obtaining input/output training instances")
-            for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
-                outputScalers.append(dataSetProvider.getOutputTensorScaler())
-                trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
-                trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
-                validationSets.append(valS)
-                trainingSets.append(trainS)
-            trainingLog("Number of validation sets: %d" % len(validationSets))
+                dataSetProvider = toDataSetProvider(dataItem)
+                trainingSet, validationSet = dataSetProvider.provideSplit(self.trainFraction)
+                outputScaler = dataSetProvider.getOutputTensorScaler()
+            trainingSets.append(trainingSet)
+            if validationSet is not None:
+                validationSets.append(validationSet)
+            outputScalers.append(outputScaler)
+            trainingLog(f"Data set {idxDataItem+1}/{len(data)}: #train={trainingSet.size()}, #validation={validationSet.size() if validationSet is not None else 'None'}")
+        trainingLog("Number of validation sets: %d" % len(validationSets))
 
-        torchModel = model.createTorchModule()
+        torchModel = model.createTorchModule() if createTorchModule else model.getTorchModule()
         if self.cuda:
             torchModel.cuda()
         model.setTorchModule(torchModel)

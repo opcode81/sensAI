@@ -178,12 +178,22 @@ class TorchModel(ABC):
         self.outputScaler = data.getOutputTensorScaler()
         self.inputScaler = data.getInputTensorScaler()
 
-    def fit(self, data: TorchDataSetProvider, **nnOptimiserParams):
+    def fit(self, data: TorchDataSetProvider, strategy: "TorchModelFittingStrategy" = None, **nnOptimiserParams):
+        """
+        Fits this model using the given model and strategy
+
+        :param data: a provider for the data with which to fit the model
+        :param strategy: the fitting strategy; if None, use TorchModelFittingStrategyDefault.
+            Pass your own strategy to perform custom fitting processes, e.g. process which involve multi-stage learning
+        :param nnOptimiserParams: the parameters with which to create an optimiser which can be applied in the fitting strategy
+        """
         self._extractParamsFromData(data)
         if "cuda" not in nnOptimiserParams:
             nnOptimiserParams["cuda"] = self.cuda
         optimiser = NNOptimiser(**nnOptimiserParams)
-        optimiser.fit(self, data)
+        if strategy is None:
+            strategy = TorchModelFittingStrategyDefault()
+        strategy.fit(self, data, optimiser)
         self.bestEpoch = optimiser.getBestEpoch()
         self._gpu = self._getGPUFromModelParameterDevice()
 
@@ -192,6 +202,23 @@ class TorchModel(ABC):
             return next(self.module.parameters()).get_device()
         except:
             return None
+
+
+class TorchModelFittingStrategy(ABC):
+    """
+    Defines the interface for fitting strategies that can be used in TorchModel.fit
+    """
+    @abstractmethod
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
+        pass
+
+
+class TorchModelFittingStrategyDefault(TorchModelFittingStrategy):
+    """
+    Represents the default fitting strategy, which simply applies the given optimiser to the model and data
+    """
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
+        nnOptimiser.fit(model, data)
 
 
 class TorchModelFromModuleFactory(TorchModel):
