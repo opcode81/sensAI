@@ -53,15 +53,12 @@ class _Optimiser(object):
         else:
             raise RuntimeError("Invalid optim method: " + self.method)
 
-    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, use_shrinkage=True, **optimiserArgs):
+    def __init__(self, params, method, lr, max_grad_norm, use_shrinkage=True, **optimiserArgs):
         """
-
         :param params: an iterable of torch.Tensor s or dict s. Specifies what Tensors should be optimized.
         :param method: string identifier for optimiser method to use
         :param lr: learnig rate
-        :param max_grad_norm: max value for gradient shrinkage
-        :param lr_decay: deacay rate
-        :param start_decay_at: epoch to start learning rate decay
+        :param max_grad_norm: gradient norm value beyond which to apply gradient shrinkage
         :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
         self.params = list(params)  # careful: params may be a generator
@@ -69,8 +66,6 @@ class _Optimiser(object):
         self.lr = lr
         self.max_grad_norm = max_grad_norm
         self.method = method
-        self.lr_decay = lr_decay
-        self.start_decay_at = start_decay_at
         self.start_decay = False
         self.optimiserArgs = optimiserArgs
         self.use_shrinkage = use_shrinkage
@@ -87,18 +82,19 @@ class _Optimiser(object):
                 loss = lossBackward()
 
                 # Compute gradients norm.
-                grad_norm = 0
+                grad_norm = None
                 for param in self.params:
-                    grad_norm += math.pow(param.grad.data.norm(), 2)
+                    n = param.grad.data.norm()
+                    if grad_norm is None:
+                        grad_norm = n * n
+                    else:
+                        grad_norm += n * n
+                grad_norm = torch.sqrt(grad_norm)
 
-                grad_norm = math.sqrt(grad_norm)
-                if grad_norm > 0:
+                if grad_norm > self.max_grad_norm:
                     shrinkage = self.max_grad_norm / grad_norm
-                else:
-                    shrinkage = 1.
 
-                for param in self.params:
-                    if shrinkage < 1:
+                    for param in self.params:
                         param.grad.data.mul_(shrinkage)
 
                 return loss
@@ -109,23 +105,6 @@ class _Optimiser(object):
 
         loss = self.optimizer.step(closure)
         return loss
-
-    # decay learning rate if val perf does not improve or we hit the start_decay_at limit
-    def updateLearningRate(self, ppl, epoch):
-        if self.start_decay_at is not None and epoch >= self.start_decay_at:
-            self.start_decay = True
-        if self.last_ppl is not None and ppl > self.last_ppl:
-            self.start_decay = True
-
-        if self.start_decay:
-            self.lr = self.lr * self.lr_decay
-            print("Decaying learning rate to %g" % self.lr)
-        #only decay for one epoch
-        self.start_decay = False
-
-        self.last_ppl = ppl
-
-        self._makeOptimizer()
 
 
 class NNLossEvaluator(ABC):
@@ -351,15 +330,17 @@ class NNOptimiser:
     log = log.getChild(__qualname__)
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
-            batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None,
+            batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False,
             useShrinkage=True, **optimiserArgs):
         """
         :param cuda: whether to use CUDA
         :param lossEvaluator: the loss evaluator to use
-        :param gpu: index of the gpu to be used, if parameter cuda is True
+        :param gpu: index of the gpu to be used (if cuda is True)
         :param optimiser: the optimizer to be used; defaults to "adam"
         :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
-        :param optimiserLR: the optimiser's learning rate decay
+        :param optimiserLR: the optimiser's learning rate
+        :param batchSize: the batch size to use; for algorithms L-BFGS (optimiser='lbfgs'), which do not use batches, leave this at None.
+            If the algorithm uses batches and None is specified, batch size 64 will be used by default.
         :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
             If no validation is to be performed, pass 1.0.
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
@@ -374,6 +355,7 @@ class NNOptimiser:
             batchSize = largeBatchSize
         else:
             if batchSize is None:
+                log.debug("No batch size was specified, using batch size 64 by default")
                 batchSize = 64
 
         if lossEvaluator is None:
@@ -389,8 +371,6 @@ class NNOptimiser:
         self.trainFraction = trainFraction
         self.scaledOutputs = scaledOutputs
         self.lossEvaluator = lossEvaluator
-        self.startLRDecayAtEpoch = startLRDecayAtEpoch
-        self.optimiserLRDecay = optimiserLRDecay
         self.optimiserArgs = optimiserArgs
         self.useShrinkage = useShrinkage
 
@@ -495,8 +475,7 @@ class NNOptimiser:
         best_val = 1e9
         best_epoch = 0
         optim = _Optimiser(torchModel.parameters(), method=self.optimiser, lr=self.optimiserLR,
-            max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
-            use_shrinkage=self.useShrinkage, **self.optimiserArgs)
+            max_grad_norm=self.optimiserClip, use_shrinkage=self.useShrinkage, **self.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
         self.lossEvaluatorState = self.lossEvaluator.createValidationLossEvaluator(self.cuda)
@@ -619,7 +598,7 @@ class NNOptimiser:
                 raise Exception("CUDA is enabled but no device found")
             if self.gpu is None:
                 if deviceCount > 1:
-                    log.warning("More than one GPU detected. Default GPU index is set to 0.")
+                    log.warning("More than one GPU detected but no GPU index was specified, using GPU 0 by default.")
                 gpuIndex = 0
             else:
                 gpuIndex = self.gpu
