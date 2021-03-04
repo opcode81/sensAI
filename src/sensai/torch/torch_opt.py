@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Callable, TYPE_CHECKING
+from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional
 
 import numpy as np
 import torch
@@ -53,15 +53,12 @@ class _Optimiser(object):
         else:
             raise RuntimeError("Invalid optim method: " + self.method)
 
-    def __init__(self, params, method, lr, max_grad_norm, lr_decay=1, start_decay_at=None, use_shrinkage=True, **optimiserArgs):
+    def __init__(self, params, method, lr, max_grad_norm, use_shrinkage=True, **optimiserArgs):
         """
-
         :param params: an iterable of torch.Tensor s or dict s. Specifies what Tensors should be optimized.
         :param method: string identifier for optimiser method to use
         :param lr: learnig rate
-        :param max_grad_norm: max value for gradient shrinkage
-        :param lr_decay: deacay rate
-        :param start_decay_at: epoch to start learning rate decay
+        :param max_grad_norm: gradient norm value beyond which to apply gradient shrinkage
         :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
         self.params = list(params)  # careful: params may be a generator
@@ -69,8 +66,6 @@ class _Optimiser(object):
         self.lr = lr
         self.max_grad_norm = max_grad_norm
         self.method = method
-        self.lr_decay = lr_decay
-        self.start_decay_at = start_decay_at
         self.start_decay = False
         self.optimiserArgs = optimiserArgs
         self.use_shrinkage = use_shrinkage
@@ -87,18 +82,19 @@ class _Optimiser(object):
                 loss = lossBackward()
 
                 # Compute gradients norm.
-                grad_norm = 0
+                grad_norm = None
                 for param in self.params:
-                    grad_norm += math.pow(param.grad.data.norm(), 2)
+                    n = param.grad.data.norm()
+                    if grad_norm is None:
+                        grad_norm = n * n
+                    else:
+                        grad_norm += n * n
+                grad_norm = torch.sqrt(grad_norm)
 
-                grad_norm = math.sqrt(grad_norm)
-                if grad_norm > 0:
+                if grad_norm > self.max_grad_norm:
                     shrinkage = self.max_grad_norm / grad_norm
-                else:
-                    shrinkage = 1.
 
-                for param in self.params:
-                    if shrinkage < 1:
+                    for param in self.params:
                         param.grad.data.mul_(shrinkage)
 
                 return loss
@@ -109,23 +105,6 @@ class _Optimiser(object):
 
         loss = self.optimizer.step(closure)
         return loss
-
-    # decay learning rate if val perf does not improve or we hit the start_decay_at limit
-    def updateLearningRate(self, ppl, epoch):
-        if self.start_decay_at is not None and epoch >= self.start_decay_at:
-            self.start_decay = True
-        if self.last_ppl is not None and ppl > self.last_ppl:
-            self.start_decay = True
-
-        if self.start_decay:
-            self.lr = self.lr * self.lr_decay
-            print("Decaying learning rate to %g" % self.lr)
-        #only decay for one epoch
-        self.start_decay = False
-
-        self.last_ppl = ppl
-
-        self._makeOptimizer()
 
 
 class NNLossEvaluator(ABC):
@@ -179,7 +158,6 @@ class NNLossEvaluator(ABC):
 
             :param output: the model's output
             :param groundTruth: the corresponding ground truth
-            :return:
             """
             pass
 
@@ -348,19 +326,18 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
 
 
-class NNOptimiser:
-    log = log.getChild(__qualname__)
-
-    def __init__(self, lossEvaluator: NNLossEvaluator = None, cuda=True, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
-            batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False, optimiserLRDecay=1, startLRDecayAtEpoch=None,
+class NNOptimiserParams:
+    def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
+            batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False,
             useShrinkage=True, **optimiserArgs):
         """
-        :param cuda: whether to use CUDA
         :param lossEvaluator: the loss evaluator to use
-        :param gpu: index of the gpu to be used, if parameter cuda is True
-        :param optimiser: the optimizer to be used; defaults to "adam"
+        :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained)
+        :param optimiser: the name of the optimizer to be used; defaults to "adam"
         :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
-        :param optimiserLR: the optimiser's learning rate decay
+        :param optimiserLR: the optimiser's learning rate
+        :param batchSize: the batch size to use; for algorithms L-BFGS (optimiser='lbfgs'), which do not use batches, leave this at None.
+            If the algorithm uses batches and None is specified, batch size 64 will be used by default.
         :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
             If no validation is to be performed, pass 1.0.
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
@@ -371,51 +348,109 @@ class NNOptimiser:
         if optimiser == 'lbfgs':
             largeBatchSize = 1e12
             if batchSize is not None:
-                self.log.warning(f"LBFGS does not make use of batches, therefore using large batch size {largeBatchSize} to achieve use of a single batch")
+                log.warning(f"LBFGS does not make use of batches, therefore using large batch size {largeBatchSize} to achieve use of a single batch")
             batchSize = largeBatchSize
         else:
             if batchSize is None:
+                log.debug("No batch size was specified, using batch size 64 by default")
                 batchSize = 64
-
-        if lossEvaluator is None:
-            raise ValueError("Must provide a loss evaluator")
 
         self.epochs = epochs
         self.batchSize = batchSize
         self.optimiserLR = optimiserLR
         self.optimiserClip = optimiserClip
         self.optimiser = optimiser
-        self.cuda = cuda
         self.gpu = gpu
         self.trainFraction = trainFraction
         self.scaledOutputs = scaledOutputs
         self.lossEvaluator = lossEvaluator
-        self.startLRDecayAtEpoch = startLRDecayAtEpoch
-        self.optimiserLRDecay = optimiserLRDecay
         self.optimiserArgs = optimiserArgs
         self.useShrinkage = useShrinkage
+
+    def __str__(self):
+        return f"{self.__class__.__name__}[optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, " \
+               f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
+               f"optimiserArgs={self.optimiserArgs}]"
+
+    @classmethod
+    def fromDictOrInstance(cls, nnOptimiserParams: Union[dict, "NNOptimiserParams"]) -> "NNOptimiserParams":
+        if isinstance(nnOptimiserParams, NNOptimiserParams):
+            return nnOptimiserParams
+        else:
+            return cls.fromDict(nnOptimiserParams)
+
+    @staticmethod
+    def fromDict(params: dict) -> "NNOptimiserParams":
+        removedParams = ["cuda"]
+        params = {k: v for k, v in params.items() if k not in removedParams}
+        return NNOptimiserParams(**params)
+
+    @classmethod
+    def fromEitherDictOrInstance(cls, nnOptimiserDictParams: dict, nnOptimiserParams: Optional["NNOptimiserParams"]):
+        haveInstance = nnOptimiserParams is not None
+        haveDict = len(nnOptimiserDictParams)
+        if haveInstance and haveDict:
+            raise ValueError("Received both a non-empty dictionary and an instance")
+        if haveInstance:
+            return nnOptimiserParams
+        else:
+            return NNOptimiserParams.fromDict(nnOptimiserDictParams)
+
+
+class NNOptimiser:
+    log = log.getChild(__qualname__)
+
+    def __init__(self, params: NNOptimiserParams):
+        """
+        :param cuda: whether to use CUDA
+        :param lossEvaluator: the loss evaluator to use
+        :param gpu: index of the gpu to be used (if CUDA is enabled in the model to be trained)
+        :param optimiser: the optimizer to be used; defaults to "adam"
+        :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
+        :param optimiserLR: the optimiser's learning rate
+        :param batchSize: the batch size to use; for algorithms L-BFGS (optimiser='lbfgs'), which do not use batches, leave this at None.
+            If the algorithm uses batches and None is specified, batch size 64 will be used by default.
+        :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
+            If no validation is to be performed, pass 1.0.
+        :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
+            Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
+        :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
+        :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
+        """
+        if params.lossEvaluator is None:
+            raise ValueError("Must provide a loss evaluator")
+
+        self.params = params
 
         self.lossEvaluatorState = None
         self.trainingLog = None
         self.bestEpoch = None
+        self.cuda = None
 
     def __str__(self):
-        return f"{self.__class__.__name__}[cuda={self.cuda}, optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, " \
-            f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
-            f"optimiserArgs={self.optimiserArgs}]"
+        return f"{self.__class__.__name__}[params={self.params}]"
 
-    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, TorchDataSet]):
+    def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, List[TorchDataSetProvider],
+            TorchDataSet, List[TorchDataSet], Tuple[TorchDataSet, TorchDataSet], List[Tuple[TorchDataSet, TorchDataSet]]],
+            createTorchModule=True):
         """
-        Fits the parameters of the given model to the given data.
+        Fits the parameters of the given model to the given data, which can be a list of or single instance of one of the following:
+
+            * a `DataUtil` or `TorchDataSetProvider` (from which a training set and validation set will be obtained according to
+              the `trainFraction` parameter of this object)
+            * a `TorchDataSet` which shall be used as the training set (for the case where no validation set shall be used)
+            * a tuple with two `TorchDataSet` instances, where the first shall be used as the training set and the second as
+              the validation set
 
         :param model: the model to be fitted
-        :param data: the data to use, which can either be given via a TorchDataSetProvider or one or more DataUtil instances.
-            For the case where only training data is required (i.e. no validation, trainFraction=1.0), a TorchDataSet
-            instance can also be passed.
+        :param data: the data to use (see variants above)
+        :param createTorchModule: whether to newly create the torch module that is to be trained from the model's factory.
+            If False, (re-)train the existing module.
         """
         self.log.info(f"Preparing parameter learning of {model} via {self}")
+        self.cuda = model.cuda
 
-        useValidation = self.trainFraction != 1.0
+        useValidation = self.params.trainFraction != 1.0
 
         def toDataSetProvider(d) -> TorchDataSetProvider:
             if isinstance(d, TorchDataSetProvider):
@@ -423,7 +458,7 @@ class NNOptimiser:
             elif isinstance(d, DataUtil):
                 return TorchDataSetProviderFromDataUtil(d, self.cuda)
             else:
-                raise ValueError()
+                raise ValueError(f"Cannot create a TorchDataSetProvider from {d}")
 
         # initialise data to be generated
         self.trainingLog = []
@@ -447,26 +482,31 @@ class NNOptimiser:
         validationSets = []
         trainingSets = []
         outputScalers = []
-        if isinstance(data, TorchDataSet):
-            if useValidation:
-                raise ValueError("Passing a TorchDataSet instance is not admissible when validation is enabled (trainFraction != 1.0). Pass a TorchDataSetProvider instead.")
-            trainingSets.append(data)
-            outputScalers.append(TensorScalerIdentity())
-        else:
-            if type(data) != list:
-                dataSetProviders = [toDataSetProvider(data)]
+        if type(data) != list:
+            data = [data]
+        self.log.info("Obtaining input/output training instances")
+        for idxDataItem, dataItem in enumerate(data):
+            if isinstance(dataItem, TorchDataSet):
+                if useValidation:
+                    raise ValueError("Passing a TorchDataSet instance is not admissible when validation is enabled (trainFraction != 1.0). Pass a TorchDataSetProvider or another representation that supports validation instead.")
+                trainingSet = dataItem
+                validationSet = None
+                outputScaler = TensorScalerIdentity()
+            elif type(dataItem) == tuple:
+                trainingSet, validationSet = dataItem
+                outputScaler = TensorScalerIdentity()
             else:
-                dataSetProviders = [toDataSetProvider(item) for item in data]
-            self.log.info("Obtaining input/output training instances")
-            for idxDataSetProvider, dataSetProvider in enumerate(dataSetProviders):
-                outputScalers.append(dataSetProvider.getOutputTensorScaler())
-                trainS, valS = dataSetProvider.provideSplit(self.trainFraction)
-                trainingLog(f"Data set {idxDataSetProvider+1}/{len(dataSetProviders)}: #train={trainS.size()}, #validation={valS.size()}")
-                validationSets.append(valS)
-                trainingSets.append(trainS)
-            trainingLog("Number of validation sets: %d" % len(validationSets))
+                dataSetProvider = toDataSetProvider(dataItem)
+                trainingSet, validationSet = dataSetProvider.provideSplit(self.params.trainFraction)
+                outputScaler = dataSetProvider.getOutputTensorScaler()
+            trainingSets.append(trainingSet)
+            if validationSet is not None:
+                validationSets.append(validationSet)
+            outputScalers.append(outputScaler)
+            trainingLog(f"Data set {idxDataItem+1}/{len(data)}: #train={trainingSet.size()}, #validation={validationSet.size() if validationSet is not None else 'None'}")
+        trainingLog("Number of validation sets: %d" % len(validationSets))
 
-        torchModel = model.createTorchModule()
+        torchModel = model.createTorchModule() if createTorchModule else model.getTorchModule()
         if self.cuda:
             torchModel.cuda()
         model.setTorchModule(torchModel)
@@ -475,28 +515,28 @@ class NNOptimiser:
         self.log.info(f"Learning parameters of {model} via {self}")
         trainingLog('Number of parameters: %d' % nParams)
 
-        criterion = self.lossEvaluator.getTrainingCriterion()
+        lossEvaluator = self.params.lossEvaluator
+        criterion = lossEvaluator.getTrainingCriterion()
 
         if self.cuda:
             criterion = criterion.cuda()
 
         best_val = 1e9
         best_epoch = 0
-        optim = _Optimiser(torchModel.parameters(), method=self.optimiser, lr=self.optimiserLR,
-            max_grad_norm=self.optimiserClip, lr_decay=self.optimiserLRDecay, start_decay_at=self.startLRDecayAtEpoch,
-            use_shrinkage=self.useShrinkage, **self.optimiserArgs)
+        optim = _Optimiser(torchModel.parameters(), method=self.params.optimiser, lr=self.params.optimiserLR,
+            max_grad_norm=self.params.optimiserClip, use_shrinkage=self.params.useShrinkage, **self.params.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
-        self.lossEvaluatorState = self.lossEvaluator.createValidationLossEvaluator(self.cuda)
-        validationMetricName = self.lossEvaluator.getValidationMetricName()
+        self.lossEvaluatorState = lossEvaluator.createValidationLossEvaluator(self.cuda)
+        validationMetricName = lossEvaluator.getValidationMetricName()
         try:
             self.log.info('Begin training')
             self.log.info('Press Ctrl+C to end training early')
-            for epoch in range(1, self.epochs + 1):
+            for epoch in range(1, self.params.epochs + 1):
                 epoch_start_time = time.time()
 
                 # perform training step, processing all the training data once
-                train_loss = self._train(trainingSets, torchModel, criterion, optim, self.batchSize, self.cuda, outputScalers)
+                train_loss = self._train(trainingSets, torchModel, criterion, optim, self.params.batchSize, self.cuda, outputScalers)
 
                 # perform validation, computing the mean metrics across all validation sets (if more than one),
                 # and check for new best result according to validation results
@@ -514,7 +554,7 @@ class NNOptimiser:
                             metricsSum += metricsArray
                     metricsSum /= len(validationSets)  # mean results
                     metrics = dict(zip(metricsKeys, metricsSum))
-                    current_val = metrics[self.lossEvaluator.getValidationMetricName()]
+                    current_val = metrics[lossEvaluator.getValidationMetricName()]
                     isNewBest = current_val < best_val
                     if isNewBest:
                         best_val = current_val
@@ -527,7 +567,7 @@ class NNOptimiser:
                     valStr = ""
                 trainingLog(
                     'Epoch {:3d}/{} completed in {:5.2f}s | train loss {:5.4f}{:s}'.format(
-                        epoch, self.epochs, (time.time() - epoch_start_time), train_loss, valStr))
+                        epoch, self.params.epochs, (time.time() - epoch_start_time), train_loss, valStr))
                 if useValidation and isNewBest:
                     bestModelBytes = model.getModuleBytes()
             trainingLog("Training complete")
@@ -548,7 +588,7 @@ class NNOptimiser:
 
     def _applyModel(self, model, X, groundTruth, outputScaler: TensorScaler):
         output = model(X)
-        if self.scaledOutputs:
+        if self.params.scaledOutputs:
             output, groundTruth = self._scaledValues(output, groundTruth, outputScaler)
         return output, groundTruth
 
@@ -589,7 +629,7 @@ class NNOptimiser:
         model.eval()
 
         groundTruthShape = None
-        for X, Y in dataSet.iterBatches(self.batchSize, shuffle=False):
+        for X, Y in dataSet.iterBatches(self.params.batchSize, shuffle=False):
             if groundTruthShape is None:
                 groundTruthShape = Y.shape[1:]  # the shape of the output of a single model application
                 self.lossEvaluatorState.startValidationCollection(groundTruthShape)
@@ -605,12 +645,12 @@ class NNOptimiser:
             deviceCount = torchcuda.device_count()
             if deviceCount == 0:
                 raise Exception("CUDA is enabled but no device found")
-            if self.gpu is None:
+            if self.params.gpu is None:
                 if deviceCount > 1:
-                    log.warning("More than one GPU detected. Default GPU index is set to 0.")
+                    log.warning("More than one GPU detected but no GPU index was specified, using GPU 0 by default.")
                 gpuIndex = 0
             else:
-                gpuIndex = self.gpu
+                gpuIndex = self.params.gpu
             torchcuda.set_device(gpuIndex)
         elif torchcuda.is_available():
             self.log.warning("You have a CUDA device, so you should probably run with cuda=True")

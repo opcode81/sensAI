@@ -9,7 +9,7 @@ import torch
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider
-from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification
+from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
 from ..util.string import objectRepr
@@ -178,12 +178,20 @@ class TorchModel(ABC):
         self.outputScaler = data.getOutputTensorScaler()
         self.inputScaler = data.getInputTensorScaler()
 
-    def fit(self, data: TorchDataSetProvider, **nnOptimiserParams):
+    def fit(self, data: TorchDataSetProvider, nnOptimiserParams: NNOptimiserParams, strategy: "TorchModelFittingStrategy" = None):
+        """
+        Fits this model using the given model and strategy
+
+        :param data: a provider for the data with which to fit the model
+        :param strategy: the fitting strategy; if None, use TorchModelFittingStrategyDefault.
+            Pass your own strategy to perform custom fitting processes, e.g. process which involve multi-stage learning
+        :param nnOptimiserParams: the parameters with which to create an optimiser which can be applied in the fitting strategy
+        """
         self._extractParamsFromData(data)
-        if "cuda" not in nnOptimiserParams:
-            nnOptimiserParams["cuda"] = self.cuda
-        optimiser = NNOptimiser(**nnOptimiserParams)
-        optimiser.fit(self, data)
+        optimiser = NNOptimiser(nnOptimiserParams)
+        if strategy is None:
+            strategy = TorchModelFittingStrategyDefault()
+        strategy.fit(self, data, optimiser)
         self.bestEpoch = optimiser.getBestEpoch()
         self._gpu = self._getGPUFromModelParameterDevice()
 
@@ -192,6 +200,23 @@ class TorchModel(ABC):
             return next(self.module.parameters()).get_device()
         except:
             return None
+
+
+class TorchModelFittingStrategy(ABC):
+    """
+    Defines the interface for fitting strategies that can be used in TorchModel.fit
+    """
+    @abstractmethod
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
+        pass
+
+
+class TorchModelFittingStrategyDefault(TorchModelFittingStrategy):
+    """
+    Represents the default fitting strategy, which simply applies the given optimiser to the model and data
+    """
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
+        nnOptimiser.fit(model, data)
 
 
 class TorchModelFromModuleFactory(TorchModel):
@@ -232,7 +257,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
     def __init__(self, modelClass: Callable[..., TorchModel], modelArgs=(), modelKwArgs=None,
-            normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
+            normalisationMode=NormalisationMode.NONE, nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
         :param modelArgs: the constructor argument list to pass to modelClass
@@ -243,16 +268,28 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         super().__init__()
         if modelKwArgs is None:
             modelKwArgs = {}
+
         if nnOptimiserParams is None:
-            nnOptimiserParams = {}
-        if "lossEvaluator" not in nnOptimiserParams:
-            nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
+            nnOptimiserParamsInstance = NNOptimiserParams()
+        else:
+            nnOptimiserParamsInstance = NNOptimiserParams.fromDictOrInstance(nnOptimiserParams)
+        if nnOptimiserParamsInstance.lossEvaluator is None:
+            nnOptimiserParamsInstance.lossEvaluator = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
+
         self.normalisationMode = normalisationMode
-        self.nnOptimiserParams = nnOptimiserParams
+        self.nnOptimiserParams = nnOptimiserParamsInstance
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
+
+    def __setstate__(self, state):
+        state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
+        s = super()
+        if hasattr(s, '__setstate__'):
+            s.__setstate__(state)
+        else:
+            self.__dict__ = state
 
     def _createTorchModel(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
@@ -264,7 +301,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
-        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
+        self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
         results = []
@@ -290,7 +327,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
     def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
-            normalisationMode=NormalisationMode.NONE, nnOptimiserParams=None):
+            normalisationMode=NormalisationMode.NONE, nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
         :param modelArgs: the constructor argument list to pass to modelClass
@@ -301,16 +338,28 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         super().__init__()
         if modelKwArgs is None:
             modelKwArgs = {}
+
         if nnOptimiserParams is None:
-            nnOptimiserParams = {}
-        if "lossEvaluator" not in nnOptimiserParams:
-            nnOptimiserParams["lossEvaluator"] = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
+            nnOptimiserParamsInstance = NNOptimiserParams()
+        else:
+            nnOptimiserParamsInstance = NNOptimiserParams.fromDictOrInstance(nnOptimiserParams)
+        if nnOptimiserParamsInstance.lossEvaluator is None:
+            nnOptimiserParamsInstance.lossEvaluator = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
+
         self.normalisationMode = normalisationMode
         self.nnOptimiserParams = nnOptimiserParams
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
+
+    def __setstate__(self, state):
+        state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
+        s = super()
+        if hasattr(s, '__setstate__'):
+            s.__setstate__(state)
+        else:
+            self.__dict__ = state
 
     def _createTorchModel(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)

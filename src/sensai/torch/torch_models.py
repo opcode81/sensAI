@@ -1,7 +1,7 @@
 import collections
 import logging
 import re
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ import torch
 from . import torch_modules
 from .torch_base import VectorTorchModel, TorchVectorRegressionModel, TorchVectorClassificationModel
 from .torch_data import TorchDataSetProviderFromDataUtil, DataUtil, TensorScaler, TensorScalerIdentity
+from .torch_opt import NNOptimiserParams
 from ..normalisation import NormalisationMode
 from ..util.string import objectRepr
 
@@ -36,7 +37,7 @@ class MultiLayerPerceptronTorchModel(VectorTorchModel):
 class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=None,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN,
-            cuda=True, pDropout=None, **nnOptimiserParams):
+            cuda=True, pDropout: float = None, nnOptimiserParams: NNOptimiserParams = None, **nnOptimiserDictParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
@@ -44,16 +45,18 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
         :param normalisationMode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param pDropout: the probability with which to apply dropouts after each hidden layer
-        :param nnOptimiserParams: parameters to pass on to NNOptimiser
+        :param nnOptimiserParams: parameters for NNOptimiser; if None, use default (or what is specified in nnOptimiserDictParams)
+        :param nnOptimiserDictParams: [for backward compatibility] parameters for NNOptimiser (alternative to nnOptimiserParams)
         """
+        nnOptimiserParams = NNOptimiserParams.fromEitherDictOrInstance(nnOptimiserDictParams, nnOptimiserParams)
         super().__init__(MultiLayerPerceptronTorchModel, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
                 dict(pDropout=pDropout), normalisationMode, nnOptimiserParams)
 
 
 class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
     def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
-            normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None,
-            **nnOptimiserParams):
+            normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None, nnOptimiserParams: NNOptimiserParams = None,
+            **nnOptimiserDictParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
@@ -61,8 +64,10 @@ class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationMod
         :param normalisationMode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param pDropout: the probability with which to apply dropouts after each hidden layer
-        :param nnOptimiserParams: parameters to pass on to NNOptimiser
+        :param nnOptimiserParams: parameters for NNOptimiser; if None, use default (or what is specified in nnOptimiserDictParams)
+        :param nnOptimiserDictParams: [for backward compatibility] parameters for NNOptimiser (alternative to nnOptimiserParams)
         """
+        nnOptimiserParams = NNOptimiserParams.fromEitherDictOrInstance(nnOptimiserDictParams, nnOptimiserParams)
         super().__init__(MultiLayerPerceptronTorchModel, [cuda, hiddenDims, hidActivationFunction, outputActivationFunction],
             dict(pDropout=pDropout), normalisationMode, nnOptimiserParams)
 
@@ -80,8 +85,8 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
     """
     def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numClasses: Optional[int] = None,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
-            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid",
-            nnOptimiserParams: dict = None):
+            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid", cuda=True,
+            nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
         """
         :param numInputTimeSlices: the number of input time slices
         :param inputDimPerTimeSlice: the dimension of the input data per time slice
@@ -98,11 +103,9 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
         :param hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
         :param dropout: the dropout probability to use during training (dropouts are applied after every major step in the evaluation path)
         :param outputActivation: the output activation function
-        :param nnOptimiserParams: parameters of NNOptimiser to use for training
+        :param nnOptimiserParams: parameters for NNOptimiser to use for training
         """
-        if nnOptimiserParams is None:
-            nnOptimiserParams = {}
-        self.cuda = nnOptimiserParams.get("cuda", False)
+        self.cuda = cuda
         self.numClasses = numClasses
         lstnetArgs = dict(numInputTimeSlices=numInputTimeSlices, inputDimPerTimeSlice=inputDimPerTimeSlice, numOutputTimeSlices=1,
             outputDimPerTimeSlice=numClasses, numConvolutions=numConvolutions, numCnnTimeSlices=numCnnTimeSlices, hidRNN=hidRNN,

@@ -139,7 +139,7 @@ class DataUtil(ABC):
 
 
 class VectorDataUtil(DataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN,
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.NONE,
             differingOutputNormalisationMode=None):
         """
         :param inputs: the inputs
@@ -217,7 +217,7 @@ class VectorDataUtil(DataUtil):
 
 
 class ClassificationVectorDataUtil(VectorDataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.MAX_BY_COLUMN):
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.NONE):
         if len(outputs.columns) != 1:
             raise Exception(f"Exactly one output dimension (the class index) is required, got {len(outputs.columns)}")
         super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode, differingOutputNormalisationMode=normalisation.NormalisationMode.NONE)
