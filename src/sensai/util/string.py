@@ -1,4 +1,4 @@
-from typing import Union, List, Dict, Any, Sequence
+from typing import Union, List, Dict, Any, Sequence, Iterable
 import re
 
 
@@ -28,3 +28,30 @@ def orRegexGroup(allowedNames: Sequence[str]):
     """
     allowedNames = [re.escape(name) for name in allowedNames]
     return r"(%s)" % "|".join(allowedNames)
+
+
+class ToStringMixin:
+    def _toStringClassName(self):
+        return type(self).__qualname__
+
+    def _toStringProperties(self, exclude: Union[str, Iterable[str]] = None, **additionalEntries) -> str:
+        if exclude is None:
+            exclude = []
+        elif type(exclude) == str:
+            exclude = [exclude]
+        d = {k: v for k, v in self.__dict__.items() if k not in exclude}
+        d.update(additionalEntries)
+        return dictString(d)
+
+    def _toStringObjectInfo(self) -> str:
+        return self._toStringProperties()
+
+    def __str__(self):
+        return f"{self._toStringClassName()}[{self._toStringObjectInfo()}]"
+
+    def __repr__(self):
+        info = f"id={id(self)}"
+        propertyInfo = self._toStringObjectInfo()
+        if len(propertyInfo) > 0:
+            info += ", " + propertyInfo
+        return f"{self._toStringClassName()}[{info}]"
