@@ -380,7 +380,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.model = self._createTorchModel()
 
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
-        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
+        self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
         results = []
