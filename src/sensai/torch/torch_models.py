@@ -1,7 +1,7 @@
 import collections
 import logging
 import re
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ import torch
 from . import torch_modules
 from .torch_base import VectorTorchModel, TorchVectorRegressionModel, TorchVectorClassificationModel
 from .torch_data import TorchDataSetProviderFromDataUtil, DataUtil, TensorScaler, TensorScalerIdentity
+from .torch_modules import ResidualFeedForwardNetwork
 from .torch_opt import NNOptimiserParams
 from ..normalisation import NormalisationMode
 from ..util.string import objectRepr
@@ -208,3 +209,28 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
 
         def getInputTensorScaler(self) -> TensorScaler:
             return self.scaler
+
+
+class ResidualFeedForwardNetworkTorchModel(VectorTorchModel):
+
+    def __init__(self, cuda, hiddenDims: Sequence[int], bottleneckDimensionFactor: float = 1, pDropout=None,
+            useBatchNormalisation: bool = False):
+        super().__init__(cuda=cuda)
+        self.hiddenDims = hiddenDims
+        self.bottleneckDimensionFactor = bottleneckDimensionFactor
+        self.pDropout = pDropout
+        self.useBatchNormalisation = useBatchNormalisation
+
+    def createTorchModuleForDims(self, inputDim, outputDim) -> torch.nn.Module:
+        return ResidualFeedForwardNetwork(inputDim, outputDim, self.hiddenDims, self.bottleneckDimensionFactor,
+            pDropout=self.pDropout, useBatchNormalisation=self.useBatchNormalisation)
+
+
+class ResidualFeedForwardNetworkVectorRegressionModel(TorchVectorRegressionModel):
+
+    def __init__(self, hiddenDims: Sequence[int], bottleneckDimensionFactor: float = 1, cuda=True, pDropout=None,
+            useBatchNormalisation: bool = False, normalisationMode=NormalisationMode.NONE,
+            nnOptimiserParams: Union[NNOptimiserParams, dict] = None):
+        super().__init__(ResidualFeedForwardNetworkTorchModel, [cuda, hiddenDims],
+            dict(bottleneckDimensionFactor=bottleneckDimensionFactor, pDropout=pDropout, useBatchNormalisation=useBatchNormalisation),
+            normalisationMode=normalisationMode, nnOptimiserParams=nnOptimiserParams)

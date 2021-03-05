@@ -1,4 +1,5 @@
-from abc import ABC
+from abc import ABC, abstractmethod
+from typing import Sequence
 
 import torch
 from torch import nn
@@ -302,3 +303,151 @@ class LSTNetwork(MCDropoutCapableNNModule):
             except AttributeError:
                 raise Exception(f'Output function "{name}" unknown.')
         return output
+
+
+class ResidualFeedForwardNetwork(nn.Module):
+    """
+    A feed-forward network consisting of a fully connected input layer, a configurable number of residual blocks and a
+    fully connected output layer. Each residual block consists of two fully connected layers with (optionally) batch
+    normalisation and dropout, which can all be bypassed by a so called skip connection. The skip path and the non-skip
+    path are added as the last step within each block.
+
+    More precisely, the non-skip path consists of the following layers:
+      batch normalization -> ReLU, dropout -> fully-connected -> batch normalization -> ReLU, dropout -> fully-connected
+    The use of the activation function before the connected layers is called "pre-activation".
+
+    The skip path does nothing for the case where the input dimension of the block equals the output dimension. If these
+    dimensions are different, the skip-path consists of a fully-connected layer, but with no activation, normalization,
+    or dropout.
+
+    Within each block, the dimension can be reduced by a certain factor. This is known as "bottleneck" design. It has
+    been shown for the original ResNet, that such a bottleneck design can reduce the number of parameters of the models
+    and improve the training behaviour without compromising the results.
+
+    Batch normalisation can be deactivated, but normally it improves the results, since it not only provides some
+    regularisation, but also normalises the distribution of the inputs of each layer. Why exactly this is beneficial
+    for the training process and the overall results is not yet fully understood (see e.g. the Wikipedia article on
+    batch normalisation for further references).
+
+    The overall architecture is inspired by ResNet and adopted to regression as described e.g. in:
+      * https://www.mdpi.com/1099-4300/22/2/193
+      * https://www.mdpi.com/1996-1073/13/10/2672
+    """
+
+    def __init__(self, inputDim: int, outputDim: int, hiddenDims: Sequence[int], bottleneckDimensionFactor: float = 1,
+            pDropout: float = None, useBatchNormalisation: bool = True):
+        """
+        :param inputDim: the input dimension of the model
+        :param outputDim: the output dimension of the model
+        :param hiddenDims: a list of dimensions; for each list item, a residual block with the corresponding dimension
+                is created
+        :param bottleneckDimensionFactor: an optional factor that specifies the hidden dimension within each block
+        :param pDropout: the dropout probability to use during training (defaults to None for no dropout)
+        :param useBatchNormalisation: whether to use batch normalisation (defaults to True)
+        """
+        super().__init__()
+        self.inputDim = inputDim
+        self.outputDim = outputDim
+        self.hiddenDims = hiddenDims
+        self.useBatchNormalisation = useBatchNormalisation
+
+        if pDropout is not None:
+            self.dropout = nn.Dropout(p=pDropout)
+
+        self.inputLayer = nn.Linear(self.inputDim, self.hiddenDims[0])
+
+        innerHiddenDims = lambda x: max(1, round(x * bottleneckDimensionFactor))
+        blocks = []
+        prevDim = self.hiddenDims[0]
+        for hiddenDim in self.hiddenDims[1:]:
+            if hiddenDim == prevDim:
+                block = self._IdentityBlock(hiddenDim, innerHiddenDims(hiddenDim), self.dropout, useBatchNormalisation)
+            else:
+                block = self._DenseBlock(prevDim, innerHiddenDims(hiddenDim), hiddenDim, self.dropout, useBatchNormalisation)
+            blocks.append(block)
+            prevDim = hiddenDim
+
+        self.bnOutput = nn.BatchNorm1d(self.hiddenDims[-1]) if self.useBatchNormalisation else None
+        self.outputLayer = nn.Linear(self.hiddenDims[-1], outputDim)
+        self.blocks = nn.ModuleList(blocks)
+
+    def forward(self, x):
+
+        x = self.inputLayer(x)
+
+        for block in self.blocks:
+            x = block(x)
+
+        x = self.bnOutput(x) if self.useBatchNormalisation else x
+        x = self.dropout(x) if self.dropout is not None else x
+        x = self.outputLayer(x)
+        return x
+
+    class _ResidualBlock(nn.Module, ABC):
+        """
+        A generic residual block which need to be specified by defining the skip path.
+        """
+
+        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: nn.Dropout, useBatchNormalisation: bool):
+            super().__init__()
+            self.inputDim = inputDim
+            self.hiddenDim = hiddenDim
+            self.outputDim = outputDim
+            self.dropout = dropout
+            self.useBatchNormalisation = useBatchNormalisation
+            self.bnIn = nn.BatchNorm1d(self.inputDim) if useBatchNormalisation else None
+            self.denseIn = nn.Linear(self.inputDim, self.hiddenDim)
+            self.bnOut = nn.BatchNorm1d(self.hiddenDim) if useBatchNormalisation else None
+            self.denseOut = nn.Linear(self.hiddenDim, self.outputDim)
+
+        def forward(self, x):
+            xSkipped = self._skip(x)
+
+            x = self.bnIn(x) if self.useBatchNormalisation else x
+            x = torch.relu(x)
+            x = self.dropout(x) if self.dropout is not None else x
+            x = self.denseIn(x)
+
+            x = self.bnOut(x) if self.useBatchNormalisation else x
+            x = torch.relu(x)
+            x = self.dropout(x) if self.dropout is not None else x
+            x = self.denseOut(x)
+
+            return x + xSkipped
+
+        @abstractmethod
+        def _skip(self, x):
+            """
+            Defines the skip path of the residual block. The input is identical to the argument passed to forward.
+            """
+            pass
+
+    class _IdentityBlock(_ResidualBlock):
+        """
+        A residual block preserving the dimension of the input
+        """
+
+        def __init__(self, inputOutputDim: int, hiddenDim: int, dropout: nn.Dropout, useBatchNormalisation: bool):
+            super().__init__(inputOutputDim, hiddenDim, inputOutputDim, dropout, useBatchNormalisation)
+
+        def _skip(self, x):
+            """
+            Defines the skip path as the identity function.
+            """
+            return x
+
+    class _DenseBlock(_ResidualBlock):
+        """
+        A residual block changing the dimension of the input to the given value.
+        """
+
+        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: nn.Dropout, useBatchNormalisation: bool):
+            super().__init__(inputDim, hiddenDim, outputDim, dropout, useBatchNormalisation)
+            self.denseSkip = nn.Linear(self.inputDim, self.outputDim)
+
+        def _skip(self, x):
+            """
+            Defines the skip path as a fully connected linear layer which changes the dimension as required by this
+            block.
+            """
+            return self.denseSkip(x)

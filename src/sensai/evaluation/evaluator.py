@@ -23,9 +23,25 @@ TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection
 class MetricsDictProvider(TrackingMixin, ABC):
     @abstractmethod
     def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+        """
+        Computes metrics for the given model, typically by fitting the model and applying it to test data
+
+        :param model: the model
+        :param kwargs: parameters to pass on to the underlying evaluation method
+        :return: a dictionary with metrics values
+        """
         pass
 
     def computeMetrics(self, model, **kwargs) -> Optional[Dict[str, float]]:
+        """
+        Computes metrics for the given model, typically by fitting the model and applying it to test data.
+        If a tracked experiment was previously set, the metrics are tracked with the string representation
+        of the model added under an additional key 'str(model)'.
+
+        :param model: the model for which to compute metrics
+        :param kwargs: parameters to pass on to the underlying evaluation method
+        :return: a dictionary with metrics values
+        """
         valuesDict = self._computeMetrics(model, **kwargs)
         if self.trackedExperiment is not None:
             trackedDict = valuesDict.copy()
@@ -131,6 +147,7 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         pass
 
     def _computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+        self.fitModel(model)
         evalData = self.evalModel(model, onTrainingData=onTrainingData)
         return evalData.getEvalStats().getAll()
 

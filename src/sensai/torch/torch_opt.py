@@ -447,8 +447,8 @@ class NNOptimiser:
         :param createTorchModule: whether to newly create the torch module that is to be trained from the model's factory.
             If False, (re-)train the existing module.
         """
-        self.log.info(f"Preparing parameter learning of {model} via {self}")
         self.cuda = model.cuda
+        self.log.info(f"Preparing parameter learning of {model} via {self} with cuda={self.cuda}")
 
         useValidation = self.params.trainFraction != 1.0
 
@@ -530,7 +530,7 @@ class NNOptimiser:
         self.lossEvaluatorState = lossEvaluator.createValidationLossEvaluator(self.cuda)
         validationMetricName = lossEvaluator.getValidationMetricName()
         try:
-            self.log.info('Begin training')
+            self.log.info(f'Begin training with cuda={self.cuda}')
             self.log.info('Press Ctrl+C to end training early')
             for epoch in range(1, self.params.epochs + 1):
                 epoch_start_time = time.time()
