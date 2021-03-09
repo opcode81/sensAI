@@ -39,8 +39,8 @@ def gitLog(path, arg):
 
 
 def gitCommit(msg):
-    with open("commitmsg.txt", "w") as f:
-        f.write(msg)
+    with open("commitmsg.txt", "wb") as f:
+        f.write(msg.encode("utf-8"))
     os.system("git commit --file=commitmsg.txt")
     os.unlink("commitmsg.txt")
 
