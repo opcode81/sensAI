@@ -146,7 +146,7 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def _evalModel(self, model: PredictorModel, data: InputOutputData) -> TEvalData:
         pass
 
-    def _computeMetrics(self, model: PredictorModel, onTrainingData=False) -> Dict[str, float]:
+    def _computeMetrics(self, model: FittableModel, onTrainingData=False) -> Dict[str, float]:
         self.fitModel(model)
         evalData = self.evalModel(model, onTrainingData=onTrainingData)
         return evalData.getEvalStats().getAll()

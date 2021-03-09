@@ -31,10 +31,22 @@ def orRegexGroup(allowedNames: Sequence[str]):
 
 
 class ToStringMixin:
+    """
+    Provides default implementations for __str__ and __repr__ which contain all attribute names and their values. The
+    latter also contains the object id.
+    """
+
     def _toStringClassName(self):
         return type(self).__qualname__
 
     def _toStringProperties(self, exclude: Union[str, Iterable[str]] = None, **additionalEntries) -> str:
+        """
+        Creates a string of the class attributes, optionally excluding some and adding others.
+
+        :param exclude: attributes to be excluded
+        :param additionalEntries: additional key-value-pairs which are added to the string just like the other attributes
+        :return: a string containing all attribute names and values
+        """
         if exclude is None:
             exclude = []
         elif type(exclude) == str:
@@ -44,7 +56,24 @@ class ToStringMixin:
         return dictString(d)
 
     def _toStringObjectInfo(self) -> str:
-        return self._toStringProperties()
+        """
+        Creates a string containing information on the objects state, which is the name and value of all attributes
+        without the attributes that are in the list provided by _toStringExclusions. It is used by the methods __str__
+        and __repr__. This method can be overwritten by sub-classes to provide a custom string.
+
+        :return: a string containing all attribute names and values
+        """
+        return self._toStringProperties(exclude=self._toStringExcludes())
+
+    def _toStringExcludes(self) -> List[str]:
+        """
+        Returns a list of attribute names to be excluded from __str__ and __repr__. This method can be overwritten by
+        sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
+        is not overwritten by the sub class.
+
+        :return: a list of attribute names
+        """
+        return []
 
     def __str__(self):
         return f"{self._toStringClassName()}[{self._toStringObjectInfo()}]"

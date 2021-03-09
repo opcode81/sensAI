@@ -1,4 +1,6 @@
+from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor
+import uuid
 
 import logging
 import os
@@ -175,16 +177,24 @@ class GridSearch(TrackingMixin):
     """
     log = log.getChild(__qualname__)
 
-    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
-            numProcesses=1, csvResultsPath: str = None, parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None):
+    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]],
+            List[Dict[str, Sequence[Any]]]], numProcesses=1, csvResultsPath: str = None,
+            parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None, modelSaveDirectory: str = None,
+            name: str = None):
         """
         :param modelFactory: the function to call with keyword arguments reflecting the parameters to try in order to obtain a model instance
         :param parameterOptions: a dictionary which maps from parameter names to lists of possible values - or a list of such dictionaries,
             where each dictionary in the list has the same keys
         :param numProcesses: the number of parallel processes to use for the search (use 1 to run without multi-processing)
-        :param csvResultsPath: the path of a CSV file to which the results shall be written
+        :param csvResultsPath: the path to a directory or concrete CSV file to which the results shall be written;
+            if it is None, no CSV data will be written; if it is a directory, a file name starting with this grid search's name (see below)
+            will be created.
+            The resulting CSV data will contain one line per evaluated parameter combination.
         :param parameterCombinationSkipDecider: an instance to which parameters combinations can be passed in order to decide whether the
             combination shall be skipped (e.g. because it is redundant/equivalent to another combination or inadmissible)
+        :param modelSaveDirectory the directory where the serialized models shall be saved; if None, models are not saved
+        :param name: the name of this grid search, which will, in particular, be prepended to all saved model files;
+            if None, a default name will be generated of the form "gridSearch_<timestamp>"
         """
         self.modelFactory = modelFactory
         if type(parameterOptions) == list:
@@ -196,8 +206,12 @@ class GridSearch(TrackingMixin):
         else:
             self.parameterOptionsList = [parameterOptions]
         self.numProcesses = numProcesses
-        self.csvResultsPath = csvResultsPath
         self.parameterCombinationSkipDecider = parameterCombinationSkipDecider
+        self.modelSaveDirectory = modelSaveDirectory
+        self.name = name if name is not None else "gridSearch_" + datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.csvResultsPath = csvResultsPath
+        if self.csvResultsPath is not None and os.path.isdir(csvResultsPath):
+            self.csvResultsPath = os.path.join(self.csvResultsPath, f"{self.name}_results.csv")
 
         self.numCombinations = 0
         for parameterOptions in self.parameterOptionsList:
@@ -210,7 +224,9 @@ class GridSearch(TrackingMixin):
         self._executor = None
 
     @classmethod
-    def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, skipDecider: ParameterCombinationSkipDecider, **params) -> Optional[Dict[str, Any]]:
+    def _evalParams(cls, modelFactory: Callable[..., VectorModel], metricsEvaluator: MetricsDictProvider,
+            skipDecider: ParameterCombinationSkipDecider, gridSearchName, combinationIdx,
+            modelSaveDirectory: Optional[str], **params) -> Optional[Dict[str, Any]]:
         if skipDecider is not None:
             if skipDecider.isSkipped(params):
                 cls.log.info(f"Parameter combination is skipped according to {skipDecider}: {params}")
@@ -219,6 +235,11 @@ class GridSearch(TrackingMixin):
         model = modelFactory(**params)
         # TODO or not TODO: for some evaluators additional kwargs can be passed, e.g. onTrainingData
         values = metricsEvaluator.computeMetrics(model)
+        if modelSaveDirectory is not None:
+            filename = f"{gridSearchName}_{model.__class__.__name__}_{combinationIdx}_{uuid.uuid4()}.pickle"
+            log.info(f"Saving trained model to {filename} ...")
+            model.save(os.path.join(modelSaveDirectory, filename))
+            values["filename"] = filename
         values["str(model)"] = str(model)
         values.update(**params)
         if skipDecider is not None:
@@ -242,8 +263,8 @@ class GridSearch(TrackingMixin):
             loggingCallback = metricsEvaluator.trackedExperiment.trackValues
         else:
             loggingCallback = None
-        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath,
-                                                  sortColumnName=sortColumnName, ascending=ascending)
+        paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath, sortColumnName=sortColumnName,
+                ascending=ascending)
 
         def collectResult(values):
             if values is None:
@@ -254,16 +275,21 @@ class GridSearch(TrackingMixin):
             log.info(f"Updated grid search result:\n{paramsMetricsCollection.getDataFrame().to_string()}")
 
         if self.numProcesses == 1:
+            combinationIdx = 0
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
-                    collectResult(self._evalParams(self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider, **paramsDict))
+                    collectResult(self._evalParams(self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider, self.name,
+                            combinationIdx, self.modelSaveDirectory, **paramsDict))
+                    combinationIdx += 1
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
             futures = []
+            combinationIdx = 0
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
                     futures.append(executor.submit(self._evalParams, self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider,
-                                                   **paramsDict))
+                            self.name, combinationIdx, self.modelSaveDirectory, **paramsDict))
+                    combinationIdx += 1
             for future in futures:
                 collectResult(future.result())
 

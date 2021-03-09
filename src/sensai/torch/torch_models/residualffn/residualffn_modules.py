@@ -8,13 +8,14 @@ from torch import nn
 class ResidualFeedForwardNetwork(nn.Module):
     """
     A feed-forward network consisting of a fully connected input layer, a configurable number of residual blocks and a
-    fully connected output layer. Each residual block consists of two fully connected layers with (optionally) batch
-    normalisation and dropout, which can all be bypassed by a so called skip connection. The skip path and the non-skip
-    path are added as the last step within each block.
+    fully connected output layer. Similar architecture are described in e.g. [1] and [2] and are all inspired by
+    ResNet [3]. Each residual block consists of two fully connected layers with (optionally) batch normalisation and
+    dropout, which can all be bypassed by a so called skip connection. The skip path and the non-skip path are added as
+    the last step within each block.
 
     More precisely, the non-skip path consists of the following layers:
       batch normalization -> ReLU, dropout -> fully-connected -> batch normalization -> ReLU, dropout -> fully-connected
-    The use of the activation function before the connected layers is called "pre-activation".
+    The use of the activation function before the connected layers is called "pre-activation" [4].
 
     The skip path does nothing for the case where the input dimension of the block equals the output dimension. If these
     dimensions are different, the skip-path consists of a fully-connected layer, but with no activation, normalization,
@@ -25,13 +26,21 @@ class ResidualFeedForwardNetwork(nn.Module):
     and improve the training behaviour without compromising the results.
 
     Batch normalisation can be deactivated, but normally it improves the results, since it not only provides some
-    regularisation, but also normalises the distribution of the inputs of each layer. Why exactly this is beneficial
-    for the training process and the overall results is not yet fully understood (see e.g. the Wikipedia article on
-    batch normalisation for further references).
+    regularisation, but also normalises the distribution of the inputs of each layer and therefore addresses the problem
+    of "internal covariate shift"[5]. The mechanism behind this is not yet fully understood (see e.g. the Wikipedia
+    article on batch normalisation for further references).
 
-    The overall architecture is inspired by ResNet and adopted to regression as described e.g. in:
-      * https://www.mdpi.com/1099-4300/22/2/193
-      * https://www.mdpi.com/1996-1073/13/10/2672
+    References:
+      * [1] Chen, Dongwei et al. “Deep Residual Learning for Nonlinear Regression.”
+        Entropy 22, no. 2 (February 2020): 193. https://doi.org/10.3390/e22020193.
+      * [2] Kiprijanovska, et al. “HousEEC: Day-Ahead Household Electrical Energy Consumption Forecasting Using Deep Learning.”
+        Energies 13, no. 10 (January 2020): 2672. https://doi.org/10.3390/en13102672.
+      * [3] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. “Deep Residual Learning for Image Recognition.”
+        ArXiv:1512.03385 [Cs], December 10, 2015. http://arxiv.org/abs/1512.03385.
+      * [4] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. “Identity Mappings in Deep Residual Networks.”
+        ArXiv:1603.05027 [Cs], July 25, 2016. http://arxiv.org/abs/1603.05027.
+      * [5] Ioffe, Sergey, and Christian Szegedy. “Batch Normalization: Accelerating Deep Network Training by Reducing
+        Internal Covariate Shift.” ArXiv:1502.03167 [Cs], March 2, 2015. http://arxiv.org/abs/1502.03167.
     """
 
     def __init__(self, inputDim: int, outputDim: int, hiddenDims: Sequence[int], bottleneckDimensionFactor: float = 1,

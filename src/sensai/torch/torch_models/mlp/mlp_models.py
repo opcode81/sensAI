@@ -1,6 +1,6 @@
 import logging
 
-import torch
+import torch.nn.functional
 
 from .mlp_modules import MultiLayerPerceptron
 from ...torch_base import VectorTorchModel, TorchVectorRegressionModel, TorchVectorClassificationModel
@@ -19,7 +19,15 @@ class MultiLayerPerceptronTorchModel(VectorTorchModel):
         self.pDropout = pDropout
 
     def __str__(self):
-        return f"_MLP[hiddenDims={self.hiddenDims}, hidAct={self.hidActivationFunction.__name__}, outAct={self.outputActivationFunction.__name__ if self.outputActivationFunction is not None else None}, pDropout={self.pDropout}]"
+        def name(x):
+            if hasattr(x, "__name__"):
+                return x.__name__
+            elif hasattr(x, "__class__"):
+                return x.__class__.__name__
+            else:
+                return str(x)
+
+        return f"_MLP[hiddenDims={self.hiddenDims}, hidAct={name(self.hidActivationFunction)}, outAct={name(self.outputActivationFunction)}, pDropout={self.pDropout}]"
 
     def createTorchModuleForDims(self, inputDim, outputDim):
         return MultiLayerPerceptron(inputDim, outputDim, self.hiddenDims,
@@ -33,8 +41,8 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
             cuda=True, pDropout: float = None, nnOptimiserParams: NNOptimiserParams = None, **nnOptimiserDictParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
-        :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
-        :param outputActivationFunction: the output activation function (torch.* or None)
+        :param hidActivationFunction: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
+        :param outputActivationFunction: the output activation function (torch.nn.functional.* or torch.* or None)
         :param normalisationMode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param pDropout: the probability with which to apply dropouts after each hidden layer
@@ -47,13 +55,13 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
 
 
 class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
-    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.sigmoid,
+    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.nn.functional.softmax,
             normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None, nnOptimiserParams: NNOptimiserParams = None,
             **nnOptimiserDictParams):
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
-        :param hidActivationFunction: the activation function (torch.*) to use for all hidden layers
-        :param outputActivationFunction: the output activation function (torch.*)
+        :param hidActivationFunction: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
+        :param outputActivationFunction: the output activation function (torch.nn.functional.* or torch.* or None)
         :param normalisationMode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param pDropout: the probability with which to apply dropouts after each hidden layer
