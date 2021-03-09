@@ -7,7 +7,9 @@ from collections import OrderedDict
 from enum import Enum
 from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional
 
+from matplotlib import pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -447,8 +449,8 @@ class NNOptimiser:
         :param createTorchModule: whether to newly create the torch module that is to be trained from the model's factory.
             If False, (re-)train the existing module.
         """
-        self.log.info(f"Preparing parameter learning of {model} via {self}")
         self.cuda = model.cuda
+        self.log.info(f"Preparing parameter learning of {model} via {self} with cuda={self.cuda}")
 
         useValidation = self.params.trainFraction != 1.0
 
@@ -529,14 +531,17 @@ class NNOptimiser:
         bestModelBytes = model.getModuleBytes()
         self.lossEvaluatorState = lossEvaluator.createValidationLossEvaluator(self.cuda)
         validationMetricName = lossEvaluator.getValidationMetricName()
+        trainingLossValues = []
+        validationMetricValues = []
         try:
-            self.log.info('Begin training')
+            self.log.info(f'Begin training with cuda={self.cuda}')
             self.log.info('Press Ctrl+C to end training early')
             for epoch in range(1, self.params.epochs + 1):
                 epoch_start_time = time.time()
 
                 # perform training step, processing all the training data once
                 train_loss = self._train(trainingSets, torchModel, criterion, optim, self.params.batchSize, self.cuda, outputScalers)
+                trainingLossValues.append(train_loss)
 
                 # perform validation, computing the mean metrics across all validation sets (if more than one),
                 # and check for new best result according to validation results
@@ -555,6 +560,7 @@ class NNOptimiser:
                     metricsSum /= len(validationSets)  # mean results
                     metrics = dict(zip(metricsKeys, metricsSum))
                     current_val = metrics[lossEvaluator.getValidationMetricName()]
+                    validationMetricValues.append(current_val)
                     isNewBest = current_val < best_val
                     if isNewBest:
                         best_val = current_val
@@ -574,6 +580,9 @@ class NNOptimiser:
         except KeyboardInterrupt:
             trainingLog('Exiting from training early')
 
+        self.trainingLossSequence = trainingLossValues
+        self.validationMetricSequence = validationMetricValues
+
         # reload best model according to validation results
         if useValidation:
             trainingLog(f'Best model is from epoch {best_epoch} with {validationMetricName} {best_val} on validation set')
@@ -583,8 +592,18 @@ class NNOptimiser:
     def getTrainingLog(self):
         return self.trainingLog
 
+    def getTrainingLossSequence(self):
+        return self.trainingLossSequence
+
+    def getValidationMetricSequence(self):
+        return self.validationMetricSequence
+
     def getBestEpoch(self):
         return self.bestEpoch
+
+    def getTrainingInfo(self) -> "TrainingInfo":
+        return TrainingInfo(bestEpoch=self.getBestEpoch(), trainingLossSequence=self.getTrainingLossSequence(),
+            validationMetricSequence=self.validationMetricSequence)
 
     def _applyModel(self, model, X, groundTruth, outputScaler: TensorScaler):
         output = model(X)
@@ -654,3 +673,25 @@ class NNOptimiser:
             torchcuda.set_device(gpuIndex)
         elif torchcuda.is_available():
             self.log.warning("You have a CUDA device, so you should probably run with cuda=True")
+
+
+class TrainingInfo:
+    def __init__(self, bestEpoch: int = None, log: str = None, trainingLossSequence: Sequence[float] = None, validationMetricSequence:
+            Sequence[float] = None):
+        self.validationMetricSequence = validationMetricSequence
+        self.trainingLossSequence = trainingLossSequence
+        self.log = log
+        self.bestEpoch = bestEpoch
+
+    def getTrainingLossSeries(self):
+        return pd.Series(self.trainingLossSequence, name="training loss")
+
+    def getValidationMetricSeries(self):
+        return pd.Series(self.validationMetricSequence, name="validation metric")
+
+    def plotAll(self):
+        """
+        Plots both the sequence of training loss values and the sequence of validation metric values
+        """
+        plt.figure()
+        pd.concat([self.getTrainingLossSeries(), self.getValidationMetricSeries()], axis=1).plot()

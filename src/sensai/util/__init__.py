@@ -39,6 +39,16 @@ def flattenArguments(args: Sequence[Union[T, Sequence[T]]]) -> List[T]:
     return result
 
 
+def markUsed(*args):
+    """
+    Utility function to mark identifiers as used.
+    The function does nothing.
+
+    :param args: pass identifiers that shall be marked as used here
+    """
+    pass
+
+
 class LogTime:
     def __init__(self, name):
         self.name = name

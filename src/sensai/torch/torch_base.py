@@ -1,62 +1,128 @@
 import io
 import logging
 from abc import ABC, abstractmethod
-from typing import Union, Tuple, Callable, Optional
+from typing import Union, Tuple, Callable, Optional, List
 
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
+from torch.nn import functional as F
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider
-from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams
+from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
-from ..util.string import objectRepr
+from ..util.string import objectRepr, ToStringMixin
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
 log = logging.getLogger(__name__)
 
 
-class TorchModel(ABC):
+class MCDropoutCapableNNModule(nn.Module, ABC):
+    """
+    Base class for NN modules that are to support MC-Dropout.
+    Support can be added by applying the _dropout function in the module's forward method.
+    Then, to apply inference that samples results, call inferMCDropout rather than just using __call__.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._applyMCDropout = False
+        self._pMCDropoutOverride = None
+
+    def __setstate__(self, d):
+        if "_applyMCDropout" not in d:
+            d["_applyMCDropout"] = False
+        if "_pMCDropoutOverride" not in d:
+            d["_pMCDropoutOverride"] = None
+        super().__setstate__(d)
+
+    def _dropout(self, x, pTraining=None, pInference=None):
+        """
+        This method is to to applied within the module's forward method to apply dropouts during training and/or inference.
+
+        :param x: the model input tensor
+        :param pTraining: the probability with which to apply dropouts during training; if None, apply no dropout
+        :param pInference:  the probability with which to apply dropouts during MC-Dropout-based inference (via inferMCDropout,
+            which may override the probability via its optional argument);
+            if None, a dropout is not to be applied
+        :return: a potentially modified version of x with some elements dropped out, depending on application context and dropout probabilities
+        """
+        if self.training and pTraining is not None:
+            return F.dropout(x, pTraining)
+        elif not self.training and self._applyMCDropout and pInference is not None:
+            return F.dropout(x, pInference if self._pMCDropoutOverride is None else self._pMCDropoutOverride)
+        else:
+            return x
+
+    def _enableMCDropout(self, enabled=True, pMCDropoutOverride=None):
+        self._applyMCDropout = enabled
+        self._pMCDropoutOverride = pMCDropoutOverride
+
+    def inferMCDropout(self, x, numSamples, p=None):
+        """
+        Applies inference using MC-Dropout, drawing the given number of samples.
+
+        :param x: the model input
+        :param numSamples: the number of samples to draw with MC-Dropout
+        :param p: the dropout probability to apply, overriding the probability specified by the model's forward method; if None, use model's default
+        :return: a pair (y, sd) where y the mean output tensor and sd is a tensor of the same dimension containing standard deviations
+        """
+        results = []
+        self._enableMCDropout(True, pMCDropoutOverride=p)
+        try:
+            for i in range(numSamples):
+                y = self(x)
+                results.append(y)
+        finally:
+            self._enableMCDropout(False)
+        results = torch.stack(results)
+        mean = torch.mean(results, 0)
+        stddev = torch.std(results, 0, unbiased=False)
+        return mean, stddev
+
+
+class TorchModel(ABC, ToStringMixin):
     """
     sensAI abstraction for torch models, which supports one-line training, allows for convenient model application,
     has basic mechanisms for data scaling, and soundly handles persistence (via pickle).
     An instance wraps a torch.nn.Module, which is constructed on demand during training via the factory method
     createTorchModule.
     """
-    log = log.getChild(__qualname__)
+    log: logging.Logger = log.getChild(__qualname__)
 
     def __init__(self, cuda=True):
-        self.cuda = cuda
+        self.cuda: bool = cuda
         self.module: Optional[torch.nn.Module] = None
         self.outputScaler: Optional[TensorScaler] = None
         self.inputScaler: Optional[TensorScaler] = None
-        self.bestEpoch = None
-        self._gpu = None
+        self.trainingInfo: Optional[TrainingInfo] = None
+        self._gpu: Optional[int] = None
 
-    def setTorchModule(self, module: torch.nn.Module):
+    def setTorchModule(self, module: torch.nn.Module) -> None:
         self.module = module
 
-    def getModuleBytes(self):
+    def getModuleBytes(self) -> bytes:
         bytesIO = io.BytesIO()
         torch.save(self.module, bytesIO)
         return bytesIO.getvalue()
 
-    def setModuleBytes(self, modelBytes):
+    def setModuleBytes(self, modelBytes: bytes) -> None:
         modelFile = io.BytesIO(modelBytes)
         self._loadModel(modelFile)
 
-    def getTorchModule(self):
+    def getTorchModule(self) -> torch.nn.Module:
         return self.module
 
-    def _setCudaEnabled(self, isCudaEnabled):
+    def _setCudaEnabled(self, isCudaEnabled: bool) -> None:
         self.cuda = isCudaEnabled
 
-    def _isCudaEnabled(self):
+    def _isCudaEnabled(self) -> bool:
         return self.cuda
 
-    def _loadModel(self, modelFile):
+    def _loadModel(self, modelFile) -> None:  # TODO: complete type hints: what types are allowed for modelFile?
         try:
             self.module = torch.load(modelFile)
             self._gpu = self._getGPUFromModelParameterDevice()
@@ -89,13 +155,18 @@ class TorchModel(ABC):
     def createTorchModule(self) -> torch.nn.Module:
         pass
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict:
         state = dict(self.__dict__)
         del state["module"]
         state["modelBytes"] = self.getModuleBytes()
         return state
 
-    def __setstate__(self, d):
+    def __setstate__(self, d: dict) -> None:
+        # backward compatibility
+        if "bestEpoch" in d:
+            d["trainingInfo"] = TrainingInfo(bestEpoch=d["bestEpoch"])
+            del d["bestEpoch"]
+
         modelBytes = None
         if "modelBytes" in d:
             modelBytes = d["modelBytes"]
@@ -104,8 +175,9 @@ class TorchModel(ABC):
         if modelBytes is not None:
             self.setModuleBytes(modelBytes)
 
-    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy=True, createBatch=False, mcDropoutSamples=None, mcDropoutProbability=None, scaleOutput=False,
-            scaleInput=False) -> Union[torch.Tensor, np.ndarray, Tuple]:
+    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy: bool = True, createBatch: bool = False,
+            mcDropoutSamples: Optional[int] = None, mcDropoutProbability: Optional[float] = None, scaleOutput: bool = False,
+            scaleInput: bool = False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
         Applies the model to the given input tensor and returns the result (normalized)
 
@@ -171,14 +243,14 @@ class TorchModel(ABC):
         """
         return self.apply(X, scaleOutput=True, scaleInput=True, **kwargs)
 
-    def scaledOutput(self, output):
+    def scaledOutput(self, output: torch.Tensor) -> torch.Tensor:
         return self.outputScaler.denormalise(output)
 
-    def _extractParamsFromData(self, data: TorchDataSetProvider):
+    def _extractParamsFromData(self, data: TorchDataSetProvider) -> None:
         self.outputScaler = data.getOutputTensorScaler()
         self.inputScaler = data.getInputTensorScaler()
 
-    def fit(self, data: TorchDataSetProvider, nnOptimiserParams: NNOptimiserParams, strategy: "TorchModelFittingStrategy" = None):
+    def fit(self, data: TorchDataSetProvider, nnOptimiserParams: NNOptimiserParams, strategy: "TorchModelFittingStrategy" = None) -> None:
         """
         Fits this model using the given model and strategy
 
@@ -192,7 +264,7 @@ class TorchModel(ABC):
         if strategy is None:
             strategy = TorchModelFittingStrategyDefault()
         strategy.fit(self, data, optimiser)
-        self.bestEpoch = optimiser.getBestEpoch()
+        self.trainingInfo = optimiser.getTrainingInfo()
         self._gpu = self._getGPUFromModelParameterDevice()
 
     def _getGPUFromModelParameterDevice(self) -> Optional[int]:
@@ -200,6 +272,9 @@ class TorchModel(ABC):
             return next(self.module.parameters()).get_device()
         except:
             return None
+
+    def _toStringExcludes(self) -> List[str]:
+        return ['_gpu', 'module', 'trainingInfo', "inputScaler", "outputScaler"]
 
 
 class TorchModelFittingStrategy(ABC):
@@ -380,7 +455,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.model = self._createTorchModel()
 
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
-        self.model.fit(dataSetProvider, **self.nnOptimiserParams)
+        self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
         results = []

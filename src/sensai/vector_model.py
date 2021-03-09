@@ -138,12 +138,15 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         return result
 
     def isFitted(self):
-        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
-        if not underlyingModelIsFitted:
+        if not self._isUnderlyingModelFitted():
             return False
         if not self._preProcessorsAreFitted():
             return False
         return True
+
+    def _isUnderlyingModelFitted(self):
+        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
+        return underlyingModelIsFitted
 
     def _checkModelInputColumns(self, modelInput: pd.DataFrame):
         if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
@@ -181,8 +184,9 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :return: a DataFrame with the same index as the input
         """
         if not self.isFitted():
-            raise Exception(f"Calling predict with unfitted model. "
-                            f"This might lead to errors down the line, especially if input/output checks are enabled")
+            raise Exception(f"Calling predict with unfitted model {self} "
+                            f"(isUnderlyingModelFitted={self._isUnderlyingModelFitted()}, "
+                            f"preProcessorsAreFitted={self._preProcessorsAreFitted()})")
         x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)

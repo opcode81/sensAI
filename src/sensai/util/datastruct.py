@@ -1,6 +1,8 @@
 from bisect import bisect_right, bisect_left
 from typing import Sequence, Optional, TypeVar, Generic, Tuple
 
+from . import sequences as array_util
+
 TKey = TypeVar("TKey")
 TValue = TypeVar("TValue")
 
@@ -22,10 +24,7 @@ class SortedValues(Generic[TValue]):
         :param value: the value to search for
         :return: the index or None if there is no such index
         """
-        idx = bisect_right(self.values, value)
-        if idx:
-            return idx - 1
-        return None
+        return array_util.floorIndex(self.values, value)
 
     def ceilIndex(self, value) -> Optional[int]:
         """
@@ -34,10 +33,7 @@ class SortedValues(Generic[TValue]):
         :param value: the value to search for
         :return: the index or None if there is no such index
         """
-        idx = bisect_left(self.values, value)
-        if idx != len(self.values):
-            return idx
-        return None
+        return array_util.ceilIndex(self.values, value)
 
     def _value(self, idx: Optional[int]) -> Optional[TValue]:
         if idx is None:
@@ -70,6 +66,60 @@ class SortedValues(Generic[TValue]):
 
     def valueSlice(self, lowestKey, highestKey) -> Optional[Sequence[TValue]]:
         return self._valueSlice(self.ceilIndex(lowestKey), self.floorIndex(highestKey))
+
+
+class SortedKeysAndValues(Generic[TKey, TValue]):
+    def __init__(self, keys: Sequence[TKey], values: Sequence[TValue]):
+        """
+        :param keys: a sorted sequence of keys
+        :param values: a sequence of corresponding values
+        """
+        if len(keys) != len(values):
+            raise ValueError("Lengths of keys and values do not match")
+        self.keys = keys
+        self.values = values
+
+    def floorIndex(self, value) -> Optional[int]:
+        """
+        Finds the rightmost index where the value is less than or equal to the given value
+
+        :param value: the value to search for
+        :return: the index or None if there is no such index
+        """
+        return array_util.floorIndex(self.values, value)
+
+    def ceilIndex(self, value) -> Optional[int]:
+        """
+        Finds the leftmost index where the value is greater than or equal to the given value
+
+        :param value: the value to search for
+        :return: the index or None if there is no such index
+        """
+        return array_util.ceilIndex(self.values, value)
+
+    def floorValue(self, key) -> Optional[TValue]:
+        """
+        Returns the value for the largest index where the corresponding key is less than or equal to the given value
+
+        :param value: the value to search for
+        :return: the value or None if there is no such value
+        """
+        return array_util.floorValue(self.keys, key, values=self.values)
+
+    def ceilValue(self, key) -> Optional[TValue]:
+        """
+        Returns the value for the smallest index where the corresponding key is greater than or equal to the given value
+
+        :param value: the value to search for
+        :return: the value or None if there is no such value
+        """
+        return array_util.ceilValue(self.keys, key, values=self.values)
+
+    def valueSliceInner(self, lowerBoundKey, upperBoundKey):
+        return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
+
+    def valueSliceOuter(self, lowerBoundKey, upperBoundKey):
+        return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
 
 
 class SortedKeyValuePairs(Generic[TKey, TValue]):
