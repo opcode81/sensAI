@@ -63,7 +63,7 @@ class ToStringMixin:
 
         :return: a string containing all attribute names and values
         """
-        return self._toStringProperties(exclude=self._toStringExcludes())
+        return self._toStringProperties(exclude=self._toStringExcludes(), **self._toStringAdditionalEntries())
 
     def _toStringExcludes(self) -> List[str]:
         """
@@ -74,6 +74,9 @@ class ToStringMixin:
         :return: a list of attribute names
         """
         return []
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        return {}
 
     def __str__(self):
         return f"{self._toStringClassName()}[{self._toStringObjectInfo()}]"

@@ -7,6 +7,7 @@ from collections import OrderedDict
 from enum import Enum
 from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional
 
+import matplotlib.figure
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
     TensorScalerIdentity
+from ..util.string import ToStringMixin
 
 if TYPE_CHECKING:
     from .torch_base import TorchModel
@@ -328,16 +330,22 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
 
 
-class NNOptimiserParams:
-    def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser="adam", optimiserClip=10., optimiserLR=0.001,
+class NNOptimiserParams(ToStringMixin):
+    REMOVED_PARAMS = {"cuda"}
+    RENAMED_PARAMS = {
+        "optimiserClip": "shrinkageClip"
+    }
+
+    def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser="adam", optimiserLR=0.001, earlyStoppingEpochs=None,
             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False,
-            useShrinkage=True, **optimiserArgs):
+            useShrinkage=True, shrinkageClip=10., **optimiserArgs):
         """
         :param lossEvaluator: the loss evaluator to use
-        :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained)
+        :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained); if None, default to first GPU
         :param optimiser: the name of the optimizer to be used; defaults to "adam"
-        :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
         :param optimiserLR: the optimiser's learning rate
+        :param earlyStoppingEpochs: the number of epochs without validation score improvement after which to abort training and
+            use the best epoch's model (early stopping); if None, never abort training before all epochs are completed
         :param batchSize: the batch size to use; for algorithms L-BFGS (optimiser='lbfgs'), which do not use batches, leave this at None.
             If the algorithm uses batches and None is specified, batch size 64 will be used by default.
         :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
@@ -345,6 +353,7 @@ class NNOptimiserParams:
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
         :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
+        :param shrinkageClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
         :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
         """
         if optimiser == 'lbfgs':
@@ -360,7 +369,7 @@ class NNOptimiserParams:
         self.epochs = epochs
         self.batchSize = batchSize
         self.optimiserLR = optimiserLR
-        self.optimiserClip = optimiserClip
+        self.shrinkageClip = shrinkageClip
         self.optimiser = optimiser
         self.gpu = gpu
         self.trainFraction = trainFraction
@@ -368,11 +377,14 @@ class NNOptimiserParams:
         self.lossEvaluator = lossEvaluator
         self.optimiserArgs = optimiserArgs
         self.useShrinkage = useShrinkage
+        self.earlyStoppingEpochs = earlyStoppingEpochs
 
-    def __str__(self):
-        return f"{self.__class__.__name__}[optimiser={self.optimiser}, lossEvaluator={self.lossEvaluator}, epochs={self.epochs}, " \
-               f"batchSize={self.batchSize}, LR={self.optimiserLR}, clip={self.optimiserClip}, gpu={self.gpu}, useShrinkage={self.useShrinkage}, " \
-               f"optimiserArgs={self.optimiserArgs}]"
+    @classmethod
+    def _updatedParams(cls, params: dict) -> dict:
+        return {cls.RENAMED_PARAMS.get(k, k): v for k, v in params.items() if k not in cls.REMOVED_PARAMS}
+
+    def __setstate__(self, state):
+        self.__dict__ = self._updatedParams(state)
 
     @classmethod
     def fromDictOrInstance(cls, nnOptimiserParams: Union[dict, "NNOptimiserParams"]) -> "NNOptimiserParams":
@@ -381,11 +393,9 @@ class NNOptimiserParams:
         else:
             return cls.fromDict(nnOptimiserParams)
 
-    @staticmethod
-    def fromDict(params: dict) -> "NNOptimiserParams":
-        removedParams = ["cuda"]
-        params = {k: v for k, v in params.items() if k not in removedParams}
-        return NNOptimiserParams(**params)
+    @classmethod
+    def fromDict(cls, params: dict) -> "NNOptimiserParams":
+        return NNOptimiserParams(**cls._updatedParams(params))
 
     @classmethod
     def fromEitherDictOrInstance(cls, nnOptimiserDictParams: dict, nnOptimiserParams: Optional["NNOptimiserParams"]):
@@ -423,10 +433,7 @@ class NNOptimiser:
             raise ValueError("Must provide a loss evaluator")
 
         self.params = params
-
         self.lossEvaluatorState = None
-        self.trainingLog = None
-        self.bestEpoch = None
         self.cuda = None
 
     def __str__(self):
@@ -434,7 +441,7 @@ class NNOptimiser:
 
     def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, List[TorchDataSetProvider],
             TorchDataSet, List[TorchDataSet], Tuple[TorchDataSet, TorchDataSet], List[Tuple[TorchDataSet, TorchDataSet]]],
-            createTorchModule=True):
+            createTorchModule=True) -> "TrainingInfo":
         """
         Fits the parameters of the given model to the given data, which can be a list of or single instance of one of the following:
 
@@ -462,13 +469,11 @@ class NNOptimiser:
             else:
                 raise ValueError(f"Cannot create a TorchDataSetProvider from {d}")
 
-        # initialise data to be generated
-        self.trainingLog = []
-        self.bestEpoch = None
+        trainingLogEntries = []
 
         def trainingLog(s):
             self.log.info(s)
-            self.trainingLog.append(s)
+            trainingLogEntries.append(s)
 
         self._init_cuda()
 
@@ -514,8 +519,9 @@ class NNOptimiser:
         model.setTorchModule(torchModel)
 
         nParams = sum([p.nelement() for p in torchModel.parameters()])
-        self.log.info(f"Learning parameters of {model} via {self}")
+        self.log.info(f"Learning parameters of {model}")
         trainingLog('Number of parameters: %d' % nParams)
+        trainingLog(f"Starting training process via {self}")
 
         lossEvaluator = self.params.lossEvaluator
         criterion = lossEvaluator.getTrainingCriterion()
@@ -523,10 +529,11 @@ class NNOptimiser:
         if self.cuda:
             criterion = criterion.cuda()
 
+        totalEpochs = None
         best_val = 1e9
         best_epoch = 0
         optim = _Optimiser(torchModel.parameters(), method=self.params.optimiser, lr=self.params.optimiserLR,
-            max_grad_norm=self.params.optimiserClip, use_shrinkage=self.params.useShrinkage, **self.params.optimiserArgs)
+            max_grad_norm=self.params.shrinkageClip, use_shrinkage=self.params.useShrinkage, **self.params.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
         self.lossEvaluatorState = lossEvaluator.createValidationLossEvaluator(self.cuda)
@@ -574,14 +581,20 @@ class NNOptimiser:
                 trainingLog(
                     'Epoch {:3d}/{} completed in {:5.2f}s | train loss {:5.4f}{:s}'.format(
                         epoch, self.params.epochs, (time.time() - epoch_start_time), train_loss, valStr))
-                if useValidation and isNewBest:
-                    bestModelBytes = model.getModuleBytes()
+                totalEpochs = epoch
+                if useValidation:
+                    if isNewBest:
+                        bestModelBytes = model.getModuleBytes()
+
+                    # check for early stopping
+                    numEpochsWithoutImprovement = epoch - best_epoch
+                    if self.params.earlyStoppingEpochs is not None and numEpochsWithoutImprovement >= self.params.earlyStoppingEpochs:
+                        trainingLog(f"Stopping early: {numEpochsWithoutImprovement} epochs without validation metric improvement")
+                        break
+
             trainingLog("Training complete")
         except KeyboardInterrupt:
-            trainingLog('Exiting from training early')
-
-        self.trainingLossSequence = trainingLossValues
-        self.validationMetricSequence = validationMetricValues
+            trainingLog('Exiting from training early because of keyboard interrupt')
 
         # reload best model according to validation results
         if useValidation:
@@ -589,21 +602,8 @@ class NNOptimiser:
             self.bestEpoch = best_epoch
             model.setModuleBytes(bestModelBytes)
 
-    def getTrainingLog(self):
-        return self.trainingLog
-
-    def getTrainingLossSequence(self):
-        return self.trainingLossSequence
-
-    def getValidationMetricSequence(self):
-        return self.validationMetricSequence
-
-    def getBestEpoch(self):
-        return self.bestEpoch
-
-    def getTrainingInfo(self) -> "TrainingInfo":
-        return TrainingInfo(bestEpoch=self.getBestEpoch(), trainingLossSequence=self.getTrainingLossSequence(),
-            validationMetricSequence=self.validationMetricSequence)
+        return TrainingInfo(bestEpoch=best_epoch if useValidation else None, log=trainingLogEntries, totalEpochs=totalEpochs,
+                trainingLossSequence=trainingLossValues, validationMetricSequence=validationMetricValues)
 
     def _applyModel(self, model, X, groundTruth, outputScaler: TensorScaler):
         output = model(X)
@@ -676,22 +676,29 @@ class NNOptimiser:
 
 
 class TrainingInfo:
-    def __init__(self, bestEpoch: int = None, log: str = None, trainingLossSequence: Sequence[float] = None, validationMetricSequence:
-            Sequence[float] = None):
+    def __init__(self, bestEpoch: int = None, log: List[str] = None, trainingLossSequence: Sequence[float] = None, validationMetricSequence:
+            Sequence[float] = None, totalEpochs=None):
         self.validationMetricSequence = validationMetricSequence
         self.trainingLossSequence = trainingLossSequence
         self.log = log
         self.bestEpoch = bestEpoch
+        self.totalEpochs = totalEpochs
 
-    def getTrainingLossSeries(self):
+    def __setstate__(self, state):
+        if "totalEpochs" not in state:
+            state["totalEpochs"] = None
+        self.__dict__ = state
+
+    def getTrainingLossSeries(self) -> pd.Series:
         return pd.Series(self.trainingLossSequence, name="training loss")
 
-    def getValidationMetricSeries(self):
+    def getValidationMetricSeries(self) -> pd.Series:
         return pd.Series(self.validationMetricSequence, name="validation metric")
 
-    def plotAll(self):
+    def plotAll(self) -> matplotlib.figure.Figure:
         """
         Plots both the sequence of training loss values and the sequence of validation metric values
         """
-        plt.figure()
+        fig = plt.figure()
         pd.concat([self.getTrainingLossSeries(), self.getValidationMetricSeries()], axis=1).plot()
+        return fig

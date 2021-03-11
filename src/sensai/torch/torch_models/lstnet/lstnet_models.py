@@ -13,7 +13,7 @@ from ...torch_data import TorchDataSetProviderFromDataUtil, TensorScalerIdentity
 from ...torch_opt import NNOptimiserParams
 from ....util.string import objectRepr
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):

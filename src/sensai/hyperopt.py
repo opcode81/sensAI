@@ -114,18 +114,29 @@ class ParametersMetricsCollection:
     """
     Utility class for holding and persisting evaluation results
     """
-    def __init__(self, csvPath=None, sortColumnName=None, ascending=True):
+    def __init__(self, csvPath=None, sortColumnName=None, ascending=True, incremental=False):
         """
         :param csvPath: path to save the data frame to upon every update
         :param sortColumnName: the column name by which to sort the data frame that is collected; if None, do not sort
         :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
+        :param incremental: whether to add to an existing CSV file instead of overwriting it
         """
         self.sortColumnName = sortColumnName
         self.csvPath = csvPath
         self.ascending = ascending
-        self.df = None
-        self.cols = None
-        self._currentRow = 0
+        if os.path.exists(csvPath) and incremental:
+            self.df = pd.read_csv(csvPath)
+            log.info(f"Found existing CSV file with {len(self.df)} entries; {csvPath} will be extended (incremental mode)")
+            self._currentRow = len(self.df)
+            self.valueDicts = [nt._asdict() for nt in self.df.itertuples()]
+        else:
+            if os.path.exists(csvPath):
+                log.info(f"Results will be written to new file {csvPath}")
+            else:
+                log.warning(f"Results in existing file ({csvPath}) will be overwritten (non-incremental mode)")
+            self.df = None
+            self._currentRow = 0
+            self.valueDicts = []
 
     def addValues(self, values: Dict[str, Any]):
         """
@@ -136,20 +147,25 @@ class ParametersMetricsCollection:
         :return:
         """
         if self.df is None:
-            self.cols = list(values.keys())
+            cols = list(values.keys())
 
             # check sort column and move it to the front
             if self.sortColumnName is not None:
-                if self.sortColumnName not in self.cols:
-                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {self.cols}; sorting will not take place!")
+                if self.sortColumnName not in cols:
+                    log.warning(f"Specified sort column '{self.sortColumnName}' not in list of columns: {cols}; sorting will not take place!")
                 else:
-                    self.cols.remove(self.sortColumnName)
-                    self.cols.insert(0, self.sortColumnName)
+                    cols.remove(self.sortColumnName)
+                    cols.insert(0, self.sortColumnName)
 
-            self.df = pd.DataFrame(columns=self.cols)
+            self.df = pd.DataFrame(columns=cols)
+        else:
+            # check for new columns
+            for col in values.keys():
+                if col not in self.df.columns:
+                    self.df[col] = None
 
         # append data to data frame
-        self.df.loc[self._currentRow] = [values[c] for c in self.cols]
+        self.df.loc[self._currentRow] = [values.get(c) for c in self.df.columns]
         self._currentRow += 1
 
         # sort where applicable
@@ -169,6 +185,17 @@ class ParametersMetricsCollection:
     def getDataFrame(self) -> pd.DataFrame:
         return self.df
 
+    def contains(self, values: Dict[str, Any]):
+        for existingValues in self.valueDicts:
+            isContained = True
+            for k, v in values.items():
+                ev = existingValues.get(k)
+                if ev != v and str(ev) != str(v):
+                    isContained = False
+                    break
+            if isContained:
+                return True
+
 
 class GridSearch(TrackingMixin):
     """
@@ -177,8 +204,8 @@ class GridSearch(TrackingMixin):
     """
     log = log.getChild(__qualname__)
 
-    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]],
-            List[Dict[str, Sequence[Any]]]], numProcesses=1, csvResultsPath: str = None,
+    def __init__(self, modelFactory: Callable[..., VectorModel], parameterOptions: Union[Dict[str, Sequence[Any]], List[Dict[str, Sequence[Any]]]],
+            numProcesses=1, csvResultsPath: str = None, incremental=False, incrementalSkipExisting=False,
             parameterCombinationSkipDecider: ParameterCombinationSkipDecider = None, modelSaveDirectory: str = None,
             name: str = None):
         """
@@ -190,9 +217,12 @@ class GridSearch(TrackingMixin):
             if it is None, no CSV data will be written; if it is a directory, a file name starting with this grid search's name (see below)
             will be created.
             The resulting CSV data will contain one line per evaluated parameter combination.
+        :param incremental: whether to add to an existing CSV file instead of overwriting it
+        :param incrementalSkipExisting: if incremental mode is on, whether to skip any parameter combinations that are already present
+            in the CSV file
         :param parameterCombinationSkipDecider: an instance to which parameters combinations can be passed in order to decide whether the
             combination shall be skipped (e.g. because it is redundant/equivalent to another combination or inadmissible)
-        :param modelSaveDirectory the directory where the serialized models shall be saved; if None, models are not saved
+        :param modelSaveDirectory: the directory where the serialized models shall be saved; if None, models are not saved
         :param name: the name of this grid search, which will, in particular, be prepended to all saved model files;
             if None, a default name will be generated of the form "gridSearch_<timestamp>"
         """
@@ -210,6 +240,8 @@ class GridSearch(TrackingMixin):
         self.modelSaveDirectory = modelSaveDirectory
         self.name = name if name is not None else "gridSearch_" + datetime.now().strftime('%Y%m%d-%H%M%S')
         self.csvResultsPath = csvResultsPath
+        self.incremental = incremental
+        self.incrementalSkipExisting = incrementalSkipExisting
         if self.csvResultsPath is not None and os.path.isdir(csvResultsPath):
             self.csvResultsPath = os.path.join(self.csvResultsPath, f"{self.name}_results.csv")
 
@@ -264,7 +296,7 @@ class GridSearch(TrackingMixin):
         else:
             loggingCallback = None
         paramsMetricsCollection = ParametersMetricsCollection(csvPath=self.csvResultsPath, sortColumnName=sortColumnName,
-                ascending=ascending)
+            ascending=ascending, incremental=self.incremental)
 
         def collectResult(values):
             if values is None:
@@ -278,8 +310,12 @@ class GridSearch(TrackingMixin):
             combinationIdx = 0
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
+                    if self.incrementalSkipExisting and self.incremental:
+                        if paramsMetricsCollection.contains(paramsDict):
+                            log.info(f"Skipped because parameters are already present in collection (incremental mode): {paramsDict}")
+                            continue
                     collectResult(self._evalParams(self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider, self.name,
-                            combinationIdx, self.modelSaveDirectory, **paramsDict))
+                        combinationIdx, self.modelSaveDirectory, **paramsDict))
                     combinationIdx += 1
         else:
             executor = ProcessPoolExecutor(max_workers=self.numProcesses)
@@ -287,8 +323,12 @@ class GridSearch(TrackingMixin):
             combinationIdx = 0
             for parameterOptions in self.parameterOptionsList:
                 for paramsDict in iterParamCombinations(parameterOptions):
+                    if self.incrementalSkipExisting and self.incremental:
+                        if paramsMetricsCollection.contains(paramsDict):
+                            log.info(f"Skipped because parameters are already present in collection (incremental mode): {paramsDict}")
+                            continue
                     futures.append(executor.submit(self._evalParams, self.modelFactory, metricsEvaluator, self.parameterCombinationSkipDecider,
-                            self.name, combinationIdx, self.modelSaveDirectory, **paramsDict))
+                        self.name, combinationIdx, self.modelSaveDirectory, **paramsDict))
                     combinationIdx += 1
             for future in futures:
                 collectResult(future.result())
@@ -338,12 +378,12 @@ class SAHyperOpt(TrackingMixin):
             pass
 
     def __init__(self, modelFactory: Callable[..., VectorModel],
-                 opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
-                 initialParameters: Dict[str, Any], metricsEvaluator: MetricsDictProvider,
-                 metricToOptimise, minimiseMetric=False,
-                 collectDataFrame=True, csvResultsPath: Optional[str] = None,
-                 parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
-                 p0=0.5, p1=0.0):
+            opsAndWeights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
+            initialParameters: Dict[str, Any], metricsEvaluator: MetricsDictProvider,
+            metricToOptimise, minimiseMetric=False,
+            collectDataFrame=True, csvResultsPath: Optional[str] = None,
+            parameterCombinationEquivalenceClassValueCache: ParameterCombinationEquivalenceClassValueCache = None,
+            p0=0.5, p1=0.0):
         """
         :param modelFactory: a factory for the generation of models which is called with the current parameter combination
             (all keyword arguments), initially initialParameters
@@ -380,7 +420,7 @@ class SAHyperOpt(TrackingMixin):
 
     @classmethod
     def _evalParams(cls, modelFactory, metricsEvaluator: MetricsDictProvider, parametersMetricsCollection: Optional[ParametersMetricsCollection],
-                    parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
+            parameterCombinationEquivalenceClassValueCache, trackedExperiment, **params):
         if trackedExperiment is not None and metricsEvaluator.trackedExperiment is not None:
             log.warning(f"Tracked experiment already set in evaluator, results will be tracked twice and"
                         f"might get overwritten!")
@@ -410,7 +450,7 @@ class SAHyperOpt(TrackingMixin):
 
     def _computeMetric(self, params):
         metrics = self._evalParams(self.modelFactory, self.evaluatorOrValidator, self.parametersMetricsCollection,
-                                   self.parameterCombinationEquivalenceClassValueCache, self.trackedExperiment, **params)
+            self.parameterCombinationEquivalenceClassValueCache, self.trackedExperiment, **params)
         metricValue = metrics[self.metricToOptimise]
         if not self.minimiseMetric:
             return -metricValue

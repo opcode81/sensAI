@@ -1,3 +1,6 @@
+from collections import Sequence
+from typing import Callable, Optional
+
 import torch
 from torch import nn
 
@@ -6,8 +9,10 @@ from ....util.string import objectRepr
 
 
 class MultiLayerPerceptron(MCDropoutCapableNNModule):
-    def __init__(self, inputDim, outputDim, hiddenDims, hidActivationFn=torch.sigmoid, outputActivationFn=torch.sigmoid,
-            pDropout=None):
+    def __init__(self, inputDim: float, outputDim: float, hiddenDims: Sequence[int],
+            hidActivationFn: Callable[[torch.Tensor], torch.Tensor] = torch.sigmoid,
+            outputActivationFn: Optional[Callable[[torch.Tensor], torch.Tensor]] = torch.sigmoid,
+            pDropout: Optional[float] = None):
         super().__init__()
         self.inputDim = inputDim
         self.outputDim = outputDim
@@ -27,7 +32,8 @@ class MultiLayerPerceptron(MCDropoutCapableNNModule):
 
     def __str__(self):
         return objectRepr(self, dict(inputDim=self.inputDim, outputDim=self.outputDim, hiddenDims=self.hiddenDims,
-            hidActivationFn=self.hidActivationFn.__name__ if self.hidActivationFn is not None else None, outputActivationFn=self.outputActivationFn.__name__ if self.outputActivationFn is not None else None,
+            hidActivationFn=self.hidActivationFn.__name__ if self.hidActivationFn is not None else None,
+            outputActivationFn=self.outputActivationFn.__name__ if self.outputActivationFn is not None else None,
             pDropout=self.pDropout))
 
     def forward(self, x):

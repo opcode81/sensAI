@@ -1,7 +1,7 @@
 import io
 import logging
 from abc import ABC, abstractmethod
-from typing import Union, Tuple, Callable, Optional, List
+from typing import Union, Tuple, Callable, Optional, List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ from ..util.dtype import toFloatArray
 from ..util.string import objectRepr, ToStringMixin
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class MCDropoutCapableNNModule(nn.Module, ABC):
@@ -27,19 +27,19 @@ class MCDropoutCapableNNModule(nn.Module, ABC):
     Then, to apply inference that samples results, call inferMCDropout rather than just using __call__.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._applyMCDropout = False
         self._pMCDropoutOverride = None
 
-    def __setstate__(self, d):
+    def __setstate__(self, d: dict) -> None:
         if "_applyMCDropout" not in d:
             d["_applyMCDropout"] = False
         if "_pMCDropoutOverride" not in d:
             d["_pMCDropoutOverride"] = None
         super().__setstate__(d)
 
-    def _dropout(self, x, pTraining=None, pInference=None):
+    def _dropout(self, x: torch.Tensor, pTraining=None, pInference=None) -> torch.Tensor:
         """
         This method is to to applied within the module's forward method to apply dropouts during training and/or inference.
 
@@ -57,11 +57,11 @@ class MCDropoutCapableNNModule(nn.Module, ABC):
         else:
             return x
 
-    def _enableMCDropout(self, enabled=True, pMCDropoutOverride=None):
+    def _enableMCDropout(self, enabled=True, pMCDropoutOverride=None) -> None:
         self._applyMCDropout = enabled
         self._pMCDropoutOverride = pMCDropoutOverride
 
-    def inferMCDropout(self, x, numSamples, p=None):
+    def inferMCDropout(self, x: torch.Tensor, numSamples, p=None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Applies inference using MC-Dropout, drawing the given number of samples.
 
@@ -93,7 +93,7 @@ class TorchModel(ABC, ToStringMixin):
     """
     log: logging.Logger = log.getChild(__qualname__)
 
-    def __init__(self, cuda=True):
+    def __init__(self, cuda=True) -> None:
         self.cuda: bool = cuda
         self.module: Optional[torch.nn.Module] = None
         self.outputScaler: Optional[TensorScaler] = None
@@ -263,8 +263,7 @@ class TorchModel(ABC, ToStringMixin):
         optimiser = NNOptimiser(nnOptimiserParams)
         if strategy is None:
             strategy = TorchModelFittingStrategyDefault()
-        strategy.fit(self, data, optimiser)
-        self.trainingInfo = optimiser.getTrainingInfo()
+        self.trainingInfo = strategy.fit(self, data, optimiser)
         self._gpu = self._getGPUFromModelParameterDevice()
 
     def _getGPUFromModelParameterDevice(self) -> Optional[int]:
@@ -273,8 +272,19 @@ class TorchModel(ABC, ToStringMixin):
         except:
             return None
 
+    @property
+    def bestEpoch(self) -> Optional[int]:
+        return self.trainingInfo.bestEpoch if self.trainingInfo is not None else None
+
+    @property
+    def totalEpochs(self) -> Optional[int]:
+        return self.trainingInfo.totalEpochs if self.trainingInfo is not None else None
+
     def _toStringExcludes(self) -> List[str]:
         return ['_gpu', 'module', 'trainingInfo', "inputScaler", "outputScaler"]
+
+    def _toStringAdditionalEntries(self):
+        return dict(bestEpoch=self.bestEpoch, totalEpochs=self.totalEpochs)
 
 
 class TorchModelFittingStrategy(ABC):
@@ -282,7 +292,7 @@ class TorchModelFittingStrategy(ABC):
     Defines the interface for fitting strategies that can be used in TorchModel.fit
     """
     @abstractmethod
-    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser) -> Optional[TrainingInfo]:
         pass
 
 
@@ -290,12 +300,12 @@ class TorchModelFittingStrategyDefault(TorchModelFittingStrategy):
     """
     Represents the default fitting strategy, which simply applies the given optimiser to the model and data
     """
-    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser):
-        nnOptimiser.fit(model, data)
+    def fit(self, model: TorchModel, data: TorchDataSetProvider, nnOptimiser: NNOptimiser) -> Optional[TrainingInfo]:
+        return nnOptimiser.fit(model, data)
 
 
 class TorchModelFromModuleFactory(TorchModel):
-    def __init__(self, moduleFactory: Callable[[], torch.nn.Module], cuda=True):
+    def __init__(self, moduleFactory: Callable[[], torch.nn.Module], cuda: bool = True) -> None:
         super().__init__(cuda)
         self.moduleFactory = moduleFactory
 
@@ -308,21 +318,21 @@ class VectorTorchModel(TorchModel, ABC):
     Base class for TorchModels that can be used within VectorModels, where the input and output dimensions
     are determined by the data
     """
-    def __init__(self, cuda: bool = True):
+    def __init__(self, cuda: bool = True) -> None:
         super().__init__(cuda=cuda)
         self.inputDim = None
         self.outputDim = None
 
-    def _extractParamsFromData(self, data: TorchDataSetProvider):
+    def _extractParamsFromData(self, data: TorchDataSetProvider) -> None:
         super()._extractParamsFromData(data)
         self.inputDim = data.getInputDim()
         self.outputDim = data.getModelOutputDim()
 
-    def createTorchModule(self):
+    def createTorchModule(self) -> torch.nn.Module:
         return self.createTorchModuleForDims(self.inputDim, self.outputDim)
 
     @abstractmethod
-    def createTorchModuleForDims(self, inputDim, outputDim) -> torch.nn.Module:
+    def createTorchModuleForDims(self, inputDim: int, outputDim: int) -> torch.nn.Module:
         pass
 
 
@@ -331,8 +341,10 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     Base class for the implementation of VectorRegressionModels based on TorchModels.
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
-    def __init__(self, modelClass: Callable[..., TorchModel], modelArgs=(), modelKwArgs=None,
-            normalisationMode=NormalisationMode.NONE, nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
+
+    def __init__(self, modelClass: Callable[..., TorchModel], modelArgs: Sequence = (), modelKwArgs: Optional[dict] = None,
+            normalisationMode: NormalisationMode = NormalisationMode.NONE,
+            nnOptimiserParams: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
         :param modelArgs: the constructor argument list to pass to modelClass
@@ -358,7 +370,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
 
-    def __setstate__(self, state):
+    def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         s = super()
         if hasattr(s, '__setstate__'):
@@ -373,7 +385,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
-    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
@@ -392,7 +404,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         yArray = self._predictOutputsForInputDataFrame(inputs)
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
 
 
@@ -401,8 +413,9 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     Base class for the implementation of VectorClassificationModels based on TorchModels.
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
-    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs=(), modelKwArgs=None,
-            normalisationMode=NormalisationMode.NONE, nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
+    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs: Sequence = (), modelKwArgs: Optional[dict] = None,
+            normalisationMode: NormalisationMode = NormalisationMode.NONE,
+            nnOptimiserParams: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
         :param modelClass: the constructor with which to create the wrapped torch vector model
         :param modelArgs: the constructor argument list to pass to modelClass
@@ -428,7 +441,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
 
-    def __setstate__(self, state):
+    def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         s = super()
         if hasattr(s, '__setstate__'):
@@ -444,7 +457,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
             normalisationMode=self.normalisationMode)
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
-    def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if len(outputs.columns) != 1:
             raise ValueError("Expected one output dimension: the class labels")
 
@@ -467,12 +480,12 @@ class TorchVectorClassificationModel(VectorClassificationModel):
             i += batchSize
         return np.concatenate(results)
 
-    def _predictClassProbabilities(self, inputs: pd.DataFrame):
+    def _predictClassProbabilities(self, inputs: pd.DataFrame) -> pd.DataFrame:
         y = self._predictOutputsForInputDataFrame(inputs)
         normalisationConstants = y.sum(axis=1)
         for i in range(y.shape[0]):
             y[i,:] /= normalisationConstants[i]
         return pd.DataFrame(y, columns=self._labels)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])

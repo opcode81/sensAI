@@ -1,4 +1,5 @@
 import logging
+from typing import Callable, Optional, Sequence
 
 import torch.nn.functional
 
@@ -7,18 +8,19 @@ from ...torch_base import VectorTorchModel, TorchVectorRegressionModel, TorchVec
 from ...torch_opt import NNOptimiserParams
 from .... import NormalisationMode
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class MultiLayerPerceptronTorchModel(VectorTorchModel):
-    def __init__(self, cuda, hiddenDims, hidActivationFunction, outputActivationFunction, pDropout=None):
+    def __init__(self, cuda: bool, hiddenDims: Sequence[int], hidActivationFunction: Callable[[torch.Tensor], torch.Tensor],
+            outputActivationFunction: Optional[Callable[[torch.Tensor], torch.Tensor]], pDropout: Optional[float] = None) -> None:
         super().__init__(cuda=cuda)
         self.hidActivationFunction = hidActivationFunction
         self.outputActivationFunction = outputActivationFunction
         self.hiddenDims = hiddenDims
         self.pDropout = pDropout
 
-    def __str__(self):
+    def __str__(self) -> str:
         def name(x):
             if hasattr(x, "__name__"):
                 return x.__name__
@@ -29,16 +31,18 @@ class MultiLayerPerceptronTorchModel(VectorTorchModel):
 
         return f"_MLP[hiddenDims={self.hiddenDims}, hidAct={name(self.hidActivationFunction)}, outAct={name(self.outputActivationFunction)}, pDropout={self.pDropout}]"
 
-    def createTorchModuleForDims(self, inputDim, outputDim):
+    def createTorchModuleForDims(self, inputDim: int, outputDim: int) -> torch.nn.Module:
         return MultiLayerPerceptron(inputDim, outputDim, self.hiddenDims,
             hidActivationFn=self.hidActivationFunction, outputActivationFn=self.outputActivationFunction,
             pDropout=self.pDropout)
 
 
 class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
-    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=None,
-            normalisationMode=NormalisationMode .MAX_BY_COLUMN,
-            cuda=True, pDropout: float = None, nnOptimiserParams: NNOptimiserParams = None, **nnOptimiserDictParams):
+    def __init__(self, hiddenDims: Sequence[int] = (5, 5), hidActivationFunction: Callable[[torch.Tensor], torch.Tensor] = torch.sigmoid,
+            outputActivationFunction: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+            normalisationMode: NormalisationMode = NormalisationMode .MAX_BY_COLUMN,
+            cuda: bool = True, pDropout: Optional[float] = None, nnOptimiserParams: Optional[NNOptimiserParams] = None,
+            **nnOptimiserDictParams) -> None:
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
@@ -55,9 +59,11 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
 
 
 class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
-    def __init__(self, hiddenDims=(5, 5), hidActivationFunction=torch.sigmoid, outputActivationFunction=torch.nn.functional.softmax,
-            normalisationMode=NormalisationMode.MAX_BY_COLUMN, cuda=True, pDropout=None, nnOptimiserParams: NNOptimiserParams = None,
-            **nnOptimiserDictParams):
+    def __init__(self, hiddenDims: Sequence[int] = (5, 5),
+            hidActivationFunction: Callable[[torch.Tensor], torch.Tensor] = torch.sigmoid,
+            outputActivationFunction: Optional[Callable[[torch.Tensor], torch.Tensor]] = torch.nn.functional.softmax,
+            normalisationMode: NormalisationMode = NormalisationMode.MAX_BY_COLUMN, cuda: bool = True, pDropout: Optional[float] = None,
+            nnOptimiserParams: Optional[NNOptimiserParams] = None, **nnOptimiserDictParams) -> None:
         """
         :param hiddenDims: sequence containing the number of neurons to use in hidden layers
         :param hidActivationFunction: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
