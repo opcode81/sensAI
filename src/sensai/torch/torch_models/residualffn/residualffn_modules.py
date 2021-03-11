@@ -14,7 +14,7 @@ class ResidualFeedForwardNetwork(nn.Module):
     the last step within each block.
 
     More precisely, the non-skip path consists of the following layers:
-      batch normalization -> ReLU, dropout -> fully-connected -> batch normalization -> ReLU, dropout -> fully-connected
+    batch normalization -> ReLU, dropout -> fully-connected -> batch normalization -> ReLU, dropout -> fully-connected
     The use of the activation function before the connected layers is called "pre-activation" [4].
 
     The skip path does nothing for the case where the input dimension of the block equals the output dimension. If these
@@ -31,16 +31,17 @@ class ResidualFeedForwardNetwork(nn.Module):
     article on batch normalisation for further references).
 
     References:
-      * [1] Chen, Dongwei et al. “Deep Residual Learning for Nonlinear Regression.”
+
+      * [1] Chen, Dongwei et al. "Deep Residual Learning for Nonlinear Regression."
         Entropy 22, no. 2 (February 2020): 193. https://doi.org/10.3390/e22020193.
-      * [2] Kiprijanovska, et al. “HousEEC: Day-Ahead Household Electrical Energy Consumption Forecasting Using Deep Learning.”
+      * [2] Kiprijanovska, et al. "HousEEC: Day-Ahead Household Electrical Energy Consumption Forecasting Using Deep Learning."
         Energies 13, no. 10 (January 2020): 2672. https://doi.org/10.3390/en13102672.
-      * [3] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. “Deep Residual Learning for Image Recognition.”
+      * [3] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. "Deep Residual Learning for Image Recognition."
         ArXiv:1512.03385 [Cs], December 10, 2015. http://arxiv.org/abs/1512.03385.
-      * [4] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. “Identity Mappings in Deep Residual Networks.”
+      * [4] He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. "Identity Mappings in Deep Residual Networks."
         ArXiv:1603.05027 [Cs], July 25, 2016. http://arxiv.org/abs/1603.05027.
-      * [5] Ioffe, Sergey, and Christian Szegedy. “Batch Normalization: Accelerating Deep Network Training by Reducing
-        Internal Covariate Shift.” ArXiv:1502.03167 [Cs], March 2, 2015. http://arxiv.org/abs/1502.03167.
+      * [5] Ioffe, Sergey, and Christian Szegedy. "Batch Normalization: Accelerating Deep Network Training by Reducing
+        Internal Covariate Shift." ArXiv:1502.03167 [Cs], March 2, 2015. http://arxiv.org/abs/1502.03167.
     """
 
     def __init__(self, inputDim: int, outputDim: int, hiddenDims: Sequence[int], bottleneckDimensionFactor: float = 1,
