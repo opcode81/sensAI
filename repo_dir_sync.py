@@ -39,12 +39,19 @@ def gitLog(path, arg):
 
 
 def gitCommit(msg):
-    with open("commitmsg.txt", "wb") as f:
+    with open(COMMIT_MSG_FILENAME, "wb") as f:
         f.write(msg.encode("utf-8"))
-    os.system("git commit --file=commitmsg.txt")
-    os.unlink("commitmsg.txt")
+    gitCommitWithMessageFromFile(COMMIT_MSG_FILENAME)
 
 
+def gitCommitWithMessageFromFile(commitMsgFilename):
+    if not os.path.exists(commitMsgFilename):
+        raise FileNotFoundError(f"{commitMsgFilename} not found in {os.path.abspath(os.getcwd())}")
+    os.system(f"git commit --file={commitMsgFilename}")
+    os.unlink(commitMsgFilename)
+
+
+COMMIT_MSG_FILENAME = "commitmsg.txt"
 LIB_DIRECTORY = os.path.join("src", "sensai")
 LIB_NAME = "sensAI"
 
@@ -127,11 +134,20 @@ class OtherRepo:
         # get log with relevant commits in this repo that are to be pulled
         lg = self.gitLogThisRepoSinceLastSync()
 
-        print("Relevant commits:\n\n" + lg + "\n\n")
-        if not self._userInputYesNo(f"The above changes will be pulled from {self.name}. Continue?"):
-            return
-
         os.chdir(libRepo.rootPath)
+
+        # create commit message file
+        commitMsg = f"Sync {self.name}\n\n" + lg
+        with open(COMMIT_MSG_FILENAME, "w") as f:
+            f.write(commitMsg)
+
+        # ask whether to commit these changes
+        print("Relevant commits:\n\n" + lg + "\n\n")
+        if not self._userInputYesNo(f"The above changes will be pulled from {self.name}.\n"
+                f"You may change the commit message by editing {os.path.abspath(COMMIT_MSG_FILENAME)}.\n"
+                "Continue?"):
+            os.unlink(COMMIT_MSG_FILENAME)
+            return
 
         # remove library tree in lib repo
         shutil.rmtree(LIB_DIRECTORY)
@@ -145,7 +161,7 @@ class OtherRepo:
 
         # make commit in lib repo
         os.system("git add %s" % LIB_DIRECTORY)
-        gitCommit(f"Sync {self.name}\n\n" + lg)
+        gitCommitWithMessageFromFile(COMMIT_MSG_FILENAME)
         newSyncCommitIdLibRepo = call("git rev-parse HEAD").strip()
 
         # update commit ids in this repo
