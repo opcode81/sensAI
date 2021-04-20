@@ -215,7 +215,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         if logResults:
             log.info(f"Cross-validation results: {strEvalResults}")
         if resultWriter is not None:
-            resultWriter.writeTextFile("crossval-results", {strEvalResults})
+            resultWriter.writeTextFile("crossval-results", strEvalResults)
         self.createPlots(crossValidationData, showPlots=showPlots, resultWriter=resultWriter)
         return crossValidationData
 
