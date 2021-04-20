@@ -264,17 +264,22 @@ class DFTModifyColumnVectorized(DFTModifyColumn):
 
 class DFTOneHotEncoder(DataFrameTransformer):
     def __init__(self, columns: Optional[Union[str, Sequence[str]]],
-             categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
+            categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False,
+            arrayValuedResult=False):
         """
         One hot encode categorical variables
 
-        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each;
+        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each
+            (or an array-valued column for the case where useArrayValues=True);
             If None, then no columns are actually to be one-hot-encoded
         :param categories: numpy arrays containing the possible values of each of the specified columns (for case where sequence is specified
             in 'columns') or dictionary mapping column name to array of possible categories for the column name.
             If None, the possible values will be inferred from the columns
+        :param inplace: whether to perform the transformation in-place
         :param ignoreUnknown: if True and an unknown category is encountered during transform, the resulting one-hot
             encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
+        :param arrayValuedResult: whether to replace the input columns by columns of the same name containing arrays as values
+            instead of creating a separate column per original value
         """
         super().__init__()
         self._paramInfo["columns"] = columns
@@ -290,6 +295,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
             self._columnNameRegex = orRegexGroup(columns)
             self._columnsToEncode = columns
         self.inplace = inplace
+        self.arrayValuedResult = arrayValuedResult
         self.handleUnknown = "ignore" if ignoreUnknown else "error"
         if categories is not None:
             if type(categories) == dict:
@@ -298,6 +304,11 @@ class DFTOneHotEncoder(DataFrameTransformer):
                 if len(columns) != len(categories):
                     raise ValueError(f"Given categories must have the same length as columns to process")
                 self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in zip(columns, categories)}
+
+    def __setstate__(self, state):
+        if "arrayValuedResult" not in state:
+            state["arrayValuedResult"] = False
+        super().__setstate__(state)
 
     def _fit(self, df: pd.DataFrame):
         if self._columnsToEncode is None:
@@ -317,15 +328,19 @@ class DFTOneHotEncoder(DataFrameTransformer):
             df = df.copy()
         for columnName in self._columnsToEncode:
             encodedArray = self.oneHotEncoders[columnName].transform(df[[columnName]])
-            df = df.drop(columns=columnName)
-            for i in range(encodedArray.shape[1]):
-                df["%s_%d" % (columnName, i)] = encodedArray[:, i]
+            if not self.arrayValuedResult:
+                df = df.drop(columns=columnName)
+                for i in range(encodedArray.shape[1]):
+                    df["%s_%d" % (columnName, i)] = encodedArray[:, i]
+            else:
+                df[columnName] = list(encodedArray)
         return df
 
     def info(self):
         info = super().info()
         info["inplace"] = self.inplace
         info["handleUnknown"] = self.handleUnknown
+        info["arrayValuedResult"] = self.arrayValuedResult
         info.update(self._paramInfo)
         return info
 

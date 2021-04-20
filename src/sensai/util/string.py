@@ -1,5 +1,7 @@
-from typing import Union, List, Dict, Any, Sequence, Iterable
+from typing import Union, List, Dict, Any, Sequence, Iterable, Optional
 import re
+
+from dcs.sensai.util import countNone
 
 
 def dictString(d):
@@ -39,19 +41,33 @@ class ToStringMixin:
     def _toStringClassName(self):
         return type(self).__qualname__
 
-    def _toStringProperties(self, exclude: Union[str, Iterable[str]] = None, **additionalEntries) -> str:
+    def _toStringProperties(self, exclude: Optional[Union[str, Iterable[str]]] = None, include: Optional[Union[str, Iterable[str]]] = None,
+            **additionalEntries) -> str:
         """
-        Creates a string of the class attributes, optionally excluding some and adding others.
+        Creates a string of the class attributes, with optional exclusions/inclusions/additions
 
-        :param exclude: attributes to be excluded
+        :param exclude: attributes to be excluded; can only be non-empty if include is empty
+        :param include: attributes to be included; can only be non-empty if exclude is empty
         :param additionalEntries: additional key-value-pairs which are added to the string just like the other attributes
         :return: a string containing all attribute names and values
         """
-        if exclude is None:
-            exclude = []
-        elif type(exclude) == str:
-            exclude = [exclude]
-        d = {k: v for k, v in self.__dict__.items() if k not in exclude}
+        def mklist(x):
+            if x is None:
+                return []
+            if type(x) == str:
+                return [x]
+            return x
+
+        exclude = mklist(exclude)
+        include = mklist(include)
+        if len(exclude) > 0 and len(include) > 0:
+            raise ValueError("Cannot provide inclusions and exclusions at the same time")
+
+        if len(include) == 0:
+            attributeDict = self.__dict__
+        else:
+            attributeDict = {k: getattr(self, k) for k in include}
+        d = {k: v for k, v in attributeDict.items() if k not in exclude}
         d.update(additionalEntries)
         return dictString(d)
 
@@ -63,11 +79,21 @@ class ToStringMixin:
 
         :return: a string containing all attribute names and values
         """
-        return self._toStringProperties(exclude=self._toStringExcludes(), **self._toStringAdditionalEntries())
+        return self._toStringProperties(exclude=self._toStringExcludes(), include=self._toStringIncludes(), **self._toStringAdditionalEntries())
 
     def _toStringExcludes(self) -> List[str]:
         """
         Returns a list of attribute names to be excluded from __str__ and __repr__. This method can be overwritten by
+        sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
+        is not overwritten by the sub class.
+
+        :return: a list of attribute names
+        """
+        return []
+
+    def _toStringIncludes(self) -> List[str]:
+        """
+        Returns a list of attribute names to be included in __str__ and __repr__. This method can be overwritten by
         sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
         is not overwritten by the sub class.
 

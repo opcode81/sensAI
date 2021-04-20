@@ -476,17 +476,13 @@ class VectorClassificationModel(VectorModel, ABC):
         this method and convert it to predicted labels (via argmax).
 
         In case you want to predict labels only or have a more efficient implementation of predicting labels than
-        using argmax, your will have to override _predict in your implementation. In the former case of a
-        non-probabilistic classifier, the implementation of this method should raise an exception, like the one below.
+        using argmax, you may override _predict instead of implementing this method. In the case of a
+        non-probabilistic classifier, the implementation of this method should raise an exception.
         """
-        raise NotImplementedError(f"Model {self.__class__.__name__} does not support prediction of probabilities")
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement _predictClassProbabilities.")
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        try:
-            predictedProbabilitiesDf = self._predictClassProbabilities(x)
-        except Exception:
-            raise Exception(f"Wrong implementation of {self.__class__.__name__}. For non-probabilistic classifiers "
-                            "_predict has to be overrode!")
+        predictedProbabilitiesDf = self._predictClassProbabilities(x)
         return self.convertClassProbabilitiesToPredictions(predictedProbabilitiesDf)
 
 

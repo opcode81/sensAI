@@ -71,6 +71,11 @@ class ResultWriter:
             f.write(df.to_string())
         return p
 
+    def writeDataFrameCsvFile(self, filenameSuffix, df: pd.DataFrame):
+        p = self.path(filenameSuffix, extensionToAdd="csv")
+        self.log.info(f"Saving data frame CSV file {p}")
+        df.to_csv(p)
+
     def writeFigure(self, filenameSuffix, fig, closeFigure=False):
         """
         :param filenameSuffix: the filename suffix, which may or may not include a file extension, valid extensions being {"png", "jpg"}

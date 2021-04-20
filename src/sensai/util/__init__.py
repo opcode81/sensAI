@@ -9,6 +9,22 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
+def countNone(*args):
+    c = 0
+    for a in args:
+        if a is None:
+            c += 1
+    return c
+
+
+def anyNone(*args):
+    return countNone(*args) > 0
+
+
+def allNone(*args):
+    return countNone(*args) == len(args)
+
+
 def concatSequences(seqs: Sequence[Sequence[T]]) -> List[T]:
     result = []
     for s in seqs:

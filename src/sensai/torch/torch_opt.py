@@ -605,8 +605,11 @@ class NNOptimiser:
         return TrainingInfo(bestEpoch=best_epoch if useValidation else None, log=trainingLogEntries, totalEpochs=totalEpochs,
                 trainingLossSequence=trainingLossValues, validationMetricSequence=validationMetricValues)
 
-    def _applyModel(self, model, X, groundTruth, outputScaler: TensorScaler):
-        output = model(X)
+    def _applyModel(self, model, input: Union[torch.Tensor, Sequence[torch.Tensor]], groundTruth, outputScaler: TensorScaler):
+        if isinstance(input, torch.Tensor):
+            output = model(input)
+        else:
+            output = model(*input)
         if self.params.scaledOutputs:
             output, groundTruth = self._scaledValues(output, groundTruth, outputScaler)
         return output, groundTruth

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, Generator, Optional, Union
+from typing import Tuple, Sequence, Generator, Optional, Union, List, Iterator
 
 from torch.autograd import Variable
 import pandas as pd
@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 from .. import normalisation
+from ..util.dtype import toFloatArray
 
 
 def toTensor(d: Union[torch.Tensor, np.ndarray, list], cuda=False):
@@ -92,6 +93,37 @@ class TensorScalerIdentity(TensorScaler):
         return tensor
 
 
+class Tensoriser(ABC):
+    def tensorise(self, df: pd.DataFrame) -> Union[torch.Tensor, List[torch.Tensor]]:
+        result = self._tensorise(df)
+        if type(result) == list:
+            lengths = set(map(len, result))
+            if len(lengths) != 1:
+                raise Exception("Lengths of tensors inconsistent")
+            length = lengths.pop()
+        else:
+            length = len(result)
+        if length != len(df):
+            raise Exception(f"{self} produced result of length {length} for DataFrame of shape {df.shape}")
+        return result
+
+    @abstractmethod
+    def _tensorise(self, df: pd.DataFrame) -> Union[torch.Tensor, List[torch.Tensor]]:
+        pass
+
+
+class TensoriserDataFrameFloatValuesMatrix(Tensoriser):
+    def _tensorise(self, df: pd.DataFrame) -> np.ndarray:
+        return torch.from_numpy(toFloatArray(df)).float()
+
+
+class TensoriserClassLabelIndices(Tensoriser):
+    def _tensorise(self, df: pd.DataFrame) -> np.ndarray:
+        if len(df.columns) != 1:
+            raise ValueError("Expected a single column containing the class label indices")
+        return torch.from_numpy(df[df.columns[0]].values).long()
+
+
 class DataUtil(ABC):
     """Interface for DataUtil classes, which are used to process data for neural networks"""
 
@@ -140,27 +172,25 @@ class DataUtil(ABC):
 
 class VectorDataUtil(DataUtil):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.NONE,
-            differingOutputNormalisationMode=None):
+            differingOutputNormalisationMode=None, inputTensoriser: Optional[Tensoriser] = None, outputTensoriser: Optional[Tensoriser] = None):
         """
-        :param inputs: the inputs
-        :param outputs: the outputs
+        :param inputs: the data frame of inputs
+        :param outputs: the data frame of outputs
         :param cuda: whether to apply CUDA
         :param normalisationMode: the normalisation mode to use for inputs and (unless differingOutputNormalisationMode is specified) outputs
-        :param differingOutputNormalisationMode: the normalisation mode to apply to outputs
+        :param differingOutputNormalisationMode: the normalisation mode to apply to outputs, overriding normalisationMode;
+            if None, use normalisationMode
         """
         if inputs.shape[0] != outputs.shape[0]:
             raise ValueError("Output length must be equal to input length")
         self.inputs = inputs
         self.outputs = outputs
-        self.normalisationMode = normalisationMode
-        self.inputValues = inputs.values
-        self.outputValues = outputs.values
-        inputScaler = normalisation.VectorDataScaler(self.inputs, self.normalisationMode)
-        self.inputValues = inputScaler.getNormalisedArray(self.inputs)
-        self.inputTensorScaler = TensorScalerFromVectorDataScaler(inputScaler, cuda)
-        outputScaler = normalisation.VectorDataScaler(self.outputs, self.normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
-        self.outputValues = outputScaler.getNormalisedArray(self.outputs)
-        self.outputTensorScaler = TensorScalerFromVectorDataScaler(outputScaler, cuda)
+        self.inputTensoriser = inputTensoriser if inputTensoriser is not None else TensoriserDataFrameFloatValuesMatrix()
+        self.outputTensoriser = outputTensoriser if outputTensoriser is not None else TensoriserDataFrameFloatValuesMatrix()
+        self.inputVectorDataScaler = normalisation.VectorDataScaler(self.inputs, normalisationMode)
+        self.inputTensorScaler = TensorScalerFromVectorDataScaler(self.inputVectorDataScaler, cuda)
+        self.outputVectorDataScaler = normalisation.VectorDataScaler(self.outputs, normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
+        self.outputTensorScaler = TensorScalerFromVectorDataScaler(self.outputVectorDataScaler, cuda)
 
     def getOutputTensorScaler(self):
         return self.outputTensorScaler
@@ -179,26 +209,16 @@ class VectorDataUtil(DataUtil):
         return A, B
 
     def _inputOutputPairs(self, indices):
-        n = len(indices)
-        X = torch.zeros((n, self.inputDim()))
-        Y = torch.zeros((n, self.outputDim()), dtype=self._torchOutputDtype())
+        inputDF = self.inputs.iloc[indices]
+        outputDF = self.outputs.iloc[indices]
 
-        for i, outputIdx in enumerate(indices):
-            inputData, outputData = self._inputOutputPair(outputIdx)
-            if i == 0:
-                if inputData.size() != X[i].size():
-                    raise Exception(f"Unexpected input size: expected {X[i].size()}, got {inputData.size()}")
-                if outputData.size() != Y[i].size():
-                    raise Exception(f"Unexpected output size: expected {Y[i].size()}, got {outputData.size()}")
-            X[i] = inputData
-            Y[i] = outputData
+        # apply normalisation (if any)
+        if self.inputVectorDataScaler.normalisationMode != normalisation.NormalisationMode.NONE:
+            inputDF = pd.DataFrame(self.inputVectorDataScaler.getNormalisedArray(inputDF), columns=inputDF.columns, index=inputDF.index)
+        if self.outputVectorDataScaler.normalisationMode != normalisation.NormalisationMode.NONE:
+            outputDF = pd.DataFrame(self.outputVectorDataScaler.getNormalisedArray(outputDF), columns=outputDF.columns, index=outputDF.index)
 
-        return X, Y
-
-    def _inputOutputPair(self, idx):
-        outputData = torch.from_numpy(self.outputValues[idx, :])
-        inputData = torch.from_numpy(self.inputValues[idx, :])
-        return inputData, outputData
+        return self.inputTensoriser.tensorise(inputDF), self.outputTensoriser.tensorise(outputDF)
 
     def inputDim(self):
         return self.inputs.shape[1]
@@ -212,40 +232,33 @@ class VectorDataUtil(DataUtil):
     def modelOutputDim(self):
         return self.outputDim()
 
-    def _torchOutputDtype(self):
-        return None  # use default (some float)
-
 
 class ClassificationVectorDataUtil(VectorDataUtil):
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.NONE):
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.NONE,
+            inputTensoriser: Tensoriser = None, outputTensoriser: Tensoriser = None):
         if len(outputs.columns) != 1:
             raise Exception(f"Exactly one output dimension (the class index) is required, got {len(outputs.columns)}")
-        super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode, differingOutputNormalisationMode=normalisation.NormalisationMode.NONE)
+        super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode,
+            differingOutputNormalisationMode=normalisation.NormalisationMode.NONE, inputTensoriser=inputTensoriser,
+            outputTensoriser=TensoriserClassLabelIndices() if outputTensoriser is None else outputTensoriser)
         self.numClasses = numClasses
 
     def modelOutputDim(self):
         return self.numClasses
 
-    def _torchOutputDtype(self):
-        return torch.long
-
-    def _inputOutputPairs(self, indices):
-        # classifications requires that the second (1-element) dimension be dropped
-        inputs, outputs = super()._inputOutputPairs(indices)
-        return inputs, outputs.view(outputs.shape[0])
-
 
 class TorchDataSet:
     @abstractmethod
-    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
+    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Iterator[Union[Tuple[torch.Tensor, torch.Tensor],
+            Tuple[Sequence[torch.Tensor], torch.Tensor], torch.Tensor, Sequence[torch.Tensor]]]:
         """
         Provides an iterator over batches from the data set.
 
         :param batchSize: the maximum size of each batch
         :param shuffle: whether to shuffle the data set
         :param inputOnly: whether to provide only inputs (rather than inputs and corresponding outputs).
-            If true, provide a single tensor, which is to serve as a model input.
-            If false, provide a pair of tensors (i, o) with inputs and corresponding outputs.
+            If true, provide only inputs, where inputs can either be a tensor or a tuple of tensors.
+            If false, provide a pair (i, o) with inputs and corresponding outputs (o is always a tensor).
             Some data sets may only be able to provide inputs, in which case inputOnly=False should lead to an
             exception.
         """
@@ -306,20 +319,62 @@ class TorchDataSetProvider:
         return self.inputDim
 
 
+class TensorTuple:
+    """
+    Represents a tuple of tensors (or a single tensor) and can be used to manipulate the contained tensors simultaneously
+    """
+    def __init__(self, tensors: Union[torch.Tensor, Sequence[torch.Tensor]]):
+        if isinstance(tensors, torch.Tensor):
+            tensors = [tensors]
+        lengths = set(map(len, tensors))
+        if len(lengths) != 1:
+            raise ValueError("Not all tensors are of the same length")
+        self.length = lengths.pop()
+        self.tensors = tensors
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, key) -> "TensorTuple":
+        t = tuple((t[key] for t in self.tensors))
+        return TensorTuple(t)
+
+    def cuda(self) -> "TensorTuple":
+        return TensorTuple([t.cuda() for t in self.tensors])
+
+    def tuple(self) -> Sequence[torch.Tensor]:
+        return tuple(self.tensors)
+
+    def item(self) -> Union[torch.Tensor, Sequence[torch.Tensor]]:
+        if len(self.tensors) == 1:
+            return self.tensors[0]
+        else:
+            return self.tuple()
+
+
 class TorchDataSetFromTensors(TorchDataSet):
-    def __init__(self, x: torch.Tensor, y: Optional[torch.Tensor], cuda: bool):
-        if y is not None and x.shape[0] != y.shape[0]:
+    def __init__(self, x: Union[torch.Tensor, Sequence[torch.Tensor]], y: Optional[torch.Tensor], cuda: bool):
+        """
+        :param x: the input tensor(s); if more than one, they must be of the same length (and a slice of each shall be provided to the
+            model as an input in each batch)
+        :param y: the output tensor
+        :param cuda: whether any generated tensors shall be moved to the selected CUDA device
+        """
+        x = TensorTuple(x)
+        y = TensorTuple(y) if y is not None else None
+        if y is not None and len(x) != len(y):
             raise ValueError("Tensors are not of the same length")
         self.x = x
         self.y = y
         self.cuda = cuda
 
-    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Generator[Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor], None, None]:
-        tensors = (self.x, self.y) if not inputOnly and self.y is not None else (self.x,)
-        yield from self._get_batches(tensors, batchSize, shuffle)
+    def iterBatches(self, batchSize: int, shuffle: bool = False, inputOnly=False) -> Iterator[Union[Tuple[torch.Tensor, torch.Tensor],
+            Tuple[Sequence[torch.Tensor], torch.Tensor], torch.Tensor, Sequence[torch.Tensor]]]:
+        tensorTuples = (self.x, self.y) if not inputOnly and self.y is not None else (self.x,)
+        yield from self._get_batches(tensorTuples, batchSize, shuffle)
 
-    def _get_batches(self, tensors: Sequence[torch.Tensor], batch_size, shuffle):
-        length = len(tensors[0])
+    def _get_batches(self, tensorTuples: Sequence[TensorTuple], batch_size, shuffle):
+        length = len(tensorTuples[0])
         if shuffle:
             index = torch.randperm(length)
         else:
@@ -329,13 +384,18 @@ class TorchDataSetFromTensors(TorchDataSet):
             end_idx = min(length, start_idx + batch_size)
             excerpt = index[start_idx:end_idx]
             batch = []
-            for tensor in tensors:
-                if len(tensor) != length:
+            for tensorTuple in tensorTuples:
+                if len(tensorTuple) != length:
                     raise Exception("Passed tensors of differing lengths")
-                t = tensor[excerpt]
+                t = tensorTuple[excerpt]
                 if self.cuda:
                     t = t.cuda()
-                batch.append(Variable(t))
+                item = t.item()
+                if type(item) == tuple:
+                    item = tuple(Variable(t) for t in item)
+                else:
+                    item = Variable(item)
+                batch.append(item)
             if len(batch) == 1:
                 yield batch[0]
             else:
@@ -343,7 +403,22 @@ class TorchDataSetFromTensors(TorchDataSet):
             start_idx += batch_size
 
     def size(self):
-        return self.y.shape[0]
+        return len(self.x)
+
+
+class TorchDataSetFromDataFrames(TorchDataSetFromTensors):
+    def __init__(self, input: pd.DataFrame, output: Optional[pd.DataFrame], cuda: bool,
+            inputTensoriser: Optional[Tensoriser] = None, outputTensoriser: Optional[Tensoriser] = None):
+        if inputTensoriser is None:
+            inputTensoriser = TensoriserDataFrameFloatValuesMatrix()
+        inputTensors = inputTensoriser.tensorise(input)
+        if output is not None:
+            if outputTensoriser is None:
+                outputTensoriser = TensoriserDataFrameFloatValuesMatrix()
+            outputTensors = outputTensoriser.tensorise(output)
+        else:
+            outputTensors = None
+        super().__init__(inputTensors, outputTensors, cuda)
 
 
 class TorchDataSetProviderFromDataUtil(TorchDataSetProvider):

@@ -154,8 +154,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param isRegression: whether to create a regression model evaluator. Either this or model have to be specified
         :return: an evaluator
         """
-        return createVectorModelEvaluator(self.inputOutputData, model=model, isRegression=isRegression,
-                                         **self.evaluatorParams)
+        return createVectorModelEvaluator(self.inputOutputData, model=model, isRegression=isRegression, **self.evaluatorParams)
 
     def createCrossValidator(self, model: TModel = None, isRegression: bool = None) -> TCrossValidator:
         """
@@ -166,8 +165,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param isRegression: whether to create a regression model cross-validator. Either this or model have to be specified
         :return: an evaluator
         """
-        return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression,
-                                         **self.crossValidatorParams)
+        return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, **self.crossValidatorParams)
 
     def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False) -> TEvalData:
@@ -221,6 +219,32 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         self.createPlots(crossValidationData, showPlots=showPlots, resultWriter=resultWriter)
         return crossValidationData
 
+    def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False) -> pd.DataFrame:
+        """
+        Compares several models via simple evaluation or cross-validation
+
+        :param models: the models to compare
+        :param resultWriter: a writer with which to store results of the comparison
+        :return: a data frame containing evaluation metrics on all models
+        """
+        statsList = []
+        for model in models:
+            if useCrossValidation:
+                crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter)
+                statsDict = crossValidationResult.getEvalStatsCollection().aggStats()
+            else:
+                evalStats: EvalStats = self.performSimpleEvaluation(model, resultWriter=resultWriter).getEvalStats()
+                statsDict = evalStats.getAll()
+            statsDict["modelName"] = model.getName()
+            statsList.append(statsDict)
+        resultsDF = pd.DataFrame(statsList).set_index("modelName")
+        strResults = f"Model comparison results:\n{resultsDF.to_string()}"
+        log.info(strResults)
+        if resultWriter is not None:
+            suffix = "crossval" if useCrossValidation else "simple-eval"
+            resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
+        return resultsDF
+
     def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> pd.DataFrame:
         """
         Compares several models via cross-validation
@@ -229,21 +253,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param resultWriter: a writer with which to store results of the comparison
         :return: a data frame containing evaluation metrics on all models
         """
-        statsList = []
-        for model in models:
-            crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter)
-            stats = crossValidationResult.getEvalStatsCollection().aggStats()
-            stats["modelName"] = model.getName()
-            statsList.append(stats)
-        resultsDF = pd.DataFrame(statsList).set_index("modelName")
-        strResults = f"Model comparison results:\n{resultsDF.to_string()}"
-        log.info(strResults)
-        if resultWriter is not None:
-            resultWriter.writeTextFile("model-comparison-results", strResults)
-        return resultsDF
+        return self.compareModels(models, resultWriter=resultWriter, useCrossValidation=True)
 
-    # TODO: a parameter predictedVarName seemed to have been present at some point but has now disappeared,
-    #   should we resuscitate it?
     def createPlots(self, data: Union[TEvalData, TCrossValData], showPlots=True, resultWriter: Optional[ResultWriter] = None, subtitlePrefix: str = ""):
         """
         Creates default plots that visualise the results in the given evaluation data

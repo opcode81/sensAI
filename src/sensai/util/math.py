@@ -23,3 +23,7 @@ class NormalDistribution:
 
     def __str__(self):
         return objectRepr(self, ["mean", "std", "unitMax"])
+
+
+def reduceFloatPrecisionDecimals(f: float, decimals: int) -> float:
+    return float(format(f, '.%df' % decimals))

@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
-    TorchDataSetProviderFromDataUtil, TorchDataSetProvider
+    TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
@@ -61,20 +61,22 @@ class MCDropoutCapableNNModule(nn.Module, ABC):
         self._applyMCDropout = enabled
         self._pMCDropoutOverride = pMCDropoutOverride
 
-    def inferMCDropout(self, x: torch.Tensor, numSamples, p=None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def inferMCDropout(self, x: Union[torch.Tensor, Sequence[torch.Tensor]], numSamples, p=None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Applies inference using MC-Dropout, drawing the given number of samples.
 
-        :param x: the model input
+        :param x: the model input (a tensor or tuple/list of tensors)
         :param numSamples: the number of samples to draw with MC-Dropout
         :param p: the dropout probability to apply, overriding the probability specified by the model's forward method; if None, use model's default
         :return: a pair (y, sd) where y the mean output tensor and sd is a tensor of the same dimension containing standard deviations
         """
+        if type(x) not in (tuple, list):
+            x = [x]
         results = []
         self._enableMCDropout(True, pMCDropoutOverride=p)
         try:
             for i in range(numSamples):
-                y = self(x)
+                y = self(*x)
                 results.append(y)
         finally:
             self._enableMCDropout(False)
@@ -175,14 +177,15 @@ class TorchModel(ABC, ToStringMixin):
         if modelBytes is not None:
             self.setModuleBytes(modelBytes)
 
-    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], asNumpy: bool = True, createBatch: bool = False,
+    def apply(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet, Sequence[torch.Tensor]], asNumpy: bool = True, createBatch: bool = False,
             mcDropoutSamples: Optional[int] = None, mcDropoutProbability: Optional[float] = None, scaleOutput: bool = False,
             scaleInput: bool = False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
         Applies the model to the given input tensor and returns the result (normalized)
 
-        :param X: the input tensor (either a batch or, if createBatch=True, a single data point) or data set.
-            If it is a data set, a single tensor will be extracted from it, so the data set must not be too large to be processed at once.
+        :param X: the input tensor (either a batch or, if createBatch=True, a single data point), a data set or a tuple/list of tensors
+            (if the model accepts more than one input).
+            If it is a data set, it will be processed at once, so the data set must not be too large to be processed at once.
         :param asNumpy: flag indicating whether to convert the result to a numpy.array (if False, return tensor)
         :param createBatch: whether to add an additional tensor dimension for a batch containing just one data point
         :param mcDropoutSamples: if not None, apply MC-Dropout-based inference with the respective number of samples; if None, apply regular inference
@@ -212,20 +215,25 @@ class TorchModel(ABC, ToStringMixin):
             X = toFloatArray(X)
             X = torch.from_numpy(X).float()
 
+        if type(X) not in (list, tuple):
+            inputs = [X]
+        else:
+            inputs = X
+
         if self._isCudaEnabled():
             torch.cuda.set_device(self._gpu)
-            X = X.cuda()
+            inputs = [t.cuda() for t in inputs]
         if scaleInput:
-            X = self.inputScaler.normalise(X)
+            inputs = [self.inputScaler.normalise(t) for t in inputs]
         if createBatch:
-            X = X.view(1, *X.size())
+            inputs = [t.view(1, *X.size()) for t in inputs]
 
-        maxValue = X.max().item()
+        maxValue = max([t.max().item() for t in inputs])
         if maxValue > 2:
             log.warning("Received input which is likely to not be correctly normalised: maximum value in input tensor is %f" % maxValue)
 
         if mcDropoutSamples is None:
-            y = model(X)
+            y = model(*inputs)
             return extract(y)
         else:
             y, stddev = model.inferMCDropout(X, mcDropoutSamples, p=mcDropoutProbability)
@@ -305,12 +313,14 @@ class TorchModelFittingStrategyDefault(TorchModelFittingStrategy):
 
 
 class TorchModelFromModuleFactory(TorchModel):
-    def __init__(self, moduleFactory: Callable[[], torch.nn.Module], cuda: bool = True) -> None:
+    def __init__(self, moduleFactory: Callable[..., torch.nn.Module], *args, cuda: bool = True, **kwargs) -> None:
         super().__init__(cuda)
+        self.args = args
+        self.kwargs = kwargs
         self.moduleFactory = moduleFactory
 
     def createTorchModule(self) -> torch.nn.Module:
-        return self.moduleFactory()
+        return self.moduleFactory(*self.args, **self.kwargs)
 
 
 class VectorTorchModel(TorchModel, ABC):
@@ -440,21 +450,28 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
+        self.inputTensoriser = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
+        if "inputTensoriser" not in state:
+            state["inputTensoriser"] = None
         s = super()
         if hasattr(s, '__setstate__'):
             s.__setstate__(state)
         else:
             self.__dict__ = state
 
+    def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+        self.inputTensoriser = tensoriser
+        return self
+
     def _createTorchModel(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels),
-            normalisationMode=self.normalisationMode)
+            normalisationMode=self.normalisationMode, inputTensoriser=self.inputTensoriser)
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
@@ -471,13 +488,11 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
-        results = []
-        i = 0
         batchSize = 64
-        while i < len(inputs):
-            inputSlice = inputs.iloc[i:i+batchSize]
-            results.append(self.model.applyScaled(inputSlice.values, asNumpy=True))
-            i += batchSize
+        results = []
+        dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
+        for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
+            results.append(self.model.applyScaled(inputBatch, asNumpy=True))
         return np.concatenate(results)
 
     def _predictClassProbabilities(self, inputs: pd.DataFrame) -> pd.DataFrame:
