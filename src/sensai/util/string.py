@@ -1,8 +1,6 @@
 from typing import Union, List, Dict, Any, Sequence, Iterable, Optional
 import re
 
-from dcs.sensai.util import countNone
-
 
 def dictString(d):
     return ', '.join([f'{k}={v}' for k, v in d.items()])
