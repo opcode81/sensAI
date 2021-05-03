@@ -40,7 +40,7 @@ class MultiLayerPerceptronTorchModel(VectorTorchModel):
 class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
     def __init__(self, hiddenDims: Sequence[int] = (5, 5), hidActivationFunction: Callable[[torch.Tensor], torch.Tensor] = torch.sigmoid,
             outputActivationFunction: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-            normalisationMode: NormalisationMode = NormalisationMode .MAX_BY_COLUMN,
+            normalisationMode: NormalisationMode = NormalisationMode.MAX_BY_COLUMN,
             cuda: bool = True, pDropout: Optional[float] = None, nnOptimiserParams: Optional[NNOptimiserParams] = None,
             **nnOptimiserDictParams) -> None:
         """

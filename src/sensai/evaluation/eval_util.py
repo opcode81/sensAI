@@ -169,6 +169,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
 
     def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False) -> TEvalData:
+        resultWriter = self._resultWriterForModel(resultWriter, model)
         evaluator = self.createEvaluator(model)
         evaluator.fitModel(model)
 
@@ -242,6 +243,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         log.info(strResults)
         if resultWriter is not None:
             suffix = "crossval" if useCrossValidation else "simple-eval"
+            strResults += "\n\n" + "\n\n".join([f"{model.getName()} = {str(model)}" for model in models])
             resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
         return resultsDF
 

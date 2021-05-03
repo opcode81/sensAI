@@ -239,11 +239,11 @@ class TorchModel(ABC, ToStringMixin):
             y, stddev = model.inferMCDropout(X, mcDropoutSamples, p=mcDropoutProbability)
             return extract(y), extract(stddev)
 
-    def applyScaled(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet], **kwargs) -> Union[torch.Tensor, np.ndarray]:
+    def applyScaled(self, X: Union[torch.Tensor, np.ndarray, TorchDataSet, Sequence[torch.Tensor]], **kwargs) -> Union[torch.Tensor, np.ndarray]:
         """
         applies the model to the given input tensor and returns the scaled result (i.e. in the original scale)
 
-        :param X: the input tensor or data set
+        :param X: the input tensor(s) or data set
         :param kwargs: parameters to pass on to apply
 
         :return: a scaled output tensor or, if MC-Dropout is applied, a pair (y, sd) of scaled tensors, where
@@ -379,20 +379,27 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
+        self.inputTensoriser = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
+        if "inputTensoriser" not in state:
+            state["inputTensoriser"] = None
         s = super()
         if hasattr(s, '__setstate__'):
             s.__setstate__(state)
         else:
             self.__dict__ = state
 
+    def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+        self.inputTensoriser = tensoriser
+        return self
+
     def _createTorchModel(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
-        dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode)
+        dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode, inputTensoriser=self.inputTensoriser)
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
@@ -401,13 +408,11 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
-        results = []
-        i = 0
         batchSize = 2**13
-        while i < len(inputs):
-            inputSlice = inputs.iloc[i:i+batchSize]
-            results.append(self.model.applyScaled(inputSlice.values, asNumpy=True))
-            i += batchSize
+        results = []
+        dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
+        for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
+            results.append(self.model.applyScaled(inputBatch, asNumpy=True))
         return np.concatenate(results)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
