@@ -1,8 +1,11 @@
+from typing import Union, Callable
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from ...torch_base import MCDropoutCapableNNModule
+from ...torch_enums import ActivationFunction
 
 
 class LSTNetwork(MCDropoutCapableNNModule):
@@ -42,7 +45,8 @@ class LSTNetwork(MCDropoutCapableNNModule):
     """
     def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
-            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid", isClassification=False):
+            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation: Union[str, ActivationFunction, Callable] = "sigmoid",
+            isClassification=False):
         """
         :param numInputTimeSlices: the number of input time slices
         :param inputDimPerTimeSlice: the dimension of the input data per time slice
@@ -111,7 +115,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
             else:
                 raise ValueError("Unknown highway combination function '%s'" % hwCombine)
 
-        self.output = self._getOutputActivationFn(outputActivation)
+        self.output = ActivationFunction.torchFunctionFromAny(outputActivation)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -183,19 +187,3 @@ class LSTNetwork(MCDropoutCapableNNModule):
     @staticmethod
     def _product(x, y):
         return x * y
-
-    @staticmethod
-    def _getOutputActivationFn(name):
-        output = None
-        if not name:
-            pass
-        elif name == 'sigmoid':
-            output = torch.sigmoid
-        elif name == 'tanh':
-            output = torch.tanh
-        else:
-            try:
-                output = getattr(F, name)
-            except AttributeError:
-                raise Exception(f'Output function "{name}" unknown.')
-        return output

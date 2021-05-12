@@ -11,6 +11,7 @@ from torch.nn import functional as F
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames
+from .torch_enums import ClassificationOutputMode
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
@@ -428,10 +429,12 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     Base class for the implementation of VectorClassificationModels based on TorchModels.
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
-    def __init__(self, modelClass: Callable[..., VectorTorchModel], modelArgs: Sequence = (), modelKwArgs: Optional[dict] = None,
+    def __init__(self, outputMode: ClassificationOutputMode,
+            modelClass: Callable[..., VectorTorchModel], modelArgs: Sequence = (), modelKwArgs: Optional[dict] = None,
             normalisationMode: NormalisationMode = NormalisationMode.NONE,
             nnOptimiserParams: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
+        :param outputMode: specifies the nature of the output of the underlying neural network model
         :param modelClass: the constructor with which to create the wrapped torch vector model
         :param modelArgs: the constructor argument list to pass to modelClass
         :param modelKwArgs: the dictionary of constructor keyword arguments to pass to modelClass
@@ -447,8 +450,10 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         else:
             nnOptimiserParamsInstance = NNOptimiserParams.fromDictOrInstance(nnOptimiserParams)
         if nnOptimiserParamsInstance.lossEvaluator is None:
-            nnOptimiserParamsInstance.lossEvaluator = NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY)
+            lossFunction = NNLossEvaluatorClassification.LossFunction.defaultForOutputMode(outputMode)
+            nnOptimiserParamsInstance.lossEvaluator = NNLossEvaluatorClassification(lossFunction)
 
+        self.outputMode = outputMode
         self.normalisationMode = normalisationMode
         self.nnOptimiserParams = nnOptimiserParams
         self.modelClass = modelClass
@@ -461,6 +466,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         if "inputTensoriser" not in state:
             state["inputTensoriser"] = None
+        if "outputMode" not in state:
+            state["outputMode"] = ClassificationOutputMode.PROBABILITIES
         s = super()
         if hasattr(s, '__setstate__'):
             s.__setstate__(state)
@@ -492,20 +499,25 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
-    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> torch.Tensor:
         batchSize = 64
         results = []
         dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
         for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
-            results.append(self.model.applyScaled(inputBatch, asNumpy=True))
-        return np.concatenate(results)
+            results.append(self.model.applyScaled(inputBatch, asNumpy=False))
+        return torch.cat(results, dim=0)
 
     def _predictClassProbabilities(self, inputs: pd.DataFrame) -> pd.DataFrame:
         y = self._predictOutputsForInputDataFrame(inputs)
-        normalisationConstants = y.sum(axis=1)
-        for i in range(y.shape[0]):
-            y[i,:] /= normalisationConstants[i]
-        return pd.DataFrame(y, columns=self._labels)
+        if self.outputMode == ClassificationOutputMode.PROBABILITIES:
+            pass
+        elif self.outputMode == ClassificationOutputMode.LOG_PROBABILITIES:
+            y = y.exp()
+        elif self.outputMode == ClassificationOutputMode.UNNORMALISED_LOG_PROBABILITIES:
+            y = y.softmax(dim=1)
+        else:
+            raise ValueError(f"Unhandled output mode {self.outputMode}")
+        return pd.DataFrame(y.numpy(), columns=self._labels)
 
     def __str__(self) -> str:
         return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])

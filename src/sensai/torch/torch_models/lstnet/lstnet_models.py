@@ -3,13 +3,13 @@ import logging
 import re
 from typing import Optional, Union
 
-import numpy as np
 import pandas as pd
 import torch
 
 from .lstnet_modules import LSTNetwork
-from ...torch_base import TorchVectorClassificationModel, VectorTorchModel
+from ...torch_base import TorchVectorClassificationModel, VectorTorchModel, ClassificationOutputMode
 from ...torch_data import TorchDataSetProviderFromDataUtil, TensorScalerIdentity, TensorScaler, DataUtil
+from ...torch_enums import ActivationFunction
 from ...torch_opt import NNOptimiserParams
 from ....util.string import objectRepr
 
@@ -29,7 +29,7 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
     """
     def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numClasses: Optional[int] = None,
             numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
-            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation="sigmoid", cuda=True,
+            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation=ActivationFunction.LOG_SOFTMAX, cuda=True,
             nnOptimiserParams: Union[dict, NNOptimiserParams] = None):
         """
         :param numInputTimeSlices: the number of input time slices
@@ -55,7 +55,8 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
             outputDimPerTimeSlice=numClasses, numConvolutions=numConvolutions, numCnnTimeSlices=numCnnTimeSlices, hidRNN=hidRNN,
             hwWindow=hwWindow, hwCombine=hwCombine, dropout=dropout, outputActivation=outputActivation,
             skip=skip, hidSkip=hidSkip, isClassification=True)
-        super().__init__(self._LSTNetworkModel, modelArgs=[self.cuda], modelKwArgs=lstnetArgs, nnOptimiserParams=nnOptimiserParams)
+        outputMode = ClassificationOutputMode.forActivationFn(ActivationFunction.torchFunctionFromAny(outputActivation))
+        super().__init__(outputMode, self._LSTNetworkModel, modelArgs=[self.cuda], modelKwArgs=lstnetArgs, nnOptimiserParams=nnOptimiserParams)
 
     class _LSTNetworkModel(VectorTorchModel):
         def __init__(self, cuda, **lstnetArgs):
@@ -89,10 +90,10 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
             raise ValueError(f"Output dimension {self.numClasses} per time time slice was specified, while the training data contains {len(self._labels)} classes")
         return TorchDataSetProviderFromDataUtil(self.DataUtil(inputs, outputs, self.numClasses), self.cuda)
 
-    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
+    def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> torch.Tensor:
         log.info(f"Predicting outputs for {len(inputs)} inputs")
         result = super()._predictOutputsForInputDataFrame(inputs)
-        return np.squeeze(result, 2)
+        return result.squeeze(2)
 
     def _computeModelInputs(self, x: pd.DataFrame, Y: pd.DataFrame = None, fit=False) -> pd.DataFrame:
         x = super()._computeModelInputs(x, Y=Y, fit=fit)

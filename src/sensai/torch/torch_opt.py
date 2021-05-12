@@ -1,3 +1,4 @@
+import enum
 import functools
 import logging
 import math
@@ -18,6 +19,7 @@ from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
     TensorScalerIdentity
+from .torch_enums import ClassificationOutputMode
 from ..util.string import ToStringMixin
 
 if TYPE_CHECKING:
@@ -26,60 +28,65 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+class Optimiser(enum.Enum):
+    SGD = ("sgd", optim.SGD)
+    ASGD = ("asgd", optim.ASGD)
+    ADAGRAD = ("adagrad", optim.Adagrad)
+    ADADELTA = ("adadelta", optim.Adadelta)
+    ADAM = ("adam", optim.Adam)
+    ADAMW = ("adamw", optim.AdamW)
+    ADAMAX = ("adamax", optim.Adamax)
+    RMSPROP = ("rmsprop", optim.RMSprop)
+    RPROP = ("rprop", optim.Rprop)
+    LBFGS = ("lbfgs", optim.LBFGS)
+
+    @classmethod
+    def fromName(cls, name: str):
+        lname = name.lower()
+        for o in cls:
+            if o.value[0] == lname:
+                return o
+        raise ValueError(f"Unknown optimiser name '{name}'; known names: {[o.value[0] for o in cls]}")
+
+
 class _Optimiser(object):
     """
     Wrapper for classes inherited from torch.optim.Optimizer
     """
-    def _makeOptimizer(self):
-        optimiserArgs = dict(self.optimiserArgs)
-        optimiserArgs.update({'lr': self.lr})
-        if self.method == 'sgd':
-            self.optimizer = optim.SGD(self.params, **optimiserArgs)
-        elif self.method == 'asgd':
-            self.optimizer = optim.ASGD(self.params, **optimiserArgs)
-        elif self.method == 'adagrad':
-            self.optimizer = optim.Adagrad(self.params, **optimiserArgs)
-        elif self.method == 'adadelta':
-            self.optimizer = optim.Adadelta(self.params, **optimiserArgs)
-        elif self.method == 'adam':
-            self.optimizer = optim.Adam(self.params, **optimiserArgs)
-        elif self.method == 'adamw':
-            self.optimizer = optim.AdamW(self.params, **optimiserArgs)
-        elif self.method == 'adamax':
-            self.optimizer = optim.Adamax(self.params, **optimiserArgs)
-        elif self.method == 'rmsprop':
-            self.optimizer = optim.RMSprop(self.params, **optimiserArgs)
-        elif self.method == 'rprop':
-            self.optimizer = optim.Rprop(self.params, **optimiserArgs)
-        elif self.method == 'lbfgs':
-            self.use_shrinkage = False
-            self.optimizer = optim.LBFGS(self.params, **optimiserArgs)
-        else:
-            raise RuntimeError("Invalid optim method: " + self.method)
-
-    def __init__(self, params, method, lr, max_grad_norm, use_shrinkage=True, **optimiserArgs):
+    def __init__(self, params, method: Union[str, Optimiser], lr, max_grad_norm, use_shrinkage=True, **optimiserArgs):
         """
         :param params: an iterable of torch.Tensor s or dict s. Specifies what Tensors should be optimized.
-        :param method: string identifier for optimiser method to use
+        :param method: the optimiser to use
         :param lr: learnig rate
         :param max_grad_norm: gradient norm value beyond which to apply gradient shrinkage
         :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
+        if type(method) == str:
+            self.method = Optimiser.fromName(method)
+        else:
+            self.method = method
         self.params = list(params)  # careful: params may be a generator
         self.last_ppl = None
         self.lr = lr
         self.max_grad_norm = max_grad_norm
-        self.method = method
         self.start_decay = False
         self.optimiserArgs = optimiserArgs
         self.use_shrinkage = use_shrinkage
-        self._makeOptimizer()
+
+        # instantiate optimiser
+        optimiserArgs = dict(self.optimiserArgs)
+        optimiserArgs.update({'lr': self.lr})
+        if self.method == Optimiser.LBFGS:
+            self.use_shrinkage = False
+            self.optimizer = optim.LBFGS(self.params, **optimiserArgs)
+        else:
+            cons = self.method.value[1]
+            self.optimizer = cons(self.params, **optimiserArgs)
 
     def step(self, lossBackward: Callable):
         """
-
         :param lossBackward: callable, performs backward step and returns loss
-        :return:
+        :return: loss value
         """
         if self.use_shrinkage:
             def closureWithShrinkage():
@@ -279,55 +286,72 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
     """A loss evaluator for (multi-variate) regression"""
 
     class LossFunction(Enum):
-        CROSSENTROPY = "CrossEntropy"
+        CROSSENTROPY = "CrossEntropy", "CE"
+        NLL = "NegativeLogLikelihood", "NLL"
+
+        def createCriterion(self) -> Callable:
+            if self is self.CROSSENTROPY:
+                return nn.CrossEntropyLoss(reduction='sum')
+            elif self is self.NLL:
+                return nn.NLLLoss(reduction="sum")
+
+        def getValidationMetricKey(self) -> str:
+            return self.value[1]
+
+        @classmethod
+        def defaultForOutputMode(cls, outputMode: ClassificationOutputMode):
+            if outputMode == ClassificationOutputMode.PROBABILITIES:
+                raise ValueError(f"No loss function available for {outputMode}; Either apply log at the end and use {ClassificationOutputMode.LOG_PROBABILITIES} or use a different final activation (e.g. log_softmax) to avoid this type of output.")
+            elif outputMode == ClassificationOutputMode.LOG_PROBABILITIES:
+                return cls.NLL
+            elif outputMode == ClassificationOutputMode.UNNORMALISED_LOG_PROBABILITIES:
+                return cls.CROSSENTROPY
+            else:
+                raise ValueError(f"No default specified for {outputMode}")
 
     def __init__(self, lossFn: LossFunction = LossFunction.CROSSENTROPY):
         if lossFn is None:
             lossFn = self.LossFunction.CROSSENTROPY
-        try:
-            self.lossFn = self.LossFunction(lossFn)
-        except ValueError:
-            raise Exception(f"Loss function {lossFn} not supported. Available are: {[e.value for e in self.LossFunction]}")
+        self.lossFn: "NNLossEvaluatorClassification.LossFunction" = self.LossFunction(lossFn)
 
     def __str__(self):
         return f"{self.__class__.__name__}[{self.lossFn}]"
 
     def createValidationLossEvaluator(self, cuda):
-        return self.ValidationLossEvaluator(cuda)
+        return self.ValidationLossEvaluator(cuda, self.lossFn)
 
     def getTrainingCriterion(self):
-        if self.lossFn is self.LossFunction.CROSSENTROPY:
-            criterion = nn.CrossEntropyLoss(reduction='sum')
-        else:
-            raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
-        return criterion
+        return self.lossFn.createCriterion()
 
     class ValidationLossEvaluator(NNLossEvaluator.ValidationLossEvaluator):
-        def __init__(self, cuda: bool):
-            self.totalLossCE = None
+        def __init__(self, cuda: bool, lossFn: "NNLossEvaluatorClassification.LossFunction"):
+            self.lossFn = lossFn
+            self.totalLoss = None
             self.numValidationSamples = None
-            self.evaluateCE = nn.CrossEntropyLoss(reduction="sum")
+            self.criterion = self.lossFn.createCriterion()
             if cuda:
-                self.evaluateCE = self.evaluateCE.cuda()
+                self.criterion = self.criterion.cuda()
 
         def startValidationCollection(self, groundTruthShape):
-            self.totalLossCE = 0
+            self.totalLoss = 0
             self.numValidationSamples = 0
 
         def processValidationResultBatch(self, output, groundTruth):
-            self.totalLossCE += self.evaluateCE(output, groundTruth).item()
+            self.totalLoss += self.criterion(output, groundTruth).item()
             self.numValidationSamples += output.shape[0]
 
         def endValidationCollection(self):
-            ce = self.totalLossCE / self.numValidationSamples
-            metrics = OrderedDict([("CE", ce), ("GeoMeanProbTrueClass", math.exp(-ce))])
+            meanLoss = self.totalLoss / self.numValidationSamples
+            if isinstance(self.criterion, nn.CrossEntropyLoss):
+                metrics = OrderedDict([("CE", meanLoss), ("GeoMeanProbTrueClass", math.exp(-meanLoss))])
+            elif isinstance(self.criterion, nn.NLLLoss):
+                metrics = {"NLL": meanLoss}
+            else:
+                raise ValueError()
             return metrics
 
     def getValidationMetricName(self):
-        if self.lossFn is self.LossFunction.CROSSENTROPY:
-            return "CE"
-        else:
-            raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
+        return self.lossFn.getValidationMetricKey()
 
 
 class NNOptimiserParams(ToStringMixin):
@@ -336,7 +360,7 @@ class NNOptimiserParams(ToStringMixin):
         "optimiserClip": "shrinkageClip"
     }
 
-    def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser="adam", optimiserLR=0.001, earlyStoppingEpochs=None,
+    def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser: Union[str, Optimiser] = "adam", optimiserLR=0.001, earlyStoppingEpochs=None,
             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False,
             useShrinkage=True, shrinkageClip=10., **optimiserArgs):
         """

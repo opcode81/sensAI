@@ -190,11 +190,25 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
-        y.index = x.index
-        return y
+        return self._createOutputDataFrame(y, x.index)
+
+    def _createOutputDataFrame(self, y: Union[pd.DataFrame, list], index):
+        if isinstance(y, pd.DataFrame):
+            # make sure the data frame has the right index
+            y.index = index
+            return y
+        else:
+            predictedColumns = self.getPredictedVariableNames()
+            if len(predictedColumns) != 1:
+                raise ValueError(f"_predict must return a DataFrame as there are multiple predicted columns; got {type(y)}")
+            return pd.DataFrame(pd.Series(y, name=predictedColumns[0], index=index))
 
     @abstractmethod
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+    def _predict(self, x: pd.DataFrame) -> Union[pd.DataFrame, list]:
+        """
+        :param x: the input data frame
+        :return: the output data frame, or, for the case where a single column is to be predicted, the list of values for that column
+        """
         pass
 
     def _underlyingModelRequiresFitting(self) -> bool:

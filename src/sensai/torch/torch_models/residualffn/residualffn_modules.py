@@ -63,6 +63,8 @@ class ResidualFeedForwardNetwork(nn.Module):
 
         if pDropout is not None:
             self.dropout = nn.Dropout(p=pDropout)
+        else:
+            self.dropout = None
 
         self.inputLayer = nn.Linear(self.inputDim, self.hiddenDims[0])
 
@@ -98,7 +100,7 @@ class ResidualFeedForwardNetwork(nn.Module):
         A generic residual block which need to be specified by defining the skip path.
         """
 
-        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: nn.Dropout, useBatchNormalisation: bool) -> None:
+        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: Optional[nn.Dropout], useBatchNormalisation: bool) -> None:
             super().__init__()
             self.inputDim = inputDim
             self.hiddenDim = hiddenDim
@@ -137,7 +139,7 @@ class ResidualFeedForwardNetwork(nn.Module):
         A residual block preserving the dimension of the input
         """
 
-        def __init__(self, inputOutputDim: int, hiddenDim: int, dropout: nn.Dropout, useBatchNormalisation: bool) -> None:
+        def __init__(self, inputOutputDim: int, hiddenDim: int, dropout: Optional[nn.Dropout], useBatchNormalisation: bool) -> None:
             super().__init__(inputOutputDim, hiddenDim, inputOutputDim, dropout, useBatchNormalisation)
 
         def _skip(self, x):
@@ -151,7 +153,7 @@ class ResidualFeedForwardNetwork(nn.Module):
         A residual block changing the dimension of the input to the given value.
         """
 
-        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: nn.Dropout, useBatchNormalisation: bool) -> None:
+        def __init__(self, inputDim: int, hiddenDim: int, outputDim: int, dropout: Optional[nn.Dropout], useBatchNormalisation: bool) -> None:
             super().__init__(inputDim, hiddenDim, outputDim, dropout, useBatchNormalisation)
             self.denseSkip = nn.Linear(self.inputDim, self.outputDim)
 

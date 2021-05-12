@@ -224,7 +224,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
-            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
+            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1.0, 0.95, 0.95)), (1, (0.7, 0, 0))))
         plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, **kwargs)
 
         plt.xlabel("ground truth")
