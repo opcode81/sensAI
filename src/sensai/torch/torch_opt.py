@@ -286,8 +286,8 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
     """A loss evaluator for (multi-variate) regression"""
 
     class LossFunction(Enum):
-        CROSSENTROPY = "CrossEntropy", "CE"
-        NLL = "NegativeLogLikelihood", "NLL"
+        CROSSENTROPY = "CrossEntropy"
+        NLL = "NegativeLogLikelihood"
 
         def createCriterion(self) -> Callable:
             if self is self.CROSSENTROPY:
@@ -296,7 +296,10 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
                 return nn.NLLLoss(reduction="sum")
 
         def getValidationMetricKey(self) -> str:
-            return self.value[1]
+            if self is self.CROSSENTROPY:
+                return "CE"
+            elif self is self.NLL:
+                return "NLL"
 
         @classmethod
         def defaultForOutputMode(cls, outputMode: ClassificationOutputMode):
