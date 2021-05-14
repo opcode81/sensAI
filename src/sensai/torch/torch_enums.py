@@ -1,23 +1,17 @@
-from dataclasses import dataclass
 from enum import Enum
+import functools
 from typing import Optional, Callable, Union
 
 from torch.nn import functional as F
 
 
-@dataclass
-class _ActivationFunction:
-    name: str
-    fn: Optional[Callable]
-
-
 class ActivationFunction(Enum):
-    NONE = _ActivationFunction("none", None)
-    SIGMOID = _ActivationFunction("sigmoid", F.sigmoid)
-    RELU = _ActivationFunction("relu", F.relu)
-    TANH = _ActivationFunction("tanh", F.tanh)
-    LOG_SOFTMAX = _ActivationFunction("log_softmax", F.log_softmax)
-    SOFTMAX = _ActivationFunction("softmax", F.softmax)
+    NONE = "none"
+    SIGMOID = "sigmoid"
+    RELU = "relu"
+    TANH = "tanh"
+    LOG_SOFTMAX = "log_softmax"
+    SOFTMAX = "softmax"
 
     @classmethod
     def fromName(cls, name) -> "ActivationFunction":
@@ -27,10 +21,17 @@ class ActivationFunction(Enum):
         raise ValueError(f"No function found for name '{name}'")
 
     def getTorchFunction(self) -> Callable:
-        return self.value.fn
+        return {
+                ActivationFunction.NONE: None,
+                ActivationFunction.SIGMOID: F.sigmoid,
+                ActivationFunction.RELU: F.relu,
+                ActivationFunction.TANH: F.tanh,
+                ActivationFunction.LOG_SOFTMAX: functools.partial(F.log_softmax, dim=1),
+                ActivationFunction.SOFTMAX: functools.partial(F.softmax, dim=1)
+            }[self]
 
     def getName(self) -> str:
-        return self.value.name
+        return self.value
 
     @classmethod
     def torchFunctionFromAny(cls, f: Union[str, "ActivationFunction", Callable]) -> Callable:
@@ -41,7 +42,10 @@ class ActivationFunction(Enum):
         :return: a function that can be applied to tensors
         """
         if isinstance(f, str):
-            return getattr(F, f)
+            try:
+                return cls.fromName(f).getTorchFunction()
+            except ValueError:
+                return getattr(F, f)
         elif isinstance(f, ActivationFunction):
             return f.getTorchFunction()
         elif callable(f):
@@ -60,8 +64,8 @@ class ClassificationOutputMode(Enum):
         if fn is None:
             return cls.UNNORMALISED_LOG_PROBABILITIES
         name = fn.__name__
-        if name in ("sigmoid", "relu"):
-            raise ValueError(f"The activation function {fn} is not suitable as an output activation function for classifcation")
+        if name in ("sigmoid", "relu", "tanh"):
+            raise ValueError(f"The activation function {fn} is not suitable as an output activation function for classification")
         elif name in ("log_softmax",):
             return cls.LOG_PROBABILITIES
         elif name in ("softmax",):
