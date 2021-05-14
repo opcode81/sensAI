@@ -63,6 +63,8 @@ class ClassificationOutputMode(Enum):
     def forActivationFn(cls, fn: Optional[Callable]):
         if fn is None:
             return cls.UNNORMALISED_LOG_PROBABILITIES
+        if isinstance(fn, functools.partial):
+            fn = fn.func
         name = fn.__name__
         if name in ("sigmoid", "relu", "tanh"):
             raise ValueError(f"The activation function {fn} is not suitable as an output activation function for classification")
