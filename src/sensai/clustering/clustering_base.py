@@ -5,15 +5,14 @@ from typing import Union, Set, Callable, Iterable, Optional
 import numpy as np
 import pandas as pd
 from scipy.spatial import distance_matrix
-from typing_extensions import Protocol
 
-from ...util.cache import PickleLoadSaveMixin
+from ..util.cache import PickleLoadSaveMixin
 
 log = logging.getLogger(__name__)
 
 
 # TODO at some point in the future: generalize to other input and deal with algorithms that allow prediction of labels
-class ClusteringModel(PickleLoadSaveMixin, ABC):
+class EuclideanClusterer(PickleLoadSaveMixin, ABC):
     """
     Base class for all clustering algorithms. Supports noise clusters and relabelling of identified clusters as noise
     based on their size.
@@ -175,33 +174,3 @@ class ClusteringModel(PickleLoadSaveMixin, ABC):
         pass
 
 
-class SKLearnClustererProtocol(Protocol):
-    """
-    Only used for type hints, do not instantiate
-    """
-    def fit(self, x: np.ndarray): ...
-
-    labels_: np.ndarray
-
-
-class SKLearnClusteringModel(ClusteringModel):
-    """
-    Wrapper around an sklearn-type clustering algorithm
-
-    :param clusterer: a clusterer object compatible the sklearn API
-    :param noiseLabel: label that is associated with the noise cluster or None
-    :param minClusterSize: if not None, clusters below this size will be labeled as noise
-    :param maxClusterSize: if not None, clusters above this size will be labeled as noise
-    """
-
-    def __init__(self, clusterer: SKLearnClustererProtocol, noiseLabel=-1,
-             minClusterSize: int = None, maxClusterSize: int = None):
-        super().__init__(noiseLabel=noiseLabel, minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
-        self.clusterer = clusterer
-
-    def _computeLabels(self, x: np.ndarray):
-        self.clusterer.fit(x)
-        return self.clusterer.labels_
-
-    def __str__(self):
-        return f"{super().__str__()}_{self.clusterer.__class__.__name__}"

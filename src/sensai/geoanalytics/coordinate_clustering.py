@@ -4,27 +4,29 @@ import numpy as np
 from shapely.geometry import MultiPoint
 from typing import Callable, Union, Iterable
 
-from .base.clustering import ClusteringModel, SKLearnClustererProtocol, SKLearnClusteringModel
+from ..clustering.clustering_base import EuclideanClusterer
+from ..clustering import SkLearnEuclideanClusterer
+from ..clustering.sklearn_clustering import SkLearnClustererProtocol
 from ..util.cache import LoadSaveInterface
-from ..util.coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
+from .coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ..util.tracking import timed
 
 log = logging.getLogger(__name__)
 
 
-class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
+class CoordinateEuclideanClusterer(EuclideanClusterer, GeoDataFrameWrapper):
     """
     Wrapper around a clustering model. This class adds additional, geospatial-specific features to the provided
     clusterer
 
     :param clusterer: an instance of ClusteringModel
     """
-    def __init__(self, clusterer: ClusteringModel):
+    def __init__(self, clusterer: EuclideanClusterer):
         self.clusterer = clusterer
         super().__init__(noiseLabel=clusterer.noiseLabel,
             maxClusterSize=clusterer.maxClusterSize, minClusterSize=clusterer.minClusterSize)
 
-    class Cluster(ClusteringModel.Cluster, GeoDataFrameWrapper, LoadSaveInterface):
+    class Cluster(EuclideanClusterer.Cluster, GeoDataFrameWrapper, LoadSaveInterface):
         """
         Wrapper around a coordinates array
 
@@ -144,7 +146,7 @@ class CoordinateClusteringModel(ClusteringModel, GeoDataFrameWrapper):
         return super().clusters(condition=condition)
 
 
-class SKLearnCoordinateClustering(CoordinateClusteringModel):
+class SkLearnCoordinateClustering(CoordinateEuclideanClusterer):
     """
     Wrapper around a sklearn clusterer. This class adds additional features like relabelling and convenient methods
     for handling geospatial data
@@ -154,8 +156,8 @@ class SKLearnCoordinateClustering(CoordinateClusteringModel):
     :param minClusterSize: if not None, clusters below this size will be labeled as noise
     :param maxClusterSize: if not None, clusters above this size will be labeled as noise
     """
-    def __init__(self, clusterer: SKLearnClustererProtocol, noiseLabel=-1,
+    def __init__(self, clusterer: SkLearnClustererProtocol, noiseLabel=-1,
                  minClusterSize: int = None, maxClusterSize: int = None):
-        clusterer = SKLearnClusteringModel(clusterer, noiseLabel=noiseLabel,
+        clusterer = SkLearnEuclideanClusterer(clusterer, noiseLabel=noiseLabel,
                            minClusterSize=minClusterSize, maxClusterSize=maxClusterSize)
         super().__init__(clusterer)

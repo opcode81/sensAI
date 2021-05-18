@@ -1,2 +1,3 @@
 from .greedy_clustering import GreedyAgglomerativeClustering
-from .base.clustering import SKLearnClusteringModel, ClusteringModel
+from sensai.clustering.clustering_base import EuclideanClusterer
+from .sklearn_clustering import SkLearnEuclideanClusterer

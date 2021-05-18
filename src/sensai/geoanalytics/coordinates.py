@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 from shapely.geometry import MultiPoint
 from typing import Union
 
-from sensai.clustering import ClusteringModel
+from ..clustering import EuclideanClusterer
 
-TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame, ClusteringModel.Cluster]
+TCoordinates = Union[np.ndarray, MultiPoint, gp.GeoDataFrame, EuclideanClusterer.Cluster]
 
 
 def validateCoordinates(coordinates: np.ndarray):
@@ -27,7 +27,7 @@ def extractCoordinatesArray(coordinates: TCoordinates) -> np.ndarray:
                              f"Is the geometry column a sequence of Points?")
     elif isinstance(coordinates, MultiPoint):
         coordinates = np.array(coordinates)
-    elif isinstance(coordinates, ClusteringModel.Cluster):
+    elif isinstance(coordinates, EuclideanClusterer.Cluster):
         coordinates = coordinates.datapoints
     validateCoordinates(coordinates)
     return coordinates
