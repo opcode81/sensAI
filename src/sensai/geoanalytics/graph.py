@@ -1,11 +1,11 @@
-import geopandas as gp
 import networkx as nx
 import numpy as np
 import scipy
 from itertools import combinations
 from scipy.spatial.distance import euclidean
-from shapely.geometry import MultiLineString
 from typing import Callable, Dict
+from shapely.geometry import MultiLineString
+import geopandas as gp
 
 from .coordinates import extractCoordinatesArray, GeoDataFrameWrapper
 
