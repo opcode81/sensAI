@@ -91,23 +91,7 @@ class _Optimiser(object):
         if self.use_shrinkage:
             def closureWithShrinkage():
                 loss = lossBackward()
-
-                # Compute gradients norm.
-                grad_norm = None
-                for param in self.params:
-                    n = param.grad.data.norm()
-                    if grad_norm is None:
-                        grad_norm = n * n
-                    else:
-                        grad_norm += n * n
-                grad_norm = torch.sqrt(grad_norm)
-
-                if grad_norm > self.max_grad_norm:
-                    shrinkage = self.max_grad_norm / grad_norm
-
-                    for param in self.params:
-                        param.grad.data.mul_(shrinkage)
-
+                torch.nn.utils.clip_grad_norm_(self.params, self.max_grad_norm)
                 return loss
 
             closure = closureWithShrinkage
@@ -365,7 +349,7 @@ class NNOptimiserParams(ToStringMixin):
 
     def __init__(self, lossEvaluator: NNLossEvaluator = None, gpu=None, optimiser: Union[str, Optimiser] = "adam", optimiserLR=0.001, earlyStoppingEpochs=None,
             batchSize=None, epochs=1000, trainFraction=0.75, scaledOutputs=False,
-            useShrinkage=True, shrinkageClip=10., **optimiserArgs):
+            useShrinkage=True, shrinkageClip=10., shuffle=True, **optimiserArgs):
         """
         :param lossEvaluator: the loss evaluator to use
         :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained); if None, default to first GPU
@@ -381,6 +365,7 @@ class NNOptimiserParams(ToStringMixin):
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
         :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
         :param shrinkageClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
+        :param shuffle: whether to shuffle the training data
         :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
         """
         if optimiser == 'lbfgs':
@@ -405,12 +390,15 @@ class NNOptimiserParams(ToStringMixin):
         self.optimiserArgs = optimiserArgs
         self.useShrinkage = useShrinkage
         self.earlyStoppingEpochs = earlyStoppingEpochs
+        self.shuffle = shuffle
 
     @classmethod
     def _updatedParams(cls, params: dict) -> dict:
         return {cls.RENAMED_PARAMS.get(k, k): v for k, v in params.items() if k not in cls.REMOVED_PARAMS}
 
     def __setstate__(self, state):
+        if "shuffle" not in state:
+            state["shuffle"] = True
         self.__dict__ = self._updatedParams(state)
 
     @classmethod
@@ -655,7 +643,7 @@ class NNOptimiser:
         n_samples = 0
         numOutputsPerDataPoint = None
         for dataSet, outputScaler in zip(dataSets, outputScalers):
-            for X, Y in dataSet.iterBatches(batch_size, shuffle=True):
+            for X, Y in dataSet.iterBatches(batch_size, shuffle=self.params.shuffle):
                 if numOutputsPerDataPoint is None:
                     outputShape = Y.shape[1:]
                     numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)

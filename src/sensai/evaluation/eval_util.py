@@ -178,7 +178,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             for predictedVarName in model.getPredictedVariableNames():
                 strEvalResult = str(evalResultData.getEvalStats(predictedVarName))
                 if logResults:
-                    log.info(f"Evaluation results for {predictedVarName}: {strEvalResult}")
+                    log.info(f"{subtitlePrefix}Evaluation results for {predictedVarName}: {strEvalResult}")
                 strEvalResults += predictedVarName + ": " + strEvalResult + "\n"
             if resultWriter is not None:
                 resultWriter.writeTextFile("evaluator-results", strEvalResults)
@@ -188,7 +188,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         gatherResults(evalResultData, resultWriter)
         if additionalEvaluationOnTrainingData:
             evalResultDataTrain = evaluator.evalModel(model, onTrainingData=True)
-            gatherResults(evalResultDataTrain, resultWriter.childWithAddedPrefix("-onTrain-"), subtitlePrefix="[onTrain] ")
+            additionalResultWriter = resultWriter.childWithAddedPrefix("-onTrain-") if resultWriter is not None else None
+            gatherResults(evalResultDataTrain, additionalResultWriter, subtitlePrefix="[onTrain] ")
 
         return evalResultData
 

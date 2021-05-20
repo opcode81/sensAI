@@ -409,7 +409,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> np.ndarray:
-        batchSize = 2**13
+        batchSize = self.nnOptimiserParams.batchSize
         results = []
         dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
         for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
@@ -500,7 +500,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
 
     def _predictOutputsForInputDataFrame(self, inputs: pd.DataFrame) -> torch.Tensor:
-        batchSize = 64
+        batchSize = self.nnOptimiserParams.batchSize
         results = []
         dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
         for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):

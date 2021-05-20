@@ -34,14 +34,16 @@ class ActivationFunction(Enum):
         return self.value
 
     @classmethod
-    def torchFunctionFromAny(cls, f: Union[str, "ActivationFunction", Callable]) -> Callable:
+    def torchFunctionFromAny(cls, f: Union[str, "ActivationFunction", Callable, None]) -> Optional[Callable]:
         """
         Gets the torch activation for the given argument
 
         :param f: either an instance of ActivationFunction, the name of a function from torch.nn.functional or an actual function
-        :return: a function that can be applied to tensors
+        :return: a function that can be applied to tensors (or None)
         """
-        if isinstance(f, str):
+        if f is None:
+            return None
+        elif isinstance(f, str):
             try:
                 return cls.fromName(f).getTorchFunction()
             except ValueError:
@@ -51,7 +53,7 @@ class ActivationFunction(Enum):
         elif callable(f):
             return f
         else:
-            raise ValueError()
+            raise ValueError(f"Could not determine torch function from {f} of type {type(f)}")
 
 
 class ClassificationOutputMode(Enum):
