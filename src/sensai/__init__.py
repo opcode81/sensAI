@@ -16,7 +16,7 @@ from .tensor_model import TensorToTensorRegressionModel, TensorToScalarRegressio
     TensorToTensorClassificationModel, TensorToScalarClassificationModel
 from .vector_model import PredictorModel, VectorModel, VectorRegressionModel, VectorClassificationModel
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
 # tensorflow
