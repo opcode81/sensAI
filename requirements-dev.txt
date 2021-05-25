@@ -8,4 +8,4 @@ bump2version
 tensorflow~=2.2.0
 lightgbm==1.18.5
 jupyter
-pyyaml==5.3
+pyyaml==5.4

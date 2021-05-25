@@ -1,0 +1,25 @@
+name: sensai
+channels:
+  - pytorch
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.7
+  - pytorch=1.4.0
+  - tensorflow=1.14.0
+  - pyqt=5.12
+  - psutil=5.6.7
+  - pytorch=1.4.0
+  - catboost=0.23
+  - pytest=5.4.1
+  - tox=3.14.6
+  - bump2version
+  - jupyter
+  - pyyaml=5.3
+  - lightgbm=3.1.1
+  - sphinx_rtd_theme
+  - pip
+  - pip:
+      - -r file:requirements.txt
+      - nbsphinx

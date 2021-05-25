@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
 import joblib
 
+from .hash import pickleHash
 from .pickle import PickleFailureDebugger
 
 log = logging.getLogger(__name__)
@@ -627,14 +628,17 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
         return callFnAndCacheResult()
 
 
-# TODO: I think this class deserves some documentation on the intended usage
 class PickleCached(object):
+    """
+    Function decorator for caching function results via pickle
+    """
     def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle"):
         """
-
-        :param cacheBasePath:
-        :param filenamePrefix:
-        :param filename:
+        :param cacheBasePath: the directory where the pickle cache file will be stored
+        :param filenamePrefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
+            a hash code of the function arguments will be appended and ".cache.pickle" will be appended; if None, use "" (if filename
+            has not been provided)
+        :param filename: the full file name of the cache file to be created; this is admissible only if the function has no arguments
         """
         self.filename = filename
         self.cacheBasePath = cacheBasePath
@@ -646,11 +650,23 @@ class PickleCached(object):
         else:
             self.filenamePrefix += "-"
 
-    def __call__(self, fn: Callable, *args, **kwargs):
-        if self.filename is None:
-            self.filename = self.filenamePrefix + fn.__qualname__ + ".cache.pickle"
-        picklePath = os.path.join(self.cacheBasePath,  self.filename)
-        return lambda *args, **kwargs: cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend)
+    def __call__(self, fn: Callable, *_args, **_kwargs):
+
+        def wrapped(*args, **kwargs):
+            haveArgs = len(args) > 0 or len(kwargs) > 0
+            if self.filename is None:
+                filename = self.filenamePrefix + fn.__qualname__
+                if haveArgs:
+                    filename += "-" + pickleHash((args, kwargs))
+                filename += ".cache.pickle"
+            else:
+                if haveArgs:
+                    raise Exception("Function called with arguments but full cache filename specified: specify a cache filename prefix only to account for argument values")
+                filename = self.filename
+            picklePath = os.path.join(self.cacheBasePath, filename)
+            return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend)
+
+        return wrapped
 
 
 class LoadSaveInterface(ABC):

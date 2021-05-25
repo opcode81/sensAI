@@ -264,17 +264,22 @@ class DFTModifyColumnVectorized(DFTModifyColumn):
 
 class DFTOneHotEncoder(DataFrameTransformer):
     def __init__(self, columns: Optional[Union[str, Sequence[str]]],
-             categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False):
+            categories: Union[List[np.ndarray], Dict[str, np.ndarray]] = None, inplace=False, ignoreUnknown=False,
+            arrayValuedResult=False):
         """
         One hot encode categorical variables
 
-        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each;
+        :param columns: list of names or regex matching names of columns that are to be replaced by a list one-hot encoded columns each
+            (or an array-valued column for the case where useArrayValues=True);
             If None, then no columns are actually to be one-hot-encoded
         :param categories: numpy arrays containing the possible values of each of the specified columns (for case where sequence is specified
             in 'columns') or dictionary mapping column name to array of possible categories for the column name.
             If None, the possible values will be inferred from the columns
+        :param inplace: whether to perform the transformation in-place
         :param ignoreUnknown: if True and an unknown category is encountered during transform, the resulting one-hot
             encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
+        :param arrayValuedResult: whether to replace the input columns by columns of the same name containing arrays as values
+            instead of creating a separate column per original value
         """
         super().__init__()
         self._paramInfo["columns"] = columns
@@ -290,6 +295,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
             self._columnNameRegex = orRegexGroup(columns)
             self._columnsToEncode = columns
         self.inplace = inplace
+        self.arrayValuedResult = arrayValuedResult
         self.handleUnknown = "ignore" if ignoreUnknown else "error"
         if categories is not None:
             if type(categories) == dict:
@@ -298,6 +304,11 @@ class DFTOneHotEncoder(DataFrameTransformer):
                 if len(columns) != len(categories):
                     raise ValueError(f"Given categories must have the same length as columns to process")
                 self.oneHotEncoders = {col: OneHotEncoder(categories=[np.sort(categories)], sparse=False, handle_unknown=self.handleUnknown) for col, categories in zip(columns, categories)}
+
+    def __setstate__(self, state):
+        if "arrayValuedResult" not in state:
+            state["arrayValuedResult"] = False
+        super().__setstate__(state)
 
     def _fit(self, df: pd.DataFrame):
         if self._columnsToEncode is None:
@@ -317,15 +328,19 @@ class DFTOneHotEncoder(DataFrameTransformer):
             df = df.copy()
         for columnName in self._columnsToEncode:
             encodedArray = self.oneHotEncoders[columnName].transform(df[[columnName]])
-            df = df.drop(columns=columnName)
-            for i in range(encodedArray.shape[1]):
-                df["%s_%d" % (columnName, i)] = encodedArray[:, i]
+            if not self.arrayValuedResult:
+                df = df.drop(columns=columnName)
+                for i in range(encodedArray.shape[1]):
+                    df["%s_%d" % (columnName, i)] = encodedArray[:, i]
+            else:
+                df[columnName] = list(encodedArray)
         return df
 
     def info(self):
         info = super().info()
         info["inplace"] = self.inplace
         info["handleUnknown"] = self.handleUnknown
+        info["arrayValuedResult"] = self.arrayValuedResult
         info.update(self._paramInfo)
         return info
 
@@ -408,7 +423,7 @@ class DFTNormalisation(DataFrameTransformer):
             return self.toRule(None)
 
     class Rule:
-        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None):
+        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None, arrayValued=False, fit=True):
             """
             :param regex: a regular expression defining the column(s) the rule applies to.
                 If None, the rule is a placeholder rule and the regex must be set later via setRegex or the rule will not be applicable.
@@ -416,6 +431,9 @@ class DFTNormalisation(DataFrameTransformer):
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
                 If None the default transformer will be used.
+            :param arrayValued: whether the column values are not scalars but arrays (of arbitrary lengths).
+                It is assumed that all entries in such arrays are to be normalised in the same way.
+            :param fit: whether the rule's transformer shall be fitted
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
@@ -423,6 +441,15 @@ class DFTNormalisation(DataFrameTransformer):
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
+            self.arrayValued = arrayValued
+            self.fit = fit
+
+        def __setstate__(self, d):
+            if "arrayValued" not in d:
+                d["arrayValued"] = False
+            if "fit" not in d:
+                d["fit"] = True
+            self.__dict__ = d
 
         def setRegex(self, regex: str):
             self.regex = re.compile(regex)
@@ -440,7 +467,7 @@ class DFTNormalisation(DataFrameTransformer):
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
-        :param rules: the set of rules to apply
+        :param rules: the set of rules; rules are always fitted and applied in the given order
         :param defaultTransformerFactory: a factory for the creation of transformer instances (from sklearn.preprocessing, e.g. StandardScaler)
             that shall be used to create a transformer for all rules that don't specify a particular transformer.
             The default transformer will only be applied to columns matched by such rules, unmatched columns will
@@ -465,7 +492,6 @@ class DFTNormalisation(DataFrameTransformer):
                     raise Exception(f"More than one rule applies to column '{c}': {matchedRulesByColumn[c]}, {rule}")
                 matchedRulesByColumn[c] = rule
 
-            # fit transformer
             if len(matchingColumns) > 0:
                 if rule.unsupported:
                     raise Exception(f"Normalisation of columns {matchingColumns} is unsupported according to {rule}")
@@ -474,9 +500,14 @@ class DFTNormalisation(DataFrameTransformer):
                         if self._defaultTransformerFactory is None:
                             raise Exception(f"No transformer to fit: {rule} defines no transformer and instance has no transformer factory")
                         rule.transformer = self._defaultTransformerFactory()
-                    applicableDF = df[matchingColumns]
-                    flatValues = applicableDF.values.flatten()
-                    rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
+                    if rule.fit:
+                        # fit transformer
+                        applicableDF = df[matchingColumns]
+                        if not rule.arrayValued:
+                            flatValues = applicableDF.values.flatten()
+                        else:
+                            flatValues = np.concatenate(applicableDF.values.flatten())
+                        rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
             else:
                 log.log(logging.DEBUG - 1, f"{rule} matched no columns")
 
@@ -503,7 +534,10 @@ class DFTNormalisation(DataFrameTransformer):
             for c in rule.matchingColumns(df.columns):
                 matchedRulesByColumn[c] = rule
                 if not rule.skip:
-                    df[c] = rule.transformer.transform(df[[c]].values)
+                    if not rule.arrayValued:
+                        df[c] = rule.transformer.transform(df[[c]].values)
+                    else:
+                        df[c] = [rule.transformer.transform([x])[0] for x in df[c]]
         self._checkUnhandledColumns(df, matchedRulesByColumn)
         return df
 

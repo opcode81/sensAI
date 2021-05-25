@@ -4,7 +4,7 @@ from typing import Dict, Sequence, Generic, TypeVar
 from sensai.evaluation.eval_stats.eval_stats_clustering import ClusteringUnsupervisedEvalStats, \
     ClusteringSupervisedEvalStats, ClusterLabelsEvalStats
 from .evaluator import MetricsDictProvider
-from ..clustering import ClusteringModel
+from ..clustering import EuclideanClusterer
 from ..util.tracking import timed
 
 TClusteringEvalStats = TypeVar("TClusteringEvalStats", bound=ClusterLabelsEvalStats)
@@ -12,7 +12,7 @@ TClusteringEvalStats = TypeVar("TClusteringEvalStats", bound=ClusterLabelsEvalSt
 
 class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats], ABC):
     @timed
-    def _computeMetrics(self, model: ClusteringModel, **kwargs) -> Dict[str, float]:
+    def _computeMetrics(self, model: EuclideanClusterer, **kwargs) -> Dict[str, float]:
         """
         Evaluate the model and return the results as dict
 
@@ -24,7 +24,7 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
         return evalStats.getAll()
 
     @abstractmethod
-    def evalModel(self, model: ClusteringModel, **kwargs) -> TClusteringEvalStats:
+    def evalModel(self, model: EuclideanClusterer, **kwargs) -> TClusteringEvalStats:
         pass
 
 
@@ -32,7 +32,7 @@ class ClusteringModelUnsupervisedEvaluator(ClusteringModelEvaluator[ClusteringUn
     def __init__(self, datapoints):
         self.datapoints = datapoints
 
-    def evalModel(self, model: ClusteringModel, fit=True):
+    def evalModel(self, model: EuclideanClusterer, fit=True):
         """
         Retrieve evaluation statistics holder for the clustering model
 
@@ -59,7 +59,7 @@ class ClusteringModelSupervisedEvaluator(ClusteringModelEvaluator[ClusteringSupe
         self.trueLabels = trueLabels
         self.noiseLabel = noiseLabel
 
-    def evalModel(self, model: ClusteringModel, fit=True):
+    def evalModel(self, model: EuclideanClusterer, fit=True):
         """
         Retrieve evaluation statistics holder for the clustering model
 

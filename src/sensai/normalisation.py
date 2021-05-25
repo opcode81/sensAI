@@ -21,37 +21,36 @@ class VectorDataScaler:
         self.scale, self.translate = self._computeScalingParams(dataFrame.values, normalisationMode)
         self.dimensionNames = list(dataFrame.columns)
 
-    @staticmethod
-    def _computeScalingParams(rawArray: np.ndarray, normalisationMode: NormalisationMode):
+    @classmethod
+    def _computeScalingParams(cls, rawArray: np.ndarray, normalisationMode: NormalisationMode):
         """
         :param rawArray: numpy array containing raw data
         :param normalisationMode: the normalization mode (0=none, 1=by maximum in entire data set, 2=by separate maximum in each column)
         """
-        if len(rawArray.shape) != 2:
-            raise ValueError("Only 2D arrays are supported")
-        dim = rawArray.shape[1]
         translate = None
-        if normalisationMode == NormalisationMode.NONE:
-            scale = None
-        elif normalisationMode == NormalisationMode.MAX_ALL:
-            scale = np.ones(dim) * np.max(rawArray)
-        elif normalisationMode == NormalisationMode.MAX_BY_COLUMN:
-            scale = np.ones(dim)
-            for i in range(dim):
-                scale[i] = np.max(np.abs(rawArray[:, i]))
-        elif normalisationMode == NormalisationMode.STANDARDISED:
-            standardScaler = sklearn.preprocessing.StandardScaler()
-            standardScaler.fit(rawArray)
-            translate = standardScaler.mean_
-            scale = standardScaler.scale_
-        else:
-            raise Exception("Unknown normalization mode")
+        scale = None
+        if normalisationMode != NormalisationMode.NONE:
+            if len(rawArray.shape) != 2:
+                raise ValueError(f"Only 2D arrays are supported by {cls.__name__} with mode {normalisationMode}")
+            dim = rawArray.shape[1]
+            if normalisationMode == NormalisationMode.MAX_ALL:
+                scale = np.ones(dim) * np.max(rawArray)
+            elif normalisationMode == NormalisationMode.MAX_BY_COLUMN:
+                scale = np.ones(dim)
+                for i in range(dim):
+                    scale[i] = np.max(np.abs(rawArray[:, i]))
+            elif normalisationMode == NormalisationMode.STANDARDISED:
+                standardScaler = sklearn.preprocessing.StandardScaler()
+                standardScaler.fit(rawArray)
+                translate = standardScaler.mean_
+                scale = standardScaler.scale_
+            else:
+                raise Exception("Unknown normalization mode")
         return scale, translate
 
     @staticmethod
     def _array(data: Union[pd.DataFrame, np.ndarray]):
         return toFloatArray(data)
-
 
     def getNormalisedArray(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         result = self._array(data)

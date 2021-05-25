@@ -4,7 +4,7 @@ import seaborn as sns
 from abc import abstractmethod, ABC
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from typing import List, Sequence
+from typing import List, Sequence, Optional
 
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
 
@@ -146,7 +146,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         """Gets the standard deviation of the absolute error"""
         return self.computeMetricValue(RegressionMetricStdDevAE())
 
-    def getEvalStatsCollection(self):
+    def getEvalStatsCollection(self) -> "RegressionEvalStatsCollection":
         """
         For the case where we collected data on multiple dimensions, obtain a stats collection where
         each object in the collection holds stats on just one dimension
@@ -160,10 +160,10 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
-    def plotErrorDistribution(self, bins=None, figure=True, titleAdd=None):
+    def plotErrorDistribution(self, bins=None, figure=True, titleAdd=None) -> Optional[plt.Figure]:
         """
         :param bins: if None, seaborns default binning will be used
-        :param figure: whether to plot in a separate figure
+        :param figure: whether to plot in a separate figure and return that figure
         :param titleAdd: a string to add to the title (on a second line)
 
         :return: the resulting figure object or None
@@ -181,10 +181,11 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         plt.ylabel("probability density")
         return fig
 
-    def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs):
+    def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
         """
-        :param figure: whether to plot in a separate figure
-        :param kwargs: will be passed to plt.scatter()
+        :param figure: whether to plot in a separate figure and return that figure
+        :param titleAdd: a string to be added to the title in a second line
+        :param kwargs: parameters to be passed on to plt.scatter()
 
         :return:  the resulting figure object or None
         """
@@ -202,11 +203,11 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         plt.title(title)
         return fig
 
-    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, **kwargs):
+    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
         """
-        :param figure: whether to plot in a separate figure
-        :param cmap: value for corresponding parameter of plt.imshow() or None
-        :param bins: how many bins to use for construncting the heatmap
+        :param figure: whether to plot in a separate figure and return that figure
+        :param cmap: the colour map to use (see corresponding parameter of plt.imshow); if None use colour map from white to red
+        :param bins: how many bins to use for constructing the heatmap
         :param titleAdd: a string to add to the title (on a second line)
         :param kwargs: will be passed to plt.imshow()
 
@@ -223,7 +224,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
-            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
+            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1.0, 0.95, 0.95)), (1, (0.7, 0, 0))))
         plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, **kwargs)
 
         plt.xlabel("ground truth")

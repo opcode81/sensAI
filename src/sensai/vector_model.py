@@ -138,12 +138,15 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         return result
 
     def isFitted(self):
-        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
-        if not underlyingModelIsFitted:
+        if not self._isUnderlyingModelFitted():
             return False
         if not self._preProcessorsAreFitted():
             return False
         return True
+
+    def _isUnderlyingModelFitted(self):
+        underlyingModelIsFitted = not self._underlyingModelRequiresFitting() or self._isFitted
+        return underlyingModelIsFitted
 
     def _checkModelInputColumns(self, modelInput: pd.DataFrame):
         if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
@@ -181,16 +184,31 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         :return: a DataFrame with the same index as the input
         """
         if not self.isFitted():
-            raise Exception(f"Calling predict with unfitted model. "
-                            f"This might lead to errors down the line, especially if input/output checks are enabled")
+            raise Exception(f"Calling predict with unfitted model {self} "
+                            f"(isUnderlyingModelFitted={self._isUnderlyingModelFitted()}, "
+                            f"preProcessorsAreFitted={self._preProcessorsAreFitted()})")
         x = self._computeModelInputs(x)
         self._checkModelInputColumns(x)
         y = self._predict(x)
-        y.index = x.index
-        return y
+        return self._createOutputDataFrame(y, x.index)
+
+    def _createOutputDataFrame(self, y: Union[pd.DataFrame, list], index):
+        if isinstance(y, pd.DataFrame):
+            # make sure the data frame has the right index
+            y.index = index
+            return y
+        else:
+            predictedColumns = self.getPredictedVariableNames()
+            if len(predictedColumns) != 1:
+                raise ValueError(f"_predict must return a DataFrame as there are multiple predicted columns; got {type(y)}")
+            return pd.DataFrame(pd.Series(y, name=predictedColumns[0], index=index))
 
     @abstractmethod
-    def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
+    def _predict(self, x: pd.DataFrame) -> Union[pd.DataFrame, list]:
+        """
+        :param x: the input data frame
+        :return: the output data frame, or, for the case where a single column is to be predicted, the list of values for that column
+        """
         pass
 
     def _underlyingModelRequiresFitting(self) -> bool:
@@ -472,17 +490,13 @@ class VectorClassificationModel(VectorModel, ABC):
         this method and convert it to predicted labels (via argmax).
 
         In case you want to predict labels only or have a more efficient implementation of predicting labels than
-        using argmax, your will have to override _predict in your implementation. In the former case of a
-        non-probabilistic classifier, the implementation of this method should raise an exception, like the one below.
+        using argmax, you may override _predict instead of implementing this method. In the case of a
+        non-probabilistic classifier, the implementation of this method should raise an exception.
         """
-        raise NotImplementedError(f"Model {self.__class__.__name__} does not support prediction of probabilities")
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement _predictClassProbabilities.")
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
-        try:
-            predictedProbabilitiesDf = self._predictClassProbabilities(x)
-        except Exception:
-            raise Exception(f"Wrong implementation of {self.__class__.__name__}. For non-probabilistic classifiers "
-                            "_predict has to be overrode!")
+        predictedProbabilitiesDf = self._predictClassProbabilities(x)
         return self.convertClassProbabilitiesToPredictions(predictedProbabilitiesDf)
 
 

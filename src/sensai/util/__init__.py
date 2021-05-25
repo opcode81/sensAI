@@ -9,6 +9,22 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
+def countNone(*args):
+    c = 0
+    for a in args:
+        if a is None:
+            c += 1
+    return c
+
+
+def anyNone(*args):
+    return countNone(*args) > 0
+
+
+def allNone(*args):
+    return countNone(*args) == len(args)
+
+
 def concatSequences(seqs: Sequence[Sequence[T]]) -> List[T]:
     result = []
     for s in seqs:
@@ -37,6 +53,16 @@ def flattenArguments(args: Sequence[Union[T, Sequence[T]]]) -> List[T]:
         else:
             result.append(arg)
     return result
+
+
+def markUsed(*args):
+    """
+    Utility function to mark identifiers as used.
+    The function does nothing.
+
+    :param args: pass identifiers that shall be marked as used here
+    """
+    pass
 
 
 class LogTime:
