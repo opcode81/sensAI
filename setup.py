@@ -8,9 +8,11 @@ geoanalytics_requirements = ['networkx==2.4', 'Shapely~=1.7.0', 'geopandas==0.7.
 setup(
     name='sensai',
     package_dir={"": "src"},
+    license="MIT",
+    url="https://github.com/jambit/sensAI",
     packages=find_packages(where="src"),
     include_package_data=True,
-    version='0.1.0',
+    version='0.1.1',
     description='Library for sensible AI',
     install_requires=[
         line
