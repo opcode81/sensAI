@@ -94,6 +94,9 @@ class TensorScalerIdentity(TensorScaler):
 
 
 class Tensoriser(ABC):
+    """
+    Represents a method for transforming a data frame into one or more tensors to be processed by a neural network model
+    """
     def tensorise(self, df: pd.DataFrame) -> Union[torch.Tensor, List[torch.Tensor]]:
         result = self._tensorise(df)
         if type(result) == list:
@@ -111,13 +114,25 @@ class Tensoriser(ABC):
     def _tensorise(self, df: pd.DataFrame) -> Union[torch.Tensor, List[torch.Tensor]]:
         pass
 
+    @abstractmethod
+    def fit(self, df: pd.DataFrame):
+        pass
 
-class TensoriserDataFrameFloatValuesMatrix(Tensoriser):
+
+class RuleBasedTensoriser(Tensoriser, ABC):
+    """
+    Base class for tensorisers which transforms data frames into tensors based on a predefined set of rules and does not require fitting
+    """
+    def fit(self, df: pd.DataFrame):
+        pass
+
+
+class TensoriserDataFrameFloatValuesMatrix(RuleBasedTensoriser):
     def _tensorise(self, df: pd.DataFrame) -> np.ndarray:
         return torch.from_numpy(toFloatArray(df)).float()
 
 
-class TensoriserClassLabelIndices(Tensoriser):
+class TensoriserClassLabelIndices(RuleBasedTensoriser):
     def _tensorise(self, df: pd.DataFrame) -> np.ndarray:
         if len(df.columns) != 1:
             raise ValueError("Expected a single column containing the class label indices")
