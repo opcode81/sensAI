@@ -39,8 +39,8 @@ def test_NNOptimiserWithoutValidation_MLPClassifier(irisDataSet):
     inputTensor = torch.tensor(scaler.getNormalisedArray(iodata.inputs), dtype=torch.float32)
     dataSet = TorchDataSetFromTensors(inputTensor, outputTensor, False)
     model = TorchModelFromModuleFactory(lambda: MultiLayerPerceptron(inputTensor.shape[1], len(classLabels),
-            (4, 3), hidActivationFn=torch.tanh, outputActivationFn=torch.nn.Softmax()), cuda=False)
-    NNOptimiser(NNOptimiserParams(lossEvaluator=NNLossEvaluatorClassification(), trainFraction=1.0, epochs=300,
+            (4, 3), hidActivationFn=torch.tanh, outputActivationFn=None), cuda=False)
+    NNOptimiser(NNOptimiserParams(lossEvaluator=NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY), trainFraction=1.0, epochs=300,
             optimiser="adam")).fit(model, dataSet)
     modelOutputs = model.apply(inputTensor, asNumpy=False)
     accuracy = torch.sum(torch.argmax(modelOutputs, 1) == outputTensor).item() / len(outputTensor)
