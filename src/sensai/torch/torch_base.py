@@ -380,7 +380,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
-        self.inputTensoriser = None
+        self.inputTensoriser: Optional[Tensoriser] = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
@@ -404,6 +404,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
+        if self.inputTensoriser is not None:
+            log.info(f"Fitting {self.inputTensoriser} ...")
+            self.inputTensoriser.fit(inputs)
         self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
@@ -489,6 +492,10 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if len(outputs.columns) != 1:
             raise ValueError("Expected one output dimension: the class labels")
+
+        if self.inputTensoriser is not None:
+            log.info(f"Fitting {self.inputTensoriser} ...")
+            self.inputTensoriser.fit(inputs)
 
         # transform outputs: for each data point, the new output shall be the index in the list of labels
         labels: pd.Series = outputs.iloc[:, 0]
