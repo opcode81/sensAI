@@ -19,7 +19,10 @@ def test_MLPClassifier(irisDataSet, irisClassificationTestCase, testResources):
     featureNames = irisDataSet.getInputOutputData().inputs.columns
     dftNorm = DFTNormalisation([DFTNormalisation.Rule(re.escape(f)) for f in featureNames], defaultTransformerFactory=sklearn.preprocessing.StandardScaler)
     model = sensai.torch.models.MultiLayerPerceptronVectorClassificationModel(hiddenDims=(50,25,8), cuda=False, epochs=100, optimiser="adam",
-        batchSize=200, normalisationMode=NormalisationMode.NONE, hidActivationFunction=torch.tanh).withName("torchMLPClassifier").withInputTransformers([dftNorm]).withFeatureGenerator(FeatureGeneratorTakeColumns())
+            batchSize=200, normalisationMode=NormalisationMode.NONE, hidActivationFunction=torch.tanh) \
+        .withName("torchMLPClassifier") \
+        .withInputTransformers([dftNorm]) \
+        .withFeatureGenerator(FeatureGeneratorTakeColumns())
     irisClassificationTestCase.testMinAccuracy(model, 0.8)
 
 
@@ -36,8 +39,8 @@ def test_NNOptimiserWithoutValidation_MLPClassifier(irisDataSet):
     inputTensor = torch.tensor(scaler.getNormalisedArray(iodata.inputs), dtype=torch.float32)
     dataSet = TorchDataSetFromTensors(inputTensor, outputTensor, False)
     model = TorchModelFromModuleFactory(lambda: MultiLayerPerceptron(inputTensor.shape[1], len(classLabels),
-            (4, 3), hidActivationFn=torch.tanh, outputActivationFn=torch.nn.Softmax()), cuda=False)
-    NNOptimiser(NNOptimiserParams(lossEvaluator=NNLossEvaluatorClassification(), trainFraction=1.0, epochs=300,
+            (4, 3), hidActivationFn=torch.tanh, outputActivationFn=None), cuda=False)
+    NNOptimiser(NNOptimiserParams(lossEvaluator=NNLossEvaluatorClassification(NNLossEvaluatorClassification.LossFunction.CROSSENTROPY), trainFraction=1.0, epochs=300,
             optimiser="adam")).fit(model, dataSet)
     modelOutputs = model.apply(inputTensor, asNumpy=False)
     accuracy = torch.sum(torch.argmax(modelOutputs, 1) == outputTensor).item() / len(outputTensor)

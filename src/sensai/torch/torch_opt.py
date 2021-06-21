@@ -296,9 +296,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
             else:
                 raise ValueError(f"No default specified for {outputMode}")
 
-    def __init__(self, lossFn: LossFunction = LossFunction.CROSSENTROPY):
-        if lossFn is None:
-            lossFn = self.LossFunction.CROSSENTROPY
+    def __init__(self, lossFn: LossFunction):
         self.lossFn: "NNLossEvaluatorClassification.LossFunction" = self.LossFunction(lossFn)
 
     def __str__(self):
