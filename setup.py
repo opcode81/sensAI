@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import setup, find_namespace_packages
 
 tf_requirements = ['tensorflow==1.15.0']
 torch_requirements = ['torch==1.4.0', 'torchtext==0.5.0']
@@ -10,7 +10,7 @@ setup(
     package_dir={"": "src"},
     license="MIT",
     url="https://github.com/jambit/sensAI",
-    packages=find_packages(where="src"),
+    packages=find_namespace_packages(where="src"),
     include_package_data=True,
     version='0.1.2.dev0',
     description='Library for sensible AI',
