@@ -197,7 +197,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
         plt.scatter(self.y_true, self.y_predicted, **kwargs)
-        plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
+        plt.plot(y_range, y_range, '-', lw=2, label="_not in legend", color="r")
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
         plt.title(title)
@@ -220,7 +220,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if figure:
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
-        plt.plot(y_range, y_range, 'k-', lw=0.75, label="_not in legend", color="green", zorder=2)
+        plt.plot(y_range, y_range, '-', lw=0.75, label="_not in legend", color="green", zorder=2)
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
