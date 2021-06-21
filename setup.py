@@ -12,7 +12,7 @@ setup(
     url="https://github.com/jambit/sensAI",
     packages=find_namespace_packages(where="src"),
     include_package_data=True,
-    version='0.1.3.dev0',
+    version='0.1.3',
     description='Library for sensible AI',
     install_requires=[
         line
