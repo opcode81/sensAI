@@ -1,4 +1,5 @@
 import logging
+from typing import Literal, Union, Optional
 
 import sklearn.ensemble
 import sklearn.linear_model
@@ -25,20 +26,23 @@ class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVector
 
 class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self,
-            random_state=42, hidden_layer_sizes=(100,), activation="relu", solver="adam",
-            max_iter=200, **modelArgs):
+            hidden_layer_sizes=(100,), activation: Literal["identity", "logistic", "tanh", "relu"] = "relu",
+            solver: Literal["adam", "lbfgs", "sgd"] = "adam", batch_size: Union[int, Literal["auto"]] = "auto", random_state: Optional[int] = 42,
+            max_iter: int = 200, early_stopping: bool = False, n_iter_no_change: int = 10, **modelArgs):
         """
-        :param random_state: the random seed
         :param hidden_layer_sizes: the sequence of hidden layer sizes
-        :param activation: {‘identity’, ‘logistic’, ‘tanh’, ‘relu’} the activation function to use for hidden layers
-            (the one used for the output layer is always 'identity')
-        :param solver: {‘lbfgs’, ‘sgd’, ‘adam’} the name of the solver to apply
+        :param activation: the activation function to use for hidden layers (the one used for the output layer is always 'identity')
+        :param solver: the name of the solver to apply
+        :param batch_size: the batch size
+        :param random_state: the random seed for reproducability; use None if it shall not be specifically defined
         :param max_iter: the number of iterations (gradient steps for L-BFGS, epochs for other solvers)
-        :param modelArgs: additional arguments to pass on to MLPRegressor, see https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html
+        :param early_stopping: whether to use early stopping (stop training after n_iter_no_change epochs without improvement)
+        :param n_iter_no_change: the number of iterations after which to stop early (if early_stopping is enabled)
+        :param modelArgs: additional arguments to pass on to MLPRegressor, see https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPRegressor.html
         """
         super().__init__(sklearn.neural_network.MLPRegressor,
-            random_state=random_state, hidden_layer_sizes=hidden_layer_sizes, activation=activation, solver=solver, max_iter=max_iter,
-            **modelArgs)
+            random_state=random_state, hidden_layer_sizes=hidden_layer_sizes, activation=activation, solver=solver, batch_size=batch_size, max_iter=max_iter,
+            early_stopping=early_stopping, n_iter_no_change=n_iter_no_change, **modelArgs)
 
 
 class SkLearnSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
