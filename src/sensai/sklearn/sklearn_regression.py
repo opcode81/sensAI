@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Union, Optional
+from typing import Union, Optional
 
 import sklearn.ensemble
 import sklearn.linear_model
