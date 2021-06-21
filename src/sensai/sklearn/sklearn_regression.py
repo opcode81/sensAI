@@ -26,14 +26,14 @@ class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVector
 
 class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self,
-            hidden_layer_sizes=(100,), activation: Literal["identity", "logistic", "tanh", "relu"] = "relu",
-            solver: Literal["adam", "lbfgs", "sgd"] = "adam", batch_size: Union[int, Literal["auto"]] = "auto", random_state: Optional[int] = 42,
+            hidden_layer_sizes=(100,), activation: str = "relu",
+            solver: str = "adam", batch_size: Union[int, str] = "auto", random_state: Optional[int] = 42,
             max_iter: int = 200, early_stopping: bool = False, n_iter_no_change: int = 10, **modelArgs):
         """
         :param hidden_layer_sizes: the sequence of hidden layer sizes
-        :param activation: the activation function to use for hidden layers (the one used for the output layer is always 'identity')
-        :param solver: the name of the solver to apply
-        :param batch_size: the batch size
+        :param activation: {"identity", "logistic", "tanh", "relu"} the activation function to use for hidden layers (the one used for the output layer is always 'identity')
+        :param solver: {"adam", "lbfgs", "sgd"} the name of the solver to apply
+        :param batch_size: the batch size or "auto" for min(200, data set size)
         :param random_state: the random seed for reproducability; use None if it shall not be specifically defined
         :param max_iter: the number of iterations (gradient steps for L-BFGS, epochs for other solvers)
         :param early_stopping: whether to use early stopping (stop training after n_iter_no_change epochs without improvement)
