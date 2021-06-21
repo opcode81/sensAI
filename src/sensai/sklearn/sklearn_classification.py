@@ -24,8 +24,8 @@ class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassifi
 
 
 class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    def __init__(self, **modelArgs):
-        super().__init__(sklearn.neural_network.MLPClassifier, **modelArgs)
+    def __init__(self, random_state=42, **modelArgs):
+        super().__init__(sklearn.neural_network.MLPClassifier, random_state=random_state, **modelArgs)
 
 
 class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
