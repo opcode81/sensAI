@@ -494,7 +494,7 @@ class DFTNormalisation(DataFrameTransformer):
 
             if len(matchingColumns) > 0:
                 if rule.unsupported:
-                    raise Exception(f"Normalisation of columns {matchingColumns} is unsupported according to {rule}")
+                    raise Exception(f"Normalisation of columns {matchingColumns} is unsupported according to {rule}. If you want to make use of these columns, transform them into a supported column before applying {self.__class__.__name__}.")
                 if not rule.skip:
                     if rule.transformer is None:
                         if self._defaultTransformerFactory is None:
