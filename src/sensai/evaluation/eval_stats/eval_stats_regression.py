@@ -200,7 +200,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if figure:
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
-        plt.scatter(self.y_true, self.y_predicted, c=(0, 0, 1, self.SCATTER_PLOT_POINT_TRANSPARENCY), zorder=2, **kwargs)
+        plt.scatter(self.y_true, self.y_predicted, c=[(0, 0, 1, self.SCATTER_PLOT_POINT_TRANSPARENCY)], zorder=2, **kwargs)
         plt.plot(y_range, y_range, '-', lw=1, label="_not in legend", color="green", zorder=1)
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
