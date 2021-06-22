@@ -423,8 +423,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         yArray = self._predictOutputsForInputDataFrame(inputs)
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
-    def __str__(self) -> str:
-        return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["modelClass", "modelArgs", "modelKwArgs", "inputTensoriser"]
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
@@ -526,5 +526,5 @@ class TorchVectorClassificationModel(VectorClassificationModel):
             raise ValueError(f"Unhandled output mode {self.outputMode}")
         return pd.DataFrame(y.numpy(), columns=self._labels)
 
-    def __str__(self) -> str:
-        return objectRepr(self, ["model", "normalisationMode", "nnOptimiserParams"])
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["modelClass", "modelArgs", "modelKwArgs", "inputTensoriser"]

@@ -230,6 +230,9 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         self.y = None
         self.knnFinder = None
 
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["neighborProviderFactory", "distanceMetric", "distanceMetricCache", "df", "y"]
+
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = X.merge(y, how="inner", left_index=True, right_index=True)
@@ -267,9 +270,6 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
     def findNeighbors(self, namedTuple):
         return self.knnFinder.findNeighbors(namedTuple, self.numNeighbors)
 
-    def __str__(self):
-        return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
-
 
 class KNearestNeighboursRegressionModel(VectorRegressionModel):
     def __init__(self, numNeighbors: int, distanceMetric: DistanceMetric,
@@ -297,6 +297,9 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         self.df = None
         self.y = None
         self.knnFinder = None
+
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["neighborProviderFactory", "distanceMetric", "distanceMetricCache", "df", "y"]
 
     def _fit(self, X: pd.DataFrame, y: pd.DataFrame):
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
@@ -326,9 +329,6 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         for i, nt in enumerate(x.itertuples()):
             predictedValues.append(self._predictSingleInput(nt))
         return pd.DataFrame({self._predictedVariableNames[0]: predictedValues}, index=x.index)
-
-    def __str__(self):
-        return objectRepr(self, ["numNeighbors", "distanceBasedWeighting", "knnFinder"])
 
 
 class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):

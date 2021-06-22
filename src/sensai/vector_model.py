@@ -15,9 +15,11 @@ from .data_transformation import DataFrameTransformer, DataFrameTransformerChain
 from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
 from .util.sequences import getFirstDuplicate
+from .util.string import ToStringMixin
 
 # imports for backward compatibility (and mark as used)
 from .data import InputOutputData
+
 if InputOutputData:
     pass
 
@@ -73,7 +75,7 @@ class FittableModel(PredictorModel, ABC):
         pass
 
 
-class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
+class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
     """
     Base class for models that map data frames to predictions and can be fitted on data frames
     """
@@ -92,6 +94,12 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ABC):
         self._predictedVariableNames: Optional[list] = None
         self._modelInputVariableNames: Optional[list] = None
         self.checkInputColumns = checkInputColumns
+
+    def _toStringExcludePrivate(self) -> bool:
+        return True
+
+    def _toStringExcludes(self) -> List[str]:
+        return ["checkInputColumns"]
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """

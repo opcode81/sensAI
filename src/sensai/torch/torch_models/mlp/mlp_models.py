@@ -21,17 +21,6 @@ class MultiLayerPerceptronTorchModel(VectorTorchModel):
         self.hiddenDims = hiddenDims
         self.pDropout = pDropout
 
-    def __str__(self) -> str:
-        def name(x):
-            if hasattr(x, "__name__"):
-                return x.__name__
-            elif hasattr(x, "__class__"):
-                return x.__class__.__name__
-            else:
-                return str(x)
-
-        return f"_MLP[hiddenDims={self.hiddenDims}, hidAct={name(self.hidActivationFunction)}, outAct={name(self.outputActivationFunction)}, pDropout={self.pDropout}]"
-
     def createTorchModuleForDims(self, inputDim: int, outputDim: int) -> torch.nn.Module:
         return MultiLayerPerceptron(inputDim, outputDim, self.hiddenDims,
             hidActivationFn=self.hidActivationFunction, outputActivationFn=self.outputActivationFunction,
