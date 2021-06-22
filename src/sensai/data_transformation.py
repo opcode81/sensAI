@@ -524,7 +524,7 @@ class DFTNormalisation(DataFrameTransformer):
         if self.requireAllHandled:
             unhandledColumns = set(df.columns) - set(matchedRulesByColumn.keys())
             if len(unhandledColumns) > 0:
-                raise Exception(f"The following columns are not handled by any rules: {unhandledColumns}")
+                raise Exception(f"The following columns are not handled by any rules: {unhandledColumns}; rules: {', '.join(map(str, self._rules))}")
 
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if not self.inplace:

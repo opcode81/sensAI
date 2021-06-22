@@ -99,6 +99,10 @@ class RegressionMetricMedianAE(RegressionMetric):
 
 
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
+    # class members controlling plot appearince, which can be centrally overridden by a user if necessary
+    HEATMAP_COLORMAP_FACTORY = lambda self: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1.0, 0.96, 0.96)), (1, (0.7, 0, 0))))
+    SCATTER_PLOT_POINT_TRANSPARENCY = 0.05
+
     """
     Collects data for the evaluation of predicted continuous values and computes corresponding metrics
     """
@@ -196,8 +200,8 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if figure:
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
-        plt.scatter(self.y_true, self.y_predicted, **kwargs)
-        plt.plot(y_range, y_range, 'k-', lw=2, label="_not in legend", color="r")
+        plt.scatter(self.y_true, self.y_predicted, c=(0, 0, 1, self.SCATTER_PLOT_POINT_TRANSPARENCY), zorder=2, **kwargs)
+        plt.plot(y_range, y_range, '-', lw=1, label="_not in legend", color="green", zorder=1)
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
         plt.title(title)
@@ -206,7 +210,8 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
         """
         :param figure: whether to plot in a separate figure and return that figure
-        :param cmap: the colour map to use (see corresponding parameter of plt.imshow); if None use colour map from white to red
+        :param cmap: the colour map to use (see corresponding parameter of plt.imshow for further information); if None, use factory
+            defined in HEATMAP_COLORMAP_FACTORY
         :param bins: how many bins to use for constructing the heatmap
         :param titleAdd: a string to add to the title (on a second line)
         :param kwargs: will be passed to plt.imshow()
@@ -224,7 +229,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
-            cmap = LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1.0, 0.95, 0.95)), (1, (0.7, 0, 0))))
+            cmap = self.HEATMAP_COLORMAP_FACTORY()
         plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, **kwargs)
 
         plt.xlabel("ground truth")

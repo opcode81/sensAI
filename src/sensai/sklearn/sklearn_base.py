@@ -1,6 +1,7 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
+from typing import List, Any, Dict
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,9 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         self.sklearnOutputTransformer = None
         self.modelConstructor = modelConstructor
         self.modelArgs = modelArgs
+
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["sklearnInputTransformer", "sklearnOutputTransformer", "modelConstructor", "modelArgs"]
 
     def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:
         """
@@ -101,12 +105,16 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
         super().__init__(modelConstructor, **modelArgs)
         self.models = {}
 
-    def __str__(self):
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["models"]
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
         if len(self.models) > 0:
-            modelStr = str(next(iter(self.models.values())))
+            d["model[0]"] = str(next(iter(self.models.values())))
         else:
-            modelStr = f"{self.modelConstructor.__name__}{self.modelArgs}"
-        return f"{self.__class__.__name__}[{modelStr}]"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+        return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         for predictedVarName in outputs.columns:
@@ -132,12 +140,16 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
         super().__init__(modelConstructor, **modelArgs)
         self.model = None
 
-    def __str__(self):
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["model"]
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
         if self.model is not None:
-            modelStr = str(self.model)
+            d["model"] = str(self.model)
         else:
-            modelStr = f"{self.modelConstructor.__name__}{self.modelArgs}"
-        return f"{self.__class__.__name__}[{modelStr}]"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+        return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         if len(outputs.columns) > 1:
@@ -166,6 +178,18 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         self.modelArgs = modelArgs
         self.model = None
 
+    def _toStringExcludes(self) -> List[str]:
+        return super()._toStringExcludes() + ["modelConstructor", "sklearnInputTransformer", "sklearnOutputTransformer",
+                                              "modelArgs", "model"]
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
+        if self.model is None:
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+        else:
+            d["model"] = str(self.model)
+        return d
+
     def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:
         """
         :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
@@ -181,13 +205,6 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         """
         self.sklearnOutputTransformer = sklearnOutputTransformer
         return self
-
-    def __str__(self):
-        if self.model is None:
-            strModel = f"{self.modelConstructor.__name__}{self.modelArgs}"
-        else:
-            strModel = str(self.model)
-        return f"{self.__class__.__name__}[{strModel}]"
 
     def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         """

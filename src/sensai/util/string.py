@@ -63,6 +63,8 @@ class ToStringMixin:
 
         if len(include) == 0:
             attributeDict = self.__dict__
+            if self._toStringExcludePrivate():
+                attributeDict = {k: v for k, v in attributeDict.items() if not k.startswith("_")}
         else:
             attributeDict = {k: getattr(self, k) for k in include}
         d = {k: v for k, v in attributeDict.items() if k not in exclude}
@@ -101,6 +103,13 @@ class ToStringMixin:
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         return {}
+
+    def _toStringExcludePrivate(self) -> bool:
+        """
+        :return: whether to exclude properties that are private, i.e. start with an underscore; explicitly included attributes
+            will still be considered
+        """
+        return False
 
     def __str__(self):
         return f"{self._toStringClassName()}[{self._toStringObjectInfo()}]"
