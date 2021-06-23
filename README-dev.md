@@ -20,7 +20,7 @@
      `bumpversion release --commit --tag`
    * Push the new release:
      `git push`
-     `git push --tags`
+     `git push --tags` (triggers PyPI release)
 
    If it it did not succeed and you need to fix stuff, 
 
