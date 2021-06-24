@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 from .. import normalisation
+from ..data import DataFrameSplitter, DataFrameSplitterFractional
 from ..util.dtype import toFloatArray
 
 
@@ -187,7 +188,8 @@ class DataUtil(ABC):
 
 class VectorDataUtil(DataUtil):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda: bool, normalisationMode=normalisation.NormalisationMode.NONE,
-            differingOutputNormalisationMode=None, inputTensoriser: Optional[Tensoriser] = None, outputTensoriser: Optional[Tensoriser] = None):
+            differingOutputNormalisationMode=None, inputTensoriser: Optional[Tensoriser] = None, outputTensoriser: Optional[Tensoriser] = None,
+            dataFrameSplitter: Optional[DataFrameSplitter] = None):
         """
         :param inputs: the data frame of inputs
         :param outputs: the data frame of outputs
@@ -206,6 +208,7 @@ class VectorDataUtil(DataUtil):
         self.inputTensorScaler = TensorScalerFromVectorDataScaler(self.inputVectorDataScaler, cuda)
         self.outputVectorDataScaler = normalisation.VectorDataScaler(self.outputs, normalisationMode if differingOutputNormalisationMode is None else differingOutputNormalisationMode)
         self.outputTensorScaler = TensorScalerFromVectorDataScaler(self.outputVectorDataScaler, cuda)
+        self.dataFrameSplitter = dataFrameSplitter
 
     def getOutputTensorScaler(self):
         return self.outputTensorScaler
@@ -214,11 +217,10 @@ class VectorDataUtil(DataUtil):
         return self.inputTensorScaler
 
     def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
-        n = self.inputs.shape[0]
-        sizeA = int(n * fractionalSizeOfFirstSet)
-        indices = list(range(n))
-        indices_A = indices[:sizeA]
-        indices_B = indices[sizeA:]
+        splitter = self.dataFrameSplitter
+        if splitter is None:
+            splitter = DataFrameSplitterFractional()
+        indices_A, indices_B = splitter.computeSplitIndices(self.inputs, fractionalSizeOfFirstSet)
         A = self._inputOutputPairs(indices_A)
         B = self._inputOutputPairs(indices_B)
         return A, B

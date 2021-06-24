@@ -65,7 +65,8 @@ TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData
 
 
 class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC):
-    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None):
+    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None,
+            shuffle=True):
         """
         :param data: the data set
         :param folds: the number of folds
@@ -73,18 +74,22 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
         :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
             (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
         :param evaluatorParams: keyword parameters with which to instantiate model evaluators
+        :param shuffle: whether to shuffle the data (using randomSeed) before creating the folds
         """
         self.returnTrainedModels = returnTrainedModels
         self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
         numDataPoints = len(data)
-        permutedIndices = np.random.RandomState(randomSeed).permutation(numDataPoints)
+        if shuffle:
+            indices = np.random.RandomState(randomSeed).permutation(numDataPoints)
+        else:
+            indices = list(range(numDataPoints))
         numTestPoints = numDataPoints // folds
         self.modelEvaluators = []
         for i in range(folds):
             testStartIdx = i * numTestPoints
             testEndIdx = testStartIdx + numTestPoints
-            testIndices = permutedIndices[testStartIdx:testEndIdx]
-            trainIndices = np.concatenate((permutedIndices[:testStartIdx], permutedIndices[testEndIdx:]))
+            testIndices = indices[testStartIdx:testEndIdx]
+            trainIndices = np.concatenate((indices[:testStartIdx], indices[testEndIdx:]))
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
 
     @staticmethod

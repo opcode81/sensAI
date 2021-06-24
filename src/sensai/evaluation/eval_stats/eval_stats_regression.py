@@ -100,7 +100,7 @@ class RegressionMetricMedianAE(RegressionMetric):
 
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     # class members controlling plot appearince, which can be centrally overridden by a user if necessary
-    HEATMAP_COLORMAP_FACTORY = lambda self: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1.0, 0.96, 0.96)), (1, (0.7, 0, 0))))
+    HEATMAP_COLORMAP_FACTORY = lambda self: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1, 0.96, 0.96)), (1, (0.7, 0, 0))), len(self.y_predicted))
     SCATTER_PLOT_POINT_TRANSPARENCY = 0.05
 
     """
@@ -226,11 +226,11 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
         plt.plot(y_range, y_range, '-', lw=0.75, label="_not in legend", color="green", zorder=2)
-        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins)
+        heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins, density=False)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:
             cmap = self.HEATMAP_COLORMAP_FACTORY()
-        plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, **kwargs)
+        plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation="none", cmap=cmap, zorder=1, **kwargs)
 
         plt.xlabel("ground truth")
         plt.ylabel("prediction")

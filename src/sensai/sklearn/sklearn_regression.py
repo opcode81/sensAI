@@ -1,5 +1,5 @@
 import logging
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 
 import sklearn.ensemble
 import sklearn.linear_model
@@ -18,10 +18,16 @@ class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
         super().__init__(sklearn.ensemble.RandomForestRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
 
+    def getFeatureImportances(self) -> Dict[str, Dict[str, float]]:
+        return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
+
 
 class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self, **modelArgs):
         super().__init__(sklearn.linear_model.LinearRegression, **modelArgs)
+
+    def getFeatureImportances(self) -> Dict[str, float]:
+        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
 class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):

@@ -75,10 +75,20 @@ class FittableModel(PredictorModel, ABC):
         pass
 
 
+class TrainingContext:
+    """
+    Contains context information for an ongoing training process
+    """
+    def __init__(self, originalInput: pd.DataFrame, originalOutput: pd.DataFrame):
+        self.originalInput = originalInput
+        self.originalOutput = originalOutput
+
+
 class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
     """
     Base class for models that map data frames to predictions and can be fitted on data frames
     """
+    _TRANSIENT_MEMBERS = ["_trainingContext"]
 
     def __init__(self, checkInputColumns=True):
         """
@@ -94,6 +104,29 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
         self._predictedVariableNames: Optional[list] = None
         self._modelInputVariableNames: Optional[list] = None
         self.checkInputColumns = checkInputColumns
+
+        # transient members
+        self._trainingContext: Optional[TrainingContext] = None
+
+    def __getstate__(self):
+        s = super()
+        if hasattr(s, '__getstate__'):
+            state = s.__getstate__()
+        else:
+            state = self.__dict__.copy()
+        for m in VectorModel._TRANSIENT_MEMBERS:
+            if m in state:
+                del state[m]
+        return state
+
+    def __setstate__(self, state):
+        for m in VectorModel._TRANSIENT_MEMBERS:
+            state[m] = None
+        s = super()
+        if hasattr(s, '__setstate__'):
+            s.__setstate__(state)
+        else:
+            self.__dict__ = state
 
     def _toStringExcludePrivate(self) -> bool:
         return True
@@ -247,19 +280,27 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
             If a preprocessor requires fitting, was not separately fit before and this option is set to False,
             an exception will be raised.
         """
-        log.info(f"Training {self.__class__.__name__}")
-        self._predictedVariableNames = list(Y.columns)
-        if not self._underlyingModelRequiresFitting():
-            self._fitPreprocessors(X, Y=Y)
-        else:
-            if Y is None:
-                raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
-            X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
-            self._modelInputVariableNames = list(X.columns)
-            log.info(
-                f"Training with outputs[{len(Y.columns)}]={list(Y.columns)}, inputs[{len(self._modelInputVariableNames)}]=[{', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])}]")
-            self._fit(X, Y)
-            self._isFitted = True
+        self._trainingContext = TrainingContext(X, Y)
+        try:
+            log.info(f"Training {self.__class__.__name__}")
+            self._predictedVariableNames = list(Y.columns)
+            if not self._underlyingModelRequiresFitting():
+                self._fitPreprocessors(X, Y=Y)
+            else:
+                if Y is None:
+                    raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
+                X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
+                self._modelInputVariableNames = list(X.columns)
+                inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
+                log.info(f"Training with outputs[{len(Y.columns)}]={list(Y.columns)}, "
+                    f"inputs[{len(self._modelInputVariableNames)}]=[{inputsWithTypes}]; N={len(X)} data points")
+                self._fit(X, Y)
+                self._isFitted = True
+        finally:
+            self._trainingContext = None
+
+    def isBeingFitted(self) -> bool:
+        return self._trainingContext is not None
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):

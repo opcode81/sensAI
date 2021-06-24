@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Optional
+from typing import Sequence, Union, Optional, Dict
 import logging
 import lightgbm
 import pandas as pd
@@ -43,6 +43,9 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
             self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
 
+    def getFeatureImportances(self) -> Dict[str, Dict[str, int]]:
+        return {targetFeature: dict(zip(model.feature_name_, model.feature_importances_)) for targetFeature, model in self.models.items()}
+
 
 class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     log = log.getChild(__qualname__)
@@ -77,3 +80,6 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             args = {"cat_column": colIndices}
             self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
+
+    def getFeatureImportances(self) -> Dict[str, Dict[str, int]]:
+        return dict(zip(self.model.feature_name_, self.model.feature_importances_))
