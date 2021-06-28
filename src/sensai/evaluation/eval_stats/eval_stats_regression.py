@@ -101,7 +101,10 @@ class RegressionMetricMedianAE(RegressionMetric):
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     # class members controlling plot appearince, which can be centrally overridden by a user if necessary
     HEATMAP_COLORMAP_FACTORY = lambda self: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1, 0.96, 0.96)), (1, (0.7, 0, 0))), len(self.y_predicted))
-    SCATTER_PLOT_POINT_TRANSPARENCY = 0.05
+    HEATMAP_DIAGONAL_COLOR = "green"
+    HEATMAP_ERROR_BOUNDARY_VALUE = None
+    HEATMAP_ERROR_BOUNDARY_COLOR = (0.8, 0.8, 0.8)
+    SCATTER_PLOT_POINT_COLOR = (0, 0, 1, 0.05)
 
     """
     Collects data for the evaluation of predicted continuous values and computes corresponding metrics
@@ -200,20 +203,25 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if figure:
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(self.y_true), max(self.y_true)]
-        plt.scatter(self.y_true, self.y_predicted, c=[(0, 0, 1, self.SCATTER_PLOT_POINT_TRANSPARENCY)], zorder=2, **kwargs)
+        plt.scatter(self.y_true, self.y_predicted, c=[self.SCATTER_PLOT_POINT_COLOR], zorder=2, **kwargs)
         plt.plot(y_range, y_range, '-', lw=1, label="_not in legend", color="green", zorder=1)
         plt.xlabel("ground truth")
         plt.ylabel("prediction")
         plt.title(title)
         return fig
 
-    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
+    def plotHeatmapGroundTruthPredictions(self, figure=True, cmap=None, bins=60, titleAdd=None, errorBoundary: Optional[float] = None,
+            **kwargs) -> Optional[plt.Figure]:
         """
         :param figure: whether to plot in a separate figure and return that figure
         :param cmap: the colour map to use (see corresponding parameter of plt.imshow for further information); if None, use factory
-            defined in HEATMAP_COLORMAP_FACTORY
+            defined in HEATMAP_COLORMAP_FACTORY (which can be centrally set to achieve custom behaviour throughout an application)
         :param bins: how many bins to use for constructing the heatmap
         :param titleAdd: a string to add to the title (on a second line)
+        :param errorBoundary: if not None, add two lines (above and below the diagonal) indicating this absolute regression error boundary;
+            if None (default), use static member HEATMAP_ERROR_BOUNDARY_VALUE (which is also None by default, but can be centrally set
+            to achieve custom behaviour throughout an application)
+
         :param kwargs: will be passed to plt.imshow()
 
         :return:  the resulting figure object or None
@@ -225,7 +233,20 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         if figure:
             fig = plt.figure(title.replace("\n", " "))
         y_range = [min(min(self.y_true), min(self.y_predicted)), max(max(self.y_true), max(self.y_predicted))]
-        plt.plot(y_range, y_range, '-', lw=0.75, label="_not in legend", color="green", zorder=2)
+
+        # diagonal
+        plt.plot(y_range, y_range, '-', lw=0.75, label="_not in legend", color=self.HEATMAP_DIAGONAL_COLOR, zorder=2)
+
+        # error boundaries
+        if errorBoundary is None:
+            errorBoundary = self.HEATMAP_ERROR_BOUNDARY_VALUE
+        if errorBoundary is not None:
+            d = np.array(y_range)
+            offs = np.array([errorBoundary, errorBoundary])
+            plt.plot(d, d + offs, '-', lw=0.75, label="_not in legend", color=self.HEATMAP_ERROR_BOUNDARY_COLOR, zorder=2)
+            plt.plot(d, d - offs, '-', lw=0.75, label="_not in legend", color=self.HEATMAP_ERROR_BOUNDARY_COLOR, zorder=2)
+
+        # heat map
         heatmap, _, _ = np.histogram2d(self.y_true, self.y_predicted, range=[y_range, y_range], bins=bins, density=False)
         extent = [y_range[0], y_range[1], y_range[0], y_range[1]]
         if cmap is None:

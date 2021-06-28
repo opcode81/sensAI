@@ -413,7 +413,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if self.inputTensoriser is not None:
             log.info(f"Fitting {self.inputTensoriser} ...")
-            self.inputTensoriser.fit(inputs)
+            self.inputTensoriser.fit(inputs, model=self)
         self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
@@ -508,7 +508,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
         if self.inputTensoriser is not None:
             log.info(f"Fitting {self.inputTensoriser} ...")
-            self.inputTensoriser.fit(inputs)
+            self.inputTensoriser.fit(inputs, model=self)
 
         # transform outputs: for each data point, the new output shall be the index in the list of labels
         labels: pd.Series = outputs.iloc[:, 0]

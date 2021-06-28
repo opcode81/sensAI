@@ -6,6 +6,7 @@ import matplotlib.figure
 from matplotlib import pyplot as plt
 import pandas as pd
 
+from .cache import dumpPickle
 
 log = logging.getLogger(__name__)
 
@@ -93,3 +94,7 @@ class ResultWriter:
     def writeFigures(self, figures: Sequence[Tuple[str, matplotlib.figure.Figure]], closeFigures=False):
         for name, fig in figures:
             self.writeFigure(name, fig, closeFigure=closeFigures)
+
+    def writePickle(self, filenameSuffix, obj):
+        p = self.path(filenameSuffix, extensionToAdd="pickle")
+        dumpPickle(obj, p)

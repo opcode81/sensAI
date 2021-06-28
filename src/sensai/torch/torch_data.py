@@ -116,7 +116,12 @@ class Tensoriser(ABC):
         pass
 
     @abstractmethod
-    def fit(self, df: pd.DataFrame):
+    def fit(self, df: pd.DataFrame, model=None):
+        """
+        :param df: the data frame with which to fit this tensoriser
+        :param model: the model in the context of which the fitting takes place (if any).
+            The fitting process may set parameters within the model that can only be determined from the (pre-tensorised) data.
+        """
         pass
 
 
@@ -124,7 +129,7 @@ class RuleBasedTensoriser(Tensoriser, ABC):
     """
     Base class for tensorisers which transforms data frames into tensors based on a predefined set of rules and does not require fitting
     """
-    def fit(self, df: pd.DataFrame):
+    def fit(self, df: pd.DataFrame, model=None):
         pass
 
 
