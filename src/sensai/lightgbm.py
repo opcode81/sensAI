@@ -25,7 +25,7 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
         :param max_depth: maximum tree depth for base learners, <=0 means no limit
         :param n_estimators: number of boosted trees to fit
         :param min_child_samples: minimum number of data needed in a child (leaf)
-        :param importance_type: the type of feature importance to be filled into feature_importances_.
+        :param importance_type: the type of feature importance to be set in the 'feature_importances_' property of the wrapped model.
             If ‘split’, result contains numbers of times the feature is used in a model.
             If ‘gain’, result contains total gains of splits which use the feature.
         :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMRegressor.html
