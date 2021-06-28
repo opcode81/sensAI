@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, TypeVar
+from typing import Tuple, Sequence, TypeVar, List
 
 import numpy as np
 import pandas as pd
@@ -104,3 +104,26 @@ class DataSplitterFractional(DataSplitter):
         A = data.filterIndices(list(indicesA))
         B = data.filterIndices(list(indicesB))
         return A, B
+
+
+class DataFrameSplitter(ABC):
+    @abstractmethod
+    def computeSplitIndices(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[Sequence[int], Sequence[int]]:
+        pass
+
+    @staticmethod
+    def split(df: pd.DataFrame, indicesPair: Tuple[Sequence[int], Sequence[int]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        indicesA, indicesB = indicesPair
+        A = df.iloc[indicesA]
+        B = df.iloc[indicesB]
+        return A, B
+
+
+class DataFrameSplitterFractional(DataFrameSplitter):
+    def computeSplitIndices(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[Sequence[int], Sequence[int]]:
+        n = df.shape[0]
+        sizeA = int(n * fractionalSizeOfFirstSet)
+        indices = list(range(n))
+        indices_A = indices[:sizeA]
+        indices_B = indices[sizeA:]
+        return indices_A, indices_B

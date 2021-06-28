@@ -142,6 +142,12 @@ class DataFrameTransformerChain(DataFrameTransformer):
         info["length"] = len(self)
         return info
 
+    def findFirstTransformerByType(self, cls) -> Optional[DataFrameTransformer]:
+        for dft in self.dataFrameTransformers:
+            if isinstance(dft, cls):
+                return dft
+        return None
+
 
 class DFTRenameColumns(RuleBasedDataFrameTransformer):
     def __init__(self, columnsMap: Dict[str, str]):
@@ -546,6 +552,11 @@ class DFTNormalisation(DataFrameTransformer):
         info["requireAllHandled"] = self.requireAllHandled
         info["inplace"] = self.inplace
         return info
+
+    def findRule(self, colName: str) -> "DFTNormalisation.Rule":
+        for rule in self._rules:
+            if rule.matches(colName):
+                return rule
 
 
 class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):

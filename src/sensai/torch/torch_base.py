@@ -15,8 +15,8 @@ from .torch_enums import ClassificationOutputMode
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
-from ..util.string import objectRepr, ToStringMixin
-from ..vector_model import VectorRegressionModel, VectorClassificationModel
+from ..util.string import ToStringMixin
+from ..vector_model import VectorRegressionModel, VectorClassificationModel, TrainingContext
 
 log: logging.Logger = logging.getLogger(__name__)
 
@@ -381,6 +381,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
+        self.torchDataSetProviderFactory = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
@@ -396,17 +397,23 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.inputTensoriser = tensoriser
         return self
 
+    def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
+        self.torchDataSetProviderFactory = torchDataSetProviderFactory
+        return self
+
     def _createTorchModel(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
-        dataUtil = VectorDataUtil(inputs, outputs, self.model.cuda, normalisationMode=self.normalisationMode, inputTensoriser=self.inputTensoriser)
-        return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+        factory = self.torchDataSetProviderFactory
+        if factory is None:
+            factory = DefaultRegressionTorchDataSetProviderFactory()
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if self.inputTensoriser is not None:
             log.info(f"Fitting {self.inputTensoriser} ...")
-            self.inputTensoriser.fit(inputs)
+            self.inputTensoriser.fit(inputs, model=self)
         self.model = self._createTorchModel()
         dataSetProvider = self._createDataSetProvider(inputs, outputs)
         self.model.fit(dataSetProvider, self.nnOptimiserParams)
@@ -464,6 +471,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
         self.inputTensoriser = None
+        self.torchDataSetProviderFactory = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
@@ -481,13 +489,18 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.inputTensoriser = tensoriser
         return self
 
+    def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
+        self.torchDataSetProviderFactory = torchDataSetProviderFactory
+        return self
+
     def _createTorchModel(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
-        dataUtil = ClassificationVectorDataUtil(inputs, outputs, self.model.cuda, len(self._labels),
-            normalisationMode=self.normalisationMode, inputTensoriser=self.inputTensoriser)
-        return TorchDataSetProviderFromDataUtil(dataUtil, self.model.cuda)
+        factory = self.torchDataSetProviderFactory
+        if factory is None:
+            factory = DefaultClassificationTorchDataSetProviderFactory()
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext)
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if len(outputs.columns) != 1:
@@ -495,7 +508,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
         if self.inputTensoriser is not None:
             log.info(f"Fitting {self.inputTensoriser} ...")
-            self.inputTensoriser.fit(inputs)
+            self.inputTensoriser.fit(inputs, model=self)
 
         # transform outputs: for each data point, the new output shall be the index in the list of labels
         labels: pd.Series = outputs.iloc[:, 0]
@@ -528,3 +541,27 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["modelClass", "modelArgs", "modelKwArgs", "inputTensoriser"]
+
+
+class TorchDataSetProviderFactory(ABC):
+    @abstractmethod
+    def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame,
+            model: Union[TorchVectorRegressionModel, TorchVectorClassificationModel],
+            trainingContext: TrainingContext) -> TorchDataSetProvider:
+        pass
+
+
+class DefaultClassificationTorchDataSetProviderFactory(TorchDataSetProviderFactory):
+    def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorClassificationModel,
+            trainingContext: TrainingContext) -> TorchDataSetProvider:
+        dataUtil = ClassificationVectorDataUtil(inputs, outputs, model.model.cuda, len(model._labels),
+            normalisationMode=model.normalisationMode, inputTensoriser=model.inputTensoriser)
+        return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
+
+
+class DefaultRegressionTorchDataSetProviderFactory(TorchDataSetProviderFactory):
+    def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorRegressionModel,
+            trainingContext: TrainingContext) -> TorchDataSetProvider:
+        dataUtil = VectorDataUtil(inputs, outputs, model.model.cuda, normalisationMode=model.normalisationMode,
+            inputTensoriser=model.inputTensoriser)
+        return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)

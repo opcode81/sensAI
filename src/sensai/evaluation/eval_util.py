@@ -167,11 +167,14 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         """
         return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, **self.crossValidatorParams)
 
-    def performSimpleEvaluation(self, model: TModel, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
-            additionalEvaluationOnTrainingData=False) -> TEvalData:
+    def performSimpleEvaluation(self, model: TModel, createPlots=True, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
+            additionalEvaluationOnTrainingData=False, fitModel=True) -> TEvalData:
+        if showPlots and not createPlots:
+            raise ValueError("showPlots=True requires createPlots=True")
         resultWriter = self._resultWriterForModel(resultWriter, model)
         evaluator = self.createEvaluator(model)
-        evaluator.fitModel(model)
+        if fitModel:
+            evaluator.fitModel(model)
 
         def gatherResults(evalResultData, resultWriter, subtitlePrefix=""):
             strEvalResults = f"{model}\n\n"
@@ -182,7 +185,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                 strEvalResults += predictedVarName + ": " + strEvalResult + "\n"
             if resultWriter is not None:
                 resultWriter.writeTextFile("evaluator-results", strEvalResults)
-            self.createPlots(evalResultData, showPlots=showPlots, resultWriter=resultWriter, subtitlePrefix=subtitlePrefix)
+            if createPlots:
+                self.createPlots(evalResultData, showPlots=showPlots, resultWriter=resultWriter, subtitlePrefix=subtitlePrefix)
 
         evalResultData = evaluator.evalModel(model)
         gatherResults(evalResultData, resultWriter)
@@ -221,25 +225,41 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         self.createPlots(crossValidationData, showPlots=showPlots, resultWriter=resultWriter)
         return crossValidationData
 
-    def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False) -> pd.DataFrame:
+    def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False,
+            fitModels=True, writeIndividualResults=True, sortColumn: Optional[str] = None, sortAscending: bool = True) -> pd.DataFrame:
         """
         Compares several models via simple evaluation or cross-validation
 
         :param models: the models to compare
         :param resultWriter: a writer with which to store results of the comparison
+        :param useCrossValidation: whether to use cross-validation in order to evaluate models; if False, use a simple evaluation
+            on test data (single split)
+        :param fitModels: whether to fit models before evaluating them; this can only be False if useCrossValidation=False
+        :param writeIndividualResults: whether to write results files on each individual model (in addition to the comparison
+            summary)
+        :param sortColumn: column/metric name by which to sort
+        :param sortAscending: whether to sort in ascending order
         :return: a data frame containing evaluation metrics on all models
         """
         statsList = []
         for model in models:
             if useCrossValidation:
-                crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter)
+                if not fitModels:
+                    raise ValueError("Cross-validation necessitates that models be retrained; got fitModels=False")
+                crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
                 statsDict = crossValidationResult.getEvalStatsCollection().aggStats()
             else:
-                evalStats: EvalStats = self.performSimpleEvaluation(model, resultWriter=resultWriter).getEvalStats()
+                evalStats: EvalStats = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
+                    fitModel=fitModels).getEvalStats()
                 statsDict = evalStats.getAll()
             statsDict["modelName"] = model.getName()
             statsList.append(statsDict)
         resultsDF = pd.DataFrame(statsList).set_index("modelName")
+        if sortColumn is not None:
+            if sortColumn not in resultsDF.columns:
+                log.warning(f"Requested sort column '{sortColumn}' not in list of columns {list(resultsDF.columns)}")
+            else:
+                resultsDF.sort_values(sortColumn, ascending=sortAscending, inplace=True)
         strResults = f"Model comparison results:\n{resultsDF.to_string()}"
         log.info(strResults)
         if resultWriter is not None:

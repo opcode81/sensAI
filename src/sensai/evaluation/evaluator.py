@@ -127,6 +127,8 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
             if dataSplitter is None:
                 dataSplitter = DataSplitterFractional(1 - testFraction, shuffle=shuffle, randomSeed=randomSeed)
             self.trainingData, self.testData = dataSplitter.split(data)
+            log.debug(f"{dataSplitter} created split with {len(self.trainingData)} ({100*len(self.trainingData)/len(data):.2f}%) and "
+                f"{len(self.testData)} ({100*len(self.testData)/len(data):.2f}%) training and test data points respectively")
         else:
             self.trainingData = data
             self.testData = testData

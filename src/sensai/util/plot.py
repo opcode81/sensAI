@@ -84,21 +84,52 @@ class Plot:
 
 
 class ScatterPlot(Plot):
-    def __init__(self, x, y, **kwargs):
-        super().__init__(lambda: plt.scatter(x, y, **kwargs))
+    def __init__(self, x, y, c=((0, 0, 1, 0.05),), x_label=None, y_label=None, **kwargs):
+        assert len(x) == len(y)
+        if x_label is None and hasattr(x, "name"):
+            x_label = x.name
+        if y_label is None and hasattr(y, "name"):
+            y_label = y.name
+
+        def draw():
+            if x_label is not None:
+                plt.xlabel(x_label)
+            if x_label is not None:
+                plt.ylabel(y_label)
+            return plt.scatter(x, y, c=c, **kwargs)
+
+        super().__init__(draw)
 
 
 class HeatMapPlot(Plot):
-    def __init__(self, x, y, bins=60, cmap=None, **kwargs):
+    DEFAULT_CMAP_FACTORY = lambda numPoints: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/numPoints, (1, 0.96, 0.96)), (1, (0.7, 0, 0))), numPoints)
+
+    def __init__(self, x, y, xLabel=None, yLabel=None, bins=60, cmap=None, commonRange=True, diagonal=False,
+            diagonalColor="green", **kwargs):
+        assert len(x) == len(y)
+        if xLabel is None and hasattr(x, "name"):
+            xLabel = x.name
+        if yLabel is None and hasattr(y, "name"):
+            yLabel = y.name
 
         def draw():
             nonlocal cmap
             x_range = [min(x), max(x)]
             y_range = [min(y), max(y)]
-            heatmap, _, _ = np.histogram2d(x, y, range=[x_range, y_range], bins=bins)
-            extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
+            range = [min(x_range[0], y_range[0]), max(x_range[1], y_range[1])]
+            if diagonal:
+                plt.plot(range, range, '-', lw=0.75, label="_not in legend", color=diagonalColor, zorder=2)
+            heatmap, _, _ = np.histogram2d(x, y, range=[x_range, y_range], bins=bins, density=False)
+            if commonRange:
+                extent = [range[0], range[1], range[0], range[1]]
+            else:
+                extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
             if cmap is None:
-                cmap = LinearSegmentedColormap.from_list("whiteToRed", ((1, 1, 1), (0.7, 0, 0)))
+                cmap = HeatMapPlot.DEFAULT_CMAP_FACTORY(len(x))
+            if xLabel is not None:
+                plt.xlabel(xLabel)
+            if yLabel is not None:
+                plt.ylabel(yLabel)
             return plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, aspect="auto", **kwargs)
 
         super().__init__(draw)
