@@ -173,6 +173,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             raise ValueError("showPlots=True requires createPlots=True")
         resultWriter = self._resultWriterForModel(resultWriter, model)
         evaluator = self.createEvaluator(model)
+        log.info(f"Evaluating {model} via {evaluator}")
         if fitModel:
             evaluator.fitModel(model)
 

@@ -13,6 +13,7 @@ from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUt
     TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames
 from .torch_enums import ClassificationOutputMode
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
+from ..data import DataFrameSplitter
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
 from ..util.string import ToStringMixin
@@ -381,12 +382,15 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
-        self.torchDataSetProviderFactory = None
+        self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
+        self.dataFrameSplitter: Optional[DataFrameSplitter] = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
-        if "inputTensoriser" not in state:
-            state["inputTensoriser"] = None
+        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter"]
+        for m in newOptionalMembers:
+            if m not in state:
+                state[m] = None
         s = super()
         if hasattr(s, '__setstate__'):
             s.__setstate__(state)
@@ -401,6 +405,10 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.torchDataSetProviderFactory = torchDataSetProviderFactory
         return self
 
+    def withDataFrameSplitter(self, dataFrameSplitter: DataFrameSplitter) -> __qualname__:
+        self.dataFrameSplitter = dataFrameSplitter
+        return self
+
     def _createTorchModel(self) -> TorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
@@ -408,7 +416,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         factory = self.torchDataSetProviderFactory
         if factory is None:
             factory = DefaultRegressionTorchDataSetProviderFactory()
-        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext)
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, self.inputTensoriser, self.dataFrameSplitter)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if self.inputTensoriser is not None:
@@ -470,13 +478,16 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
-        self.inputTensoriser = None
-        self.torchDataSetProviderFactory = None
+        self.inputTensoriser: Optional[Tensoriser] = None
+        self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
+        self.dataFrameSplitter: Optional[DataFrameSplitter] = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
-        if "inputTensoriser" not in state:
-            state["inputTensoriser"] = None
+        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter"]
+        for m in newOptionalMembers:
+            if m not in state:
+                state[m] = None
         if "outputMode" not in state:
             state["outputMode"] = ClassificationOutputMode.PROBABILITIES
         s = super()
@@ -493,6 +504,10 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.torchDataSetProviderFactory = torchDataSetProviderFactory
         return self
 
+    def withDataFrameSplitter(self, dataFrameSplitter: DataFrameSplitter) -> __qualname__:
+        self.dataFrameSplitter = dataFrameSplitter
+        return self
+
     def _createTorchModel(self) -> VectorTorchModel:
         return self.modelClass(*self.modelArgs, **self.modelKwArgs)
 
@@ -500,7 +515,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         factory = self.torchDataSetProviderFactory
         if factory is None:
             factory = DefaultClassificationTorchDataSetProviderFactory()
-        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext)
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, self.inputTensoriser, self.dataFrameSplitter)
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if len(outputs.columns) != 1:
@@ -546,22 +561,24 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 class TorchDataSetProviderFactory(ABC):
     @abstractmethod
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame,
-            model: Union[TorchVectorRegressionModel, TorchVectorClassificationModel],
-            trainingContext: TrainingContext) -> TorchDataSetProvider:
+            model: Union[TorchVectorRegressionModel, TorchVectorClassificationModel], trainingContext: TrainingContext,
+            inputTensoriser: Optional[Tensoriser], dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         pass
 
 
 class DefaultClassificationTorchDataSetProviderFactory(TorchDataSetProviderFactory):
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorClassificationModel,
-            trainingContext: TrainingContext) -> TorchDataSetProvider:
+            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser],
+            dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, model.model.cuda, len(model._labels),
-            normalisationMode=model.normalisationMode, inputTensoriser=model.inputTensoriser)
+            normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser)
         return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
 
 
 class DefaultRegressionTorchDataSetProviderFactory(TorchDataSetProviderFactory):
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorRegressionModel,
-            trainingContext: TrainingContext) -> TorchDataSetProvider:
+            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser],
+            dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = VectorDataUtil(inputs, outputs, model.model.cuda, normalisationMode=model.normalisationMode,
-            inputTensoriser=model.inputTensoriser)
+            inputTensoriser=inputTensoriser, dataFrameSplitter=dataFrameSplitter)
         return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)

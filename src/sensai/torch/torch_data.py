@@ -224,7 +224,12 @@ class VectorDataUtil(DataUtil):
     def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
         splitter = self.dataFrameSplitter
         if splitter is None:
-            splitter = DataFrameSplitterFractional()
+            # By default, we use a simple fractional split without shuffling.
+            # Shuffling is usually unnecessary, because in evaluation contexts, the data may have already been shuffled by the evaluator
+            # (unless explicitly disabled by the user). Furthermore, not shuffling gives the user the possibility to manually
+            # order the data in ways that result in desirable fractional splits (though the user may, of course, simply override
+            # the splitter to achieve any desired split).
+            splitter = DataFrameSplitterFractional(shuffle=False)
         indices_A, indices_B = splitter.computeSplitIndices(self.inputs, fractionalSizeOfFirstSet)
         A = self._inputOutputPairs(indices_A)
         B = self._inputOutputPairs(indices_B)
@@ -257,12 +262,13 @@ class VectorDataUtil(DataUtil):
 
 class ClassificationVectorDataUtil(VectorDataUtil):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, cuda, numClasses, normalisationMode=normalisation.NormalisationMode.NONE,
-            inputTensoriser: Tensoriser = None, outputTensoriser: Tensoriser = None):
+            inputTensoriser: Tensoriser = None, outputTensoriser: Tensoriser = None, dataFrameSplitter: Optional[DataFrameSplitter] = None):
         if len(outputs.columns) != 1:
             raise Exception(f"Exactly one output dimension (the class index) is required, got {len(outputs.columns)}")
         super().__init__(inputs, outputs, cuda, normalisationMode=normalisationMode,
             differingOutputNormalisationMode=normalisation.NormalisationMode.NONE, inputTensoriser=inputTensoriser,
-            outputTensoriser=TensoriserClassLabelIndices() if outputTensoriser is None else outputTensoriser)
+            outputTensoriser=TensoriserClassLabelIndices() if outputTensoriser is None else outputTensoriser,
+            dataFrameSplitter=dataFrameSplitter)
         self.numClasses = numClasses
 
     def modelOutputDim(self):

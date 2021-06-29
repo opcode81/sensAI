@@ -94,8 +94,8 @@ class DataSplitterFractional(DataSplitter):
     def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
         numDataPoints = len(data)
         splitIndex = int(numDataPoints * self.fractionalSizeOfFirstSet)
-        rand = np.random.RandomState(self.randomSeed)
         if self.shuffle:
+            rand = np.random.RandomState(self.randomSeed)
             indices = rand.permutation(numDataPoints)
         else:
             indices = range(numDataPoints)
@@ -120,10 +120,18 @@ class DataFrameSplitter(ABC):
 
 
 class DataFrameSplitterFractional(DataFrameSplitter):
+    def __init__(self, shuffle=False, randomSeed=42):
+        self.randomSeed = randomSeed
+        self.shuffle = shuffle
+
     def computeSplitIndices(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[Sequence[int], Sequence[int]]:
         n = df.shape[0]
         sizeA = int(n * fractionalSizeOfFirstSet)
-        indices = list(range(n))
+        if self.shuffle:
+            rand = np.random.RandomState(self.randomSeed)
+            indices = rand.permutation(n)
+        else:
+            indices = list(range(n))
         indices_A = indices[:sizeA]
         indices_B = indices[sizeA:]
         return indices_A, indices_B
