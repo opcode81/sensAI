@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, TypeVar, List
+from typing import Tuple, Sequence, TypeVar, List, Generic
 
 import numpy as np
 import pandas as pd
@@ -77,7 +77,7 @@ class InputOutputData(BaseInputOutputData):
 TInputOutputData = TypeVar("TInputOutputData", bound=BaseInputOutputData)
 
 
-class DataSplitter(ABC):
+class DataSplitter(ABC, Generic[TInputOutputData]):
     @abstractmethod
     def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
         pass
@@ -101,6 +101,31 @@ class DataSplitterFractional(DataSplitter):
             indices = range(numDataPoints)
         indicesA = indices[:splitIndex]
         indicesB = indices[splitIndex:]
+        A = data.filterIndices(list(indicesA))
+        B = data.filterIndices(list(indicesB))
+        return A, B
+
+
+class DataSplitterFromDataFrameSplitter(DataSplitter[InputOutputData]):
+    """
+    Creates a DataSplitter from a DataFrameSplitter, which can be applied either to the input or the output data.
+    It supports only InputOutputData, not other subclasses of BaseInputOutputData.
+    """
+    def __init__(self, dataFrameSplitter: "DataFrameSplitter", fractionalSizeOfFirstSet: float, applyToInput=True):
+        """
+        :param dataFrameSplitter: the splitter to apply
+        :param fractionalSizeOfFirstSet: the desired fractional size of the first set when applying the splitter
+        :param applyToInput: if True, apply the splitter to the input data frame; if False, apply it to the output data frame
+        """
+        self.dataFrameSplitter = dataFrameSplitter
+        self.fractionalSizeOfFirstSet = fractionalSizeOfFirstSet
+        self.applyToInput = applyToInput
+
+    def split(self, data: InputOutputData) -> Tuple[InputOutputData, InputOutputData]:
+        if not isinstance(data, InputOutputData):
+            raise ValueError(f"{self} is only applicable to instances of {InputOutputData.__name__}, got {data}")
+        df = data.inputs if self.applyToInput else data.outputs
+        indicesA, indicesB = self.dataFrameSplitter.computeSplitIndices(df, self.fractionalSizeOfFirstSet)
         A = data.filterIndices(list(indicesA))
         B = data.filterIndices(list(indicesB))
         return A, B
