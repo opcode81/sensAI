@@ -568,7 +568,7 @@ class DFTNormalisation(DataFrameTransformer):
                         if not rule.arrayValued:
                             df[c] = rule.transformer.transform(df[[c]].values)
                         else:
-                            df[c] = [rule.transformer.transform([x])[0] for x in df[c]]
+                            df[c] = [rule.transformer.transform(np.array([x]).T)[:, 0] for x in df[c]]
         self._checkUnhandledColumns(df, matchedRulesByColumn)
         return df
 
