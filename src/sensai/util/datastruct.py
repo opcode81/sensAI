@@ -1,10 +1,56 @@
 from bisect import bisect_right, bisect_left
-from typing import Sequence, Optional, TypeVar, Generic, Tuple
+from enum import Enum
+from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any
 
 from . import sequences as array_util
 
 TKey = TypeVar("TKey")
 TValue = TypeVar("TValue")
+
+
+class Trivalent(Enum):
+    TRUE = "true"
+    FALSE = "false"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def fromBool(cls, b: bool):
+        return cls.TRUE if b else cls.FALSE
+
+    def isTrue(self):
+        return self == Trivalent.TRUE
+
+    def isFalse(self):
+        return self == Trivalent.FALSE
+
+
+class DeferredParams:
+    """
+    Represents a dictionary of parameters that is specifically designed to hold parameters that can only defined late within
+    a process (i.e. not initially at construction time), e.g. because the parameters are data-dependent and therefore can only
+    be determined once the data has been seen.
+    """
+    UNDEFINED = "__undefined__DeferredParams"
+
+    def __init__(self):
+        self.params = {}
+
+    def setParam(self, name: str, value: Any):
+        self.params[name] = value
+
+    def getParam(self, name, default=UNDEFINED):
+        """
+        :param name: the parameter name
+        :param default: in case no value is set, return this value, and if UNDEFINED (default), raise KeyError
+        :return: the parameter value
+        """
+        if default == self.UNDEFINED:
+            return self.params[name]
+        else:
+            return self.params.get(name, default)
+
+    def getDict(self) -> Dict[str, Any]:
+        return self.params
 
 
 class SortedValues(Generic[TValue]):

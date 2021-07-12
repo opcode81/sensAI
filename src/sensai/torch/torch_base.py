@@ -97,6 +97,8 @@ class TorchModel(ABC, ToStringMixin):
     """
     log: logging.Logger = log.getChild(__qualname__)
 
+    NORMALISATION_CHECK_THRESHOLD = 5
+
     def __init__(self, cuda=True) -> None:
         self.cuda: bool = cuda
         self.module: Optional[torch.nn.Module] = None
@@ -230,9 +232,14 @@ class TorchModel(ABC, ToStringMixin):
         if createBatch:
             inputs = [t.view(1, *X.size()) for t in inputs]
 
-        maxValue = max([t.max().item() for t in inputs])
-        if maxValue > 2:
-            log.warning("Received input which is likely to not be correctly normalised: maximum value in input tensor is %f" % maxValue)
+        # check input normalisation
+        if self.NORMALISATION_CHECK_THRESHOLD is not None:
+            maxValue = 0.0
+            for t in inputs:
+                if t.is_floating_point():  # ignore any integer tensors (which typically contain lengths)
+                    maxValue = max(t.abs().max().item(), maxValue)
+            if maxValue > self.NORMALISATION_CHECK_THRESHOLD:
+                log.warning("Received input which is likely to not be correctly normalised: maximum abs. value in input tensor is %f" % maxValue)
 
         if mcDropoutSamples is None:
             y = model(*inputs)
@@ -571,7 +578,7 @@ class DefaultClassificationTorchDataSetProviderFactory(TorchDataSetProviderFacto
             trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser],
             dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, model.model.cuda, len(model._labels),
-            normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser)
+            normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser, dataFrameSplitter=dataFrameSplitter)
         return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
 
 
