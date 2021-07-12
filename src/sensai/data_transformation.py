@@ -560,7 +560,7 @@ class DFTNormalisation(DataFrameTransformer):
             for c in matchingColumns:
                 matchedRulesByColumn[c] = rule
             if not rule.skip:
-                if rule.independentColumns:
+                if rule.independentColumns and not rule.arrayValued:
                     matchingColumns = sorted(matchingColumns)
                     df[matchingColumns] = rule.transformer.transform(df[matchingColumns].values)
                 else:
