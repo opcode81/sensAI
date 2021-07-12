@@ -557,6 +557,8 @@ class DFTNormalisation(DataFrameTransformer):
         matchedRulesByColumn = {}
         for rule in self._rules:
             matchingColumns = rule.matchingColumns(df.columns)
+            if len(matchingColumns) == 0:
+                continue
             for c in matchingColumns:
                 matchedRulesByColumn[c] = rule
             if not rule.skip:
