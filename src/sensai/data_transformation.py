@@ -403,18 +403,21 @@ class DFTNormalisation(DataFrameTransformer):
     """
 
     class RuleTemplate:
-        def __init__(self, skip=False, unsupported=False, transformer=None):
+        def __init__(self, skip=False, unsupported=False, transformer=None, independentColumns=False):
             """
             :param skip: flag indicating whether no transformation shall be performed on all of the columns
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to all of the columns.
                 If None, the default transformer will be used (as specified in DFTNormalisation instance).
+            :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
+                rule matches multiple columns.
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
+            self.independentColumns = independentColumns
 
         def toRule(self, regex: Optional[str]):
             """
@@ -423,15 +426,19 @@ class DFTNormalisation(DataFrameTransformer):
             :param regex: a regular expression defining the column the rule applies to
             :return: the resulting Rule
             """
-            return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer)
+            return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer,
+                independentColumns=self.independentColumns)
 
         def toPlaceholderRule(self):
             return self.toRule(None)
 
     class Rule:
-        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None, arrayValued=False, fit=True):
+        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None, arrayValued=False, fit=True,
+                independentColumns=False):
             """
             :param regex: a regular expression defining the column(s) the rule applies to.
+                If it applies to multiple columns, these columns will be normalised in the same way (using the same normalisation
+                process for each column) unless independentColumns=True.
                 If None, the rule is a placeholder rule and the regex must be set later via setRegex or the rule will not be applicable.
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
@@ -439,7 +446,10 @@ class DFTNormalisation(DataFrameTransformer):
                 If None the default transformer will be used.
             :param arrayValued: whether the column values are not scalars but arrays (of arbitrary lengths).
                 It is assumed that all entries in such arrays are to be normalised in the same way.
+                If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
             :param fit: whether the rule's transformer shall be fitted
+            :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
+                rule matches multiple columns.
             """
             if skip and transformer is not None:
                 raise ValueError("skip==True while transformer is not None")
@@ -449,12 +459,15 @@ class DFTNormalisation(DataFrameTransformer):
             self.transformer = transformer
             self.arrayValued = arrayValued
             self.fit = fit
+            self.independentColumns = independentColumns
 
         def __setstate__(self, d):
             if "arrayValued" not in d:
                 d["arrayValued"] = False
             if "fit" not in d:
                 d["fit"] = True
+            if "independentColumns" not in d:
+                d["independentColumns"] = False
             self.__dict__ = d
 
         def setRegex(self, regex: str):
@@ -508,12 +521,18 @@ class DFTNormalisation(DataFrameTransformer):
                         rule.transformer = self._defaultTransformerFactory()
                     if rule.fit:
                         # fit transformer
-                        applicableDF = df[matchingColumns]
-                        if not rule.arrayValued:
-                            flatValues = applicableDF.values.flatten()
+                        applicableDF = df[sorted(matchingColumns)]
+                        if rule.arrayValued:
+                            if len(matchingColumns) > 1:
+                                raise Exception(f"Array-valued case is only supported for a single column, matched {matchingColumns} for {rule}")
+                            values = np.concatenate(applicableDF.values.flatten())
+                            values = values.reshape((len(values), 1))
+                        elif rule.independentColumns:
+                            values = applicableDF.values
                         else:
-                            flatValues = np.concatenate(applicableDF.values.flatten())
-                        rule.transformer.fit(flatValues.reshape((len(flatValues), 1)))
+                            values = applicableDF.values.flatten()
+                            values = values.reshape((len(values), 1))
+                        rule.transformer.fit(values)
             else:
                 log.log(logging.DEBUG - 1, f"{rule} matched no columns")
 
@@ -537,13 +556,19 @@ class DFTNormalisation(DataFrameTransformer):
             df = df.copy()
         matchedRulesByColumn = {}
         for rule in self._rules:
-            for c in rule.matchingColumns(df.columns):
+            matchingColumns = rule.matchingColumns(df.columns)
+            for c in matchingColumns:
                 matchedRulesByColumn[c] = rule
-                if not rule.skip:
-                    if not rule.arrayValued:
-                        df[c] = rule.transformer.transform(df[[c]].values)
-                    else:
-                        df[c] = [rule.transformer.transform([x])[0] for x in df[c]]
+            if not rule.skip:
+                if rule.independentColumns:
+                    matchingColumns = sorted(matchingColumns)
+                    df[matchingColumns] = rule.transformer.transform(df[matchingColumns].values)
+                else:
+                    for c in matchingColumns:
+                        if not rule.arrayValued:
+                            df[c] = rule.transformer.transform(df[[c]].values)
+                        else:
+                            df[c] = [rule.transformer.transform([x])[0] for x in df[c]]
         self._checkUnhandledColumns(df, matchedRulesByColumn)
         return df
 
