@@ -1,6 +1,8 @@
+import numpy as np
 import pandas as pd
+import sklearn.preprocessing
 
-from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer, DataFrameTransformerChain
+from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer, DataFrameTransformerChain, DFTNormalisation
 
 
 class TestDFTTransformerBasics:
@@ -49,3 +51,26 @@ class TestDFTTransformerBasics:
         # if all fgens are fitted, the combination is also fitted, even if fit was not called
         dftChain = DataFrameTransformerChain([self.RuleBasedTestDFT(), self.RuleBasedTestDFT()])
         assert dftChain.isFitted()
+
+
+class TestDFTNormalisation:
+    def test_multiColumnSingleRuleIndependent(self):
+        arr = np.array([1, 5, 10])
+        df = pd.DataFrame({"foo": arr, "bar": arr*100})
+        dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", transformer=sklearn.preprocessing.MaxAbsScaler(), independentColumns=True)])
+        df2 = dft.fitApply(df)
+        assert np.all(df2.foo == arr/10) and np.all(df2.bar == arr/10)
+
+    def test_multiColumnSingleRule(self):
+        arr = np.array([1, 5, 10])
+        df = pd.DataFrame({"foo": arr, "bar": arr*100})
+        dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", transformer=sklearn.preprocessing.MaxAbsScaler(), independentColumns=False)])
+        df2 = dft.fitApply(df)
+        assert np.all(df2.foo == arr/1000) and np.all(df2.bar == arr/10)
+
+    def test_arrayValued(self):
+        arr = np.array([1, 5, 10])
+        df = pd.DataFrame({"foo": [arr, 2*arr, 10*arr]})
+        dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", transformer=sklearn.preprocessing.MaxAbsScaler(), arrayValued=True)])
+        df2 = dft.fitApply(df)
+        assert np.all(df2.foo.iloc[0] == arr/100) and np.all(df2.foo.iloc[-1] == arr/10)
