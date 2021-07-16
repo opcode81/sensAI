@@ -5,7 +5,7 @@
 2. Bump the version that the new release shall change by using one of the following commands:
 
    * `bumpversion patch  --commit`
-   * ``bumpversion minor --commit`
+   * `bumpversion minor --commit`
    * `bumpversion major  --commit`
 
    This will create a new "-dev" version which can be pushed without a release ending up on PyPI.
