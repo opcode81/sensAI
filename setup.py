@@ -39,7 +39,7 @@ setup(
     url="https://github.com/jambit/sensAI",
     packages=find_namespace_packages(where="src"),
     include_package_data=True,
-    version='0.1.5',
+    version='0.1.6.dev0',
     description='Library for sensible AI',
     install_requires=required_packages(open("requirements.txt").readlines()),
     dependency_links=["https://download.pytorch.org/whl/torch_stable.html"],
