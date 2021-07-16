@@ -6,7 +6,7 @@ models. Hence the name of the module and of the central base class VectorModel.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Any, Optional, Union, Type
+from typing import List, Any, Optional, Union, Type, Dict
 
 import numpy as np
 import pandas as pd
@@ -133,6 +133,12 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
 
     def _toStringExcludes(self) -> List[str]:
         return ["checkInputColumns"]
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
+        if self._featureGenerator is not None:
+            d["featureGeneratorNames"] = self._featureGenerator.getNames()
+        return d
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
         """

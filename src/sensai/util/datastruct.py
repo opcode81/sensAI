@@ -1,8 +1,8 @@
-from bisect import bisect_right, bisect_left
 from enum import Enum
 from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any
 
 from . import sequences as array_util
+from .string import ToStringMixin, dictString
 
 TKey = TypeVar("TKey")
 TValue = TypeVar("TValue")
@@ -24,7 +24,7 @@ class Trivalent(Enum):
         return self == Trivalent.FALSE
 
 
-class DeferredParams:
+class DeferredParams(ToStringMixin):
     """
     Represents a dictionary of parameters that is specifically designed to hold parameters that can only defined late within
     a process (i.e. not initially at construction time), e.g. because the parameters are data-dependent and therefore can only
@@ -34,6 +34,9 @@ class DeferredParams:
 
     def __init__(self):
         self.params = {}
+
+    def _toStringObjectInfo(self) -> str:
+        return dictString(self.params)
 
     def setParam(self, name: str, value: Any):
         self.params[name] = value

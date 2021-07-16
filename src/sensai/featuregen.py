@@ -1,7 +1,8 @@
+import functools
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Sequence, List, Union, Callable, Any, Dict, TYPE_CHECKING, Optional
+from typing import Sequence, List, Union, Callable, Any, Dict, TYPE_CHECKING, Optional, Hashable
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ import pandas as pd
 from . import util, data_transformation
 from .columngen import ColumnGenerator
 from .util import flattenArguments
-from .util.string import orRegexGroup
+from .util.string import orRegexGroup, ToStringMixin, dictString, listString
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -21,7 +22,7 @@ class DuplicateColumnNamesException(Exception):
     pass
 
 
-class FeatureGenerator(ABC):
+class FeatureGenerator(ToStringMixin, ABC):
     """
     Base class for feature generators that create a new DataFrame containing feature values
     from an input DataFrame
@@ -79,7 +80,13 @@ class FeatureGenerator(ABC):
         d["_isFitted"] = d.get("_isFitted", True)
         self.__dict__ = d
 
-    def getName(self) -> str:
+    def _toStringExcludePrivate(self) -> bool:
+        return True
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        return dict(name=self.getName())
+
+    def getName(self):
         """
         :return: the name of this feature generator, which may be a default name if the name has not been set. Note that feature generators created
             by a FeatureGeneratorFactory always get the name with which the generator factory was registered.
@@ -90,6 +97,12 @@ class FeatureGenerator(ABC):
 
     def setName(self, name):
         self._name = name
+
+    def getNames(self) -> list:
+        """
+        :return: the list of names of feature generators; will be a list with a single name for a regular feature generator
+        """
+        return [self.getName()]
 
     def info(self):
         return {
@@ -144,6 +157,7 @@ class FeatureGenerator(ABC):
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
         """
+        log.debug(f"Fitting {self}")
         self._fit(X, Y=Y, ctx=ctx)
         self._isFitted = True
 
@@ -247,7 +261,7 @@ class MultiFeatureGenerator(FeatureGenerator):
     def __init__(self, *featureGenerators: Union[FeatureGenerator, List[FeatureGenerator]]):
         self.featureGenerators = featureGenerators = flattenArguments(featureGenerators)
         if len(self.featureGenerators) == 0:
-            log.info("Creating an empty MultiFeatureGenerator. It will generate a data frame without columns.")
+            log.debug("Creating an empty MultiFeatureGenerator. It will generate a data frame without columns.")
         categoricalFeatureNameRegexes = [regex for regex in [fg.getCategoricalFeatureNameRegex() for fg in featureGenerators] if regex is not None]
         if len(categoricalFeatureNameRegexes) > 0:
             categoricalFeatureNames = "|".join(categoricalFeatureNameRegexes)
@@ -256,6 +270,9 @@ class MultiFeatureGenerator(FeatureGenerator):
         normalisationRules = util.concatSequences([fg.getNormalisationRules() for fg in featureGenerators])
         super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
             addCategoricalDefaultRules=False)
+
+    def _toStringObjectInfo(self) -> str:
+        return f"featureGenerators={listString(self.featureGenerators)}"
 
     def _generateFromMultiple(self, generateFeatures: Callable[[FeatureGenerator], pd.DataFrame], index) -> pd.DataFrame:
         dfs = []
@@ -273,8 +290,11 @@ class MultiFeatureGenerator(FeatureGenerator):
         return self._generateFromMultiple(generateFeatures, inputDF.index)
 
     def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
+        log.debug(f"Fitting and generating features with {self}")
+
         def generateFeatures(fg: FeatureGenerator):
             return fg.fitGenerate(X, Y, ctx)
+
         return self._generateFromMultiple(generateFeatures, X.index)
 
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
@@ -289,11 +309,8 @@ class MultiFeatureGenerator(FeatureGenerator):
         info["featureGeneratorNames"] = self.getNames()
         return info
 
-    def getNames(self) -> List[str]:
-        """
-        :return: the list of names of all contained feature generators
-        """
-        return [fg.getName() for fg in self.featureGenerators]
+    def getNames(self) -> list:
+        return functools.reduce(lambda x, y: x + y, [fg.getNames() for fg in self.featureGenerators], [])
 
 
 class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
@@ -490,15 +507,10 @@ class ChainedFeatureGenerator(FeatureGenerator):
         info["chainedFeatureGeneratorNames"] = self.getNames()
 
     def fitGenerate(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None) -> pd.DataFrame:
+        log.debug(f"Fitting and generating features with {self}")
         for fg in self.featureGenerators:
             X = fg.fitGenerate(X, Y, ctx)
         return X
-
-    def getNames(self) -> List[str]:
-        """
-        :return: the list of names of all contained feature generators
-        """
-        return [fg.getName() for fg in self.featureGenerators]
 
 
 class FeatureGeneratorTargetDistribution(FeatureGenerator):
@@ -605,12 +617,10 @@ class FeatureGeneratorTargetDistribution(FeatureGenerator):
 class FeatureGeneratorRegistry:
     """
     Represents a registry for named feature generators which can be instantiated via factories.
-    Each named feature generator is a singleton, i.e. each factory will be called at most once.
 
-    Feature generators can be registered and retrieved by \n
+    In addition to functions registerFactory and getFeatureGenerator, feature generators can be registered and retrieved via \n
     registry.<name> = <featureGeneratorFactory> \n
     registry.<name> \n
-    or through the corresponding methods
 
     Example:
         >>> from sensai.featuregen import FeatureGeneratorRegistry, FeatureGeneratorTakeColumns
@@ -631,8 +641,8 @@ class FeatureGeneratorRegistry:
             instance for each name
         """
         # Important: Don't set public members in init. Since we override setattr this would lead to undesired consequences
-        self._featureGeneratorFactories: Dict[str, Callable[[], FeatureGenerator]] = {}
-        self._featureGeneratorSingletons: Dict[str, Callable[[], FeatureGenerator]] = {}
+        self._featureGeneratorFactories: Dict[Hashable, Callable[[], FeatureGenerator]] = {}
+        self._featureGeneratorSingletons: Dict[Hashable, Callable[[], FeatureGenerator]] = {}
         self._useSingletons = useSingletons
 
     def __setattr__(self, name: str, value):
@@ -650,7 +660,7 @@ class FeatureGeneratorRegistry:
     def availableFeatures(self):
         return list(self._featureGeneratorFactories.keys())
 
-    def registerFactory(self, name, factory: Callable[[], FeatureGenerator]):
+    def registerFactory(self, name: Hashable, factory: Callable[[], FeatureGenerator]):
         """
         Registers a feature generator factory which can subsequently be referenced by models via their name
         :param name: the name
@@ -658,7 +668,6 @@ class FeatureGeneratorRegistry:
         """
         if name in self._featureGeneratorFactories:
             raise ValueError(f"Generator for name '{name}' already registered")
-        super().__setattr__(name, factory)
         self._featureGeneratorFactories[name] = factory
 
     def getFeatureGenerator(self, name) -> FeatureGenerator:
@@ -709,12 +718,10 @@ class FeatureCollector(object):
         for f in self._featureGeneratorsOrNames:
             if isinstance(f, FeatureGenerator):
                 featureGenerators.append(f)
-            elif type(f) == str:
+            else:
                 if self._registry is None:
                     raise Exception(f"Received feature name '{f}' instead of instance but no registry to perform the lookup")
                 featureGenerators.append(self._registry.getFeatureGenerator(f))
-            else:
-                raise ValueError(f"Unexpected type {type(f)} in list of features")
         return MultiFeatureGenerator(*featureGenerators)
 
 
@@ -757,10 +764,10 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         if self.inputFeatureGenerator:
             df = self.inputFeatureGenerator.generate(df)
         if self.useTargetFeatureGeneratorForTraining and not ctx.isFitted():
-            log.info(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
+            log.debug(f"Using targetFeatureGenerator {self.targetFeatureGenerator.__class__.__name__} to generate target features")
             return self.targetFeatureGenerator.generate(df)
         else:
-            log.info(f"Generating target features via {self.vectorModel.__class__.__name__}")
+            log.debug(f"Generating target features via {self.vectorModel.__class__.__name__}")
             return self.vectorModel.predict(df)
 
     def info(self):
