@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable
+from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable
 
 import numpy as np
 
@@ -20,6 +20,11 @@ class Vectoriser(Generic[T]):
         self.f = f
         self.transformer = transformer
         self._resultType = None
+
+    def __setstate__(self, state):
+        if "_resultType" not in state:
+            state["_resultType"] = None
+        self.__dict__ = state
 
     def fit(self, items: Iterable[T]):
         if self.transformer is not None:
@@ -188,3 +193,38 @@ if __name__ == '__main__':
     svec = SequenceVectoriser([vectoriser, vectoriser])
     svec.fit(data)
     result, lengths = svec.applyMultiWithPadding(data)
+
+
+class VectoriserRegistry:
+    def __init__(self):
+        self._factories: Dict[Hashable, Callable[[Callable], Vectoriser]] = {}
+
+    def getAvailableVectorisers(self):
+        return list(self._factories.keys())
+
+    def registerFactory(self, name: Hashable, factory: Callable[[Callable], Vectoriser]):
+        """
+        Registers a vectoriser factory which can subsequently be referenced via their name
+
+        :param name: the name
+        :param factory: the factory, which takes the default transformer factory as an argument
+        """
+        if name in self._factories:
+            raise ValueError(f"Vectoriser factory for name '{name}' already registered")
+        self._factories[name] = factory
+
+    def getVectoriser(self, name: Hashable, defaultTransformerFactory: Callable) -> Vectoriser:
+        """
+        Creates a vectoriser from a name, which must have been previously registered.
+
+        :param name: the name of the generator
+        :param defaultTransformerFactory: the default transformer factory
+        :return: a new vectoriser instance
+        """
+        factory = self._factories.get(name)
+        if factory is None:
+            raise ValueError(f"No factory registered for name '{name}': known names: {list(self._factories.keys())}. Register the factory first.")
+        return factory(defaultTransformerFactory)
+
+    def getVectorisers(self, names: List[Hashable], defaultTransformerFactory: Callable) -> List[Vectoriser]:
+        return [self.getVectoriser(name, defaultTransformerFactory) for name in names]

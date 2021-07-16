@@ -2,8 +2,12 @@ from typing import Union, List, Dict, Any, Sequence, Iterable, Optional
 import re
 
 
-def dictString(d):
+def dictString(d: Dict):
     return ', '.join([f'{k}={v}' for k, v in d.items()])
+
+
+def listString(l: Iterable[Any]):
+    return "[" + ", ".join((str(x) for x in l)) + "]"
 
 
 def objectRepr(obj, memberNamesOrDict: Union[List[str], Dict[str, Any]]):
@@ -97,7 +101,7 @@ class ToStringMixin:
         sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
         is not overwritten by the sub class.
 
-        :return: a list of attribute names
+        :return: a list of attribute names; if empty, include all attributes (except the ones being excluded according to other methods)
         """
         return []
 
