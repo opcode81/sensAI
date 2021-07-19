@@ -652,7 +652,11 @@ class FeatureGeneratorRegistry:
             super().__setattr__(name, value)
 
     def __getattr__(self, item: str):
-        return self._featureGeneratorFactories[item]
+        factory = self._featureGeneratorFactories.get(item)
+        if factory is not None:
+            return factory
+        else:
+            raise AttributeError(item)
 
     @property
     def availableFeatures(self):
