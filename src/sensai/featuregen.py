@@ -652,9 +652,7 @@ class FeatureGeneratorRegistry:
             super().__setattr__(name, value)
 
     def __getattr__(self, item: str):
-        if item.startswith("_"):
-            raise ValueError(f"Access to private variables in {self.__class__.__name__} is forbidden")
-        return self.getFeatureGenerator(item)
+        return self._featureGeneratorFactories[item]
 
     @property
     def availableFeatures(self):
