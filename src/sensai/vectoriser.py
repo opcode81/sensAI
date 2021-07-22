@@ -3,7 +3,7 @@ from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Ite
 
 import numpy as np
 
-from dcs.sensai.util.string import listString, ToStringMixin, dictString
+from .util.string import listString, ToStringMixin, dictString
 
 T = TypeVar("T")
 
