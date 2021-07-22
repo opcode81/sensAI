@@ -1,6 +1,6 @@
 import logging
 import pickle
-from typing import List
+from typing import List, Dict, Any
 
 log = logging.getLogger(__name__)
 
@@ -82,3 +82,39 @@ class PickleFailureDebugger:
                 log.error(f"{prefix}: pickling would result in failures due to: {failures}")
             else:
                 log.info(f"{prefix}: is picklable")
+
+
+def setstate(cls, obj, state: Dict[str, Any]) -> None:
+    """
+    Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
+    a parent class already implements __setstate__ and where it does not. Call this function whenever you would actually
+    like to call the super-class' implementation.
+    Unfortunately, __setstate__ is not implemented in object, rendering super().__setstate__(state) invalid in the general case.
+
+    :param cls: the class in which you are implementing __setstate__
+    :param obj: the instance of cls
+    :param state: the state dictionary
+    """
+    s = super(cls, obj)
+    if hasattr(s, '__setstate__'):
+        s.__setstate__(state)
+    else:
+        obj.__dict__ = state
+
+
+def getstate(cls, obj) -> Dict[str, Any]:
+    """
+    Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
+    a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually
+    like to call the super-class' implementation.
+    Unfortunately, __getstate__ is not implemented in object, rendering super().__getstate__() invalid in the general case.
+
+    :param cls: the class in which you are implementing __getstate__
+    :param obj: the instance of cls
+    :return: the state dictionary, which may be modified by the receiver
+    """
+    s = super(cls, obj)
+    if hasattr(s, '__getstate__'):
+        return s.__getstate__()
+    else:
+        return obj.__dict__.copy()

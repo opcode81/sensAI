@@ -97,4 +97,5 @@ class ResultWriter:
 
     def writePickle(self, filenameSuffix, obj):
         p = self.path(filenameSuffix, extensionToAdd="pickle")
+        self.log.info(f"Saving pickle {p}")
         dumpPickle(obj, p)

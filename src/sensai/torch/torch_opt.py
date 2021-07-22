@@ -267,7 +267,7 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
 
 
 class NNLossEvaluatorClassification(NNLossEvaluator):
-    """A loss evaluator for (multi-variate) regression"""
+    """A loss evaluator for classification"""
 
     class LossFunction(Enum):
         CROSSENTROPY = "CrossEntropy"
