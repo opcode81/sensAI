@@ -660,12 +660,20 @@ class FeatureGeneratorRegistry:
     def availableFeatures(self):
         return list(self._featureGeneratorFactories.keys())
 
+    @staticmethod
+    def _name(name: Hashable):
+        # for enums, which have .name, use the name only, because it is less problematic to persist
+        if hasattr(name, "name"):
+            name = name.name
+        return name
+
     def registerFactory(self, name: Hashable, factory: Callable[[], FeatureGenerator]):
         """
         Registers a feature generator factory which can subsequently be referenced by models via their name
-        :param name: the name
+        :param name: the name (which can, in particular, be a string or an enum item)
         :param factory: the factory
         """
+        name = self._name(name)
         if name in self._featureGeneratorFactories:
             raise ValueError(f"Generator for name '{name}' already registered")
         self._featureGeneratorFactories[name] = factory
@@ -675,14 +683,15 @@ class FeatureGeneratorRegistry:
         Creates a feature generator from a name, which must have been previously registered.
         The name of the returned feature generator (as returned by getName()) is set to name.
 
-        :param name: the name of the generator
+        :param name: the name (which can, in particular, be a string or an enum item)
         :return: a new feature generator instance (or existing instance for the case where useSingletons is enabled)
         """
+        name = self._name(name)
         generator = self._featureGeneratorSingletons.get(name)
         if generator is None:
             factory = self._featureGeneratorFactories.get(name)
             if factory is None:
-                raise ValueError(f"No factory registered for name '{name}': known names: {list(self._featureGeneratorFactories.keys())}. Use registerFeatureGeneratorFactory to register a new feature generator factory.")
+                raise ValueError(f"No factory registered for name '{name}': known names: {listString(self._featureGeneratorFactories.keys())}. Use registerFeatureGeneratorFactory to register a new feature generator factory.")
             generator = factory()
             generator.setName(name)
             if self._useSingletons:

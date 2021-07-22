@@ -14,6 +14,7 @@ import pandas as pd
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
+from .util.logging import StopWatch
 from .util.sequences import getFirstDuplicate
 from .util.string import ToStringMixin
 
@@ -288,7 +289,8 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
         """
         self._trainingContext = TrainingContext(X, Y)
         try:
-            log.info(f"Training {self.__class__.__name__}")
+            log.info(f"Fitting {self.__class__.__name__} instance")
+            sw = StopWatch()
             self._predictedVariableNames = list(Y.columns)
             if not self._underlyingModelRequiresFitting():
                 self._fitPreprocessors(X, Y=Y)
@@ -298,10 +300,11 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
                 X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
                 self._modelInputVariableNames = list(X.columns)
                 inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
-                log.info(f"Training with outputs[{len(Y.columns)}]={list(Y.columns)}, "
+                log.info(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
                     f"inputs[{len(self._modelInputVariableNames)}]=[{inputsWithTypes}]; N={len(X)} data points")
                 self._fit(X, Y)
                 self._isFitted = True
+            log.info(f"Fitting completed in {sw.getElapsedTimeSecs():.2f} seconds: {self}")
         finally:
             self._trainingContext = None
 

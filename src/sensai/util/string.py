@@ -2,21 +2,30 @@ from typing import Union, List, Dict, Any, Sequence, Iterable, Optional
 import re
 
 
-def dictString(d: Dict):
-    return ', '.join([f'{k}={v}' for k, v in d.items()])
+def dictString(d: Dict, brackets: Optional[str] = None):
+    s = ', '.join([f'{k}={toString(v)}' for k, v in d.items()])
+    if brackets is not None:
+        return brackets[:1] + s + brackets[-1:]
+    else:
+        return s
 
 
-def listString(l: Iterable[Any]):
-    return "[" + ", ".join((str(x) for x in l)) + "]"
+def listString(l: Iterable[Any], brackets="[]"):
+    return brackets[:1] + ", ".join((toString(x) for x in l)) + brackets[-1:]
+
+
+def toString(x):
+    if type(x) == list:
+        return listString(x)
+    elif type(x) == tuple:
+        return listString(x, brackets="()")
+    elif type(x) == dict:
+        return dictString(x, brackets="{}")
+    else:
+        return str(x)
 
 
 def objectRepr(obj, memberNamesOrDict: Union[List[str], Dict[str, Any]]):
-    def toString(x):
-        if type(x) == dict:
-            return "{" + dictString(x) + "}"
-        else:
-            return str(x)
-
     if type(memberNamesOrDict) == dict:
         membersDict = memberNamesOrDict
     else:
@@ -46,12 +55,13 @@ class ToStringMixin:
     def _toStringProperties(self, exclude: Optional[Union[str, Iterable[str]]] = None, include: Optional[Union[str, Iterable[str]]] = None,
             **additionalEntries) -> str:
         """
-        Creates a string of the class attributes, with optional exclusions/inclusions/additions
+        Creates a string of the class attributes, with optional exclusions/inclusions/additions.
+        Exclusions take precedence over inclusions.
 
-        :param exclude: attributes to be excluded; can only be non-empty if include is empty
-        :param include: attributes to be included; can only be non-empty if exclude is empty
+        :param exclude: attributes to be excluded
+        :param include: attributes to be included; if None/empty, include all that are not excluded
         :param additionalEntries: additional key-value-pairs which are added to the string just like the other attributes
-        :return: a string containing all attribute names and values
+        :return: a string containing attribute names and values
         """
         def mklist(x):
             if x is None:
@@ -62,15 +72,13 @@ class ToStringMixin:
 
         exclude = mklist(exclude)
         include = mklist(include)
-        if len(exclude) > 0 and len(include) > 0:
-            raise ValueError("Cannot provide inclusions and exclusions at the same time")
 
         if len(include) == 0:
             attributeDict = self.__dict__
             if self._toStringExcludePrivate():
                 attributeDict = {k: v for k, v in attributeDict.items() if not k.startswith("_")}
         else:
-            attributeDict = {k: getattr(self, k) for k in include}
+            attributeDict = {k: getattr(self, k) for k in include if hasattr(self, k)}
         d = {k: v for k, v in attributeDict.items() if k not in exclude}
         d.update(additionalEntries)
         return dictString(d)
@@ -88,8 +96,8 @@ class ToStringMixin:
     def _toStringExcludes(self) -> List[str]:
         """
         Returns a list of attribute names to be excluded from __str__ and __repr__. This method can be overwritten by
-        sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
-        is not overwritten by the sub class.
+        sub-classes which can call super and extend the list returned.
+        This method will only have no effect if _toStringObjectInfo is overridden to not use its result.
 
         :return: a list of attribute names
         """
@@ -98,8 +106,8 @@ class ToStringMixin:
     def _toStringIncludes(self) -> List[str]:
         """
         Returns a list of attribute names to be included in __str__ and __repr__. This method can be overwritten by
-        sub-classes which can call super to extend this list. This method will only have an effect if _toStringObjectInfo
-        is not overwritten by the sub class.
+        sub-classes which can call super and extend the list returned.
+        This method will only have no effect if _toStringObjectInfo is overridden to not use its result.
 
         :return: a list of attribute names; if empty, include all attributes (except the ones being excluded according to other methods)
         """

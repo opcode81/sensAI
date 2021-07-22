@@ -157,9 +157,7 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         """Fits the given model's parameters using this evaluator's training data"""
         if self.trainingData is None:
             raise Exception(f"Cannot fit model with evaluator {self.__class__.__name__}: no training data provided")
-        startTime = time.time()
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
-        log.info(f"Training of {model.__class__.__name__} completed in {time.time() - startTime:.1f} seconds")
 
 
 class VectorRegressionModelEvaluator(PredictorModelEvaluator[VectorRegressionModelEvaluationData]):

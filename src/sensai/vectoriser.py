@@ -1,7 +1,9 @@
 from enum import Enum
-from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable
+from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional
 
 import numpy as np
+
+from dcs.sensai.util.string import listString, ToStringMixin, dictString
 
 T = TypeVar("T")
 
@@ -20,11 +22,25 @@ class Vectoriser(Generic[T]):
         self.f = f
         self.transformer = transformer
         self._resultType = None
+        self.name = None
 
     def __setstate__(self, state):
-        if "_resultType" not in state:
-            state["_resultType"] = None
+        for newOptionalProperty in ["_resultType", "name"]:
+            if newOptionalProperty not in state:
+                state[newOptionalProperty] = None
         self.__dict__ = state
+
+    def setName(self, name):
+        self.name = name
+
+    def getName(self):
+        """
+        :return: the name of this feature generator, which may be a default name if the name has not been set. Note that feature generators created
+            by a FeatureGeneratorFactory always get the name with which the generator factory was registered.
+        """
+        if self.name is None:
+            return f"{self.__class__.__name__}-{id(self)}"
+        return self.name
 
     def fit(self, items: Iterable[T]):
         if self.transformer is not None:
@@ -87,7 +103,7 @@ class Vectoriser(Generic[T]):
                 raise ValueError(f"Received unhandled value of type {type(y)}")
 
 
-class SequenceVectoriser(Generic[T]):
+class SequenceVectoriser(Generic[T], ToStringMixin):
     """
     Supports the application of Vectorisers to sequences of objects of some type T, where each object of type T is
     mapped to a vector (1D array) by the vectorisers.
@@ -105,6 +121,9 @@ class SequenceVectoriser(Generic[T]):
             self.vectorisers = [vectorisers]
         else:
             self.vectorisers = vectorisers
+
+    def _toStringObjectInfo(self) -> str:
+        return dictString(dict(vectoriserNames=[v.getName() for v in self.vectorisers]))
 
     def fit(self, data: Iterable[Sequence[T]]):
         uniqueItems = set()
@@ -202,13 +221,29 @@ class VectoriserRegistry:
     def getAvailableVectorisers(self):
         return list(self._factories.keys())
 
-    def registerFactory(self, name: Hashable, factory: Callable[[Callable], Vectoriser]):
+    @staticmethod
+    def _name(name: Hashable):
+        # for enums, which have .name, use the name only, because it is less problematic to persist
+        if hasattr(name, "name"):
+            name = name.name
+        return name
+
+    def registerFactory(self, name: Hashable, factory: Callable[[Callable], Vectoriser],
+            additionalNames: Optional[Iterable[Hashable]] = None):
         """
         Registers a vectoriser factory which can subsequently be referenced via their name
 
-        :param name: the name
+        :param name: the name (which can, in particular, be a string or an enum item)
         :param factory: the factory, which takes the default transformer factory as an argument
+        :param additionalNames: (optional) additional names under which to register the factory
         """
+        self._registerFactory(name, factory)
+        if additionalNames is not None:
+            for n in additionalNames:
+                self._registerFactory(n, factory)
+
+    def _registerFactory(self, name: Hashable, factory):
+        name = self._name(name)
         if name in self._factories:
             raise ValueError(f"Vectoriser factory for name '{name}' already registered")
         self._factories[name] = factory
@@ -217,14 +252,17 @@ class VectoriserRegistry:
         """
         Creates a vectoriser from a name, which must have been previously registered.
 
-        :param name: the name of the generator
+        :param name: the name (which can, in particular, be a string or an enum item)
         :param defaultTransformerFactory: the default transformer factory
         :return: a new vectoriser instance
         """
+        name = self._name(name)
         factory = self._factories.get(name)
         if factory is None:
-            raise ValueError(f"No factory registered for name '{name}': known names: {list(self._factories.keys())}. Register the factory first.")
-        return factory(defaultTransformerFactory)
+            raise ValueError(f"No factory registered for name '{name}': known names: {listString(self._factories.keys())}. Register the factory first.")
+        instance = factory(defaultTransformerFactory)
+        instance.setName(name)
+        return instance
 
     def getVectorisers(self, names: List[Hashable], defaultTransformerFactory: Callable) -> List[Vectoriser]:
         return [self.getVectoriser(name, defaultTransformerFactory) for name in names]

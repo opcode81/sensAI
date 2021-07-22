@@ -3,14 +3,29 @@ import time
 
 class StopWatch:
     """
-    A simple stopwatch singleton which can be used to determine execution times
+    Represents a stop watch for timing an execution. Constructing an instance starts the stopwatch.
+    """
+    def __init__(self):
+        self.startTime = time.time()
+
+    def restart(self):
+        self.startTime = time.time()
+
+    def getElapsedTimeSecs(self) -> float:
+        return time.time() - self.startTime
+
+
+class StopWatchManager:
+    """
+    A singleton which manages a pool of named stopwatches, such that executions to be timed by referring to a name only -
+    without the need for a limited scope.
     """
     _instance = None
 
     @classmethod
     def getInstance(cls):
         if cls._instance is None:
-            cls._instance = StopWatch(42)
+            cls._instance = StopWatchManager(42)
         return cls._instance
 
     def __init__(self, secret):
