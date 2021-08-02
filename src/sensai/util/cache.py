@@ -11,10 +11,8 @@ import time
 from abc import abstractmethod, ABC
 from typing import Any, Callable, Iterator, List, Optional, TypeVar
 
-import joblib
-
 from .hash import pickleHash
-from .pickle import PickleFailureDebugger
+from .pickle import loadPickle, dumpPickle
 
 log = logging.getLogger(__name__)
 
@@ -62,33 +60,6 @@ class PersistentList(ABC):
         :return: generator of item
         """
         pass
-
-
-def loadPickle(path, backend="pickle"):
-    with open(path, "rb") as f:
-        if backend == "pickle":
-            return pickle.load(f)
-        elif backend == "joblib":
-            return joblib.load(f)
-        else:
-            raise ValueError(f"Unknown backend '{backend}'")
-
-
-def dumpPickle(obj, picklePath, backend="pickle"):
-    dirName = os.path.dirname(picklePath)
-    if dirName != "":
-        os.makedirs(dirName, exist_ok=True)
-    with open(picklePath, "wb") as f:
-        if backend == "pickle":
-            try:
-                pickle.dump(obj, f)
-            except AttributeError as e:
-                failingPaths = PickleFailureDebugger.debugFailure(obj)
-                raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
-        elif backend == "joblib":
-            joblib.dump(obj, f)
-        else:
-            raise ValueError(f"Unknown backend '{backend}'")
 
 
 class DelayedUpdateHook:

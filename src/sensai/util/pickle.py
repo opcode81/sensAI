@@ -1,8 +1,38 @@
 import logging
+import os
 import pickle
 from typing import List, Dict, Any
 
+import joblib
+
 log = logging.getLogger(__name__)
+
+
+def loadPickle(path, backend="pickle"):
+    with open(path, "rb") as f:
+        if backend == "pickle":
+            return pickle.load(f)
+        elif backend == "joblib":
+            return joblib.load(f)
+        else:
+            raise ValueError(f"Unknown backend '{backend}'")
+
+
+def dumpPickle(obj, picklePath, backend="pickle"):
+    dirName = os.path.dirname(picklePath)
+    if dirName != "":
+        os.makedirs(dirName, exist_ok=True)
+    with open(picklePath, "wb") as f:
+        if backend == "pickle":
+            try:
+                pickle.dump(obj, f)
+            except AttributeError as e:
+                failingPaths = PickleFailureDebugger.debugFailure(obj)
+                raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
+        elif backend == "joblib":
+            joblib.dump(obj, f)
+        else:
+            raise ValueError(f"Unknown backend '{backend}'")
 
 
 class PickleFailureDebugger:

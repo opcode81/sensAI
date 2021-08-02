@@ -6,7 +6,7 @@ import matplotlib.figure
 from matplotlib import pyplot as plt
 import pandas as pd
 
-from .cache import dumpPickle
+from .pickle import dumpPickle
 
 log = logging.getLogger(__name__)
 
