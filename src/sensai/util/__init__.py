@@ -1,14 +1,12 @@
-import logging
 import sys
-import time
 from typing import Sequence, TypeVar, List, Union
 
 from . import aggregation
 from . import cache
 from . import cache_mysql
+from .logging import LogTime
 
 T = TypeVar("T")
-log = logging.getLogger(__name__)
 
 
 def countNone(*args):
@@ -65,24 +63,6 @@ def markUsed(*args):
     :param args: pass identifiers that shall be marked as used here
     """
     pass
-
-
-class LogTime:
-    def __init__(self, name):
-        self.name = name
-        self.startTime = None
-
-    def start(self):
-        self.startTime = time.time()
-
-    def stop(self):
-        log.info(f"{self.name} completed in {time.time()-self.startTime} seconds")
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.stop()
-
-    def __enter__(self):
-        return self.start()
 
 
 def _backwardCompatibility():

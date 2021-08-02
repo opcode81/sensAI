@@ -1,4 +1,8 @@
+from logging import *
 import time
+
+
+log = getLogger(__name__)
 
 
 class StopWatch:
@@ -47,3 +51,21 @@ class StopWatchManager:
 
     def isRunning(self, name):
         return name in self._stopWatches
+
+
+class LogTime:
+    def __init__(self, name):
+        self.name = name
+        self.startTime = None
+
+    def start(self):
+        self.startTime = time.time()
+
+    def stop(self):
+        log.info(f"{self.name} completed in {time.time()-self.startTime} seconds")
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+
+    def __enter__(self):
+        return self.start()
