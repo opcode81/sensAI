@@ -1,7 +1,14 @@
 from bisect import bisect_right, bisect_left
-from typing import Optional, TypeVar, Sequence, Any
+from typing import Optional, TypeVar, Sequence, Any, List
 
 T = TypeVar("T")
+
+
+def concatSequences(seqs: Sequence[Sequence[T]]) -> List[T]:
+    result = []
+    for s in seqs:
+        result.extend(s)
+    return result
 
 
 def getFirstDuplicate(seq: Sequence[T]) -> Optional[T]:
