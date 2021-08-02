@@ -84,6 +84,16 @@ class SortedValues(Generic[TValue]):
         """
         return array_util.ceilIndex(self.values, value)
 
+    def closestIndex(self, value) -> Optional[int]:
+        """
+        Finds the index of the value that is closest to the given value.
+        If two subsequent values have the same distance, the smaller index is returned.
+
+        :param value: the value to search for
+        :return: the index or None if this object is empty
+        """
+        return array_util.closestIndex(self.values, value)
+
     def _value(self, idx: Optional[int]) -> Optional[TValue]:
         if idx is None:
             return None
@@ -108,6 +118,16 @@ class SortedValues(Generic[TValue]):
         """
         return self._value(self.ceilIndex(value))
 
+    def closestValue(self, value) -> Optional[TValue]:
+        """
+        Finds the value that is closest to the given value.
+        If two subsequent values have the same distance, the smaller value is returned.
+
+        :param value: the value to search for
+        :return: the value or None if this object is empty
+        """
+        return self._value(self.closestIndex(value))
+
     def _valueSlice(self, firstIndex, lastIndex):
         if firstIndex is None or lastIndex is None:
             return None
@@ -128,23 +148,33 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         self.keys = keys
         self.values = values
 
-    def floorIndex(self, value) -> Optional[int]:
+    def floorIndex(self, key) -> Optional[int]:
         """
-        Finds the rightmost index where the value is less than or equal to the given value
+        Finds the rightmost index where the key value is less than or equal to the given value
 
-        :param value: the value to search for
+        :param key: the value to search for
         :return: the index or None if there is no such index
         """
-        return array_util.floorIndex(self.values, value)
+        return array_util.floorIndex(self.keys, key)
 
-    def ceilIndex(self, value) -> Optional[int]:
+    def ceilIndex(self, key) -> Optional[int]:
         """
-        Finds the leftmost index where the value is greater than or equal to the given value
+        Finds the leftmost index where the key value is greater than or equal to the given value
 
-        :param value: the value to search for
+        :param key: the value to search for
         :return: the index or None if there is no such index
         """
-        return array_util.ceilIndex(self.values, value)
+        return array_util.ceilIndex(self.keys, key)
+
+    def closestIndex(self, key) -> Optional[int]:
+        """
+        Finds the index where the key is closest to the given value.
+        If two subsequent keys have the same distance, the smaller index is returned.
+
+        :param key: the value to search for
+        :return: the index or None if this object is empty.
+        """
+        return array_util.closestIndex(self.keys, key)
 
     def floorValue(self, key) -> Optional[TValue]:
         """
@@ -163,6 +193,16 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         :return: the value or None if there is no such value
         """
         return array_util.ceilValue(self.keys, key, values=self.values)
+
+    def closestValue(self, key) -> Optional[TValue]:
+        """
+        Finds the value that is closest to the given value.
+        If two subsequent values have the same distance, the smaller value is returned.
+
+        :param value: the value to search for
+        :return: the value or None if this object is empty
+        """
+        return array_util.closestValue(self.keys, key, values=self.values)
 
     def valueSliceInner(self, lowerBoundKey, upperBoundKey):
         return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
@@ -198,6 +238,12 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
 
     def ceilValue(self, key) -> Optional[TValue]:
         return self._value(self.ceilIndex(key))
+
+    def closestIndex(self, key) -> Optional[int]:
+        return self._sortedKeys.closestIndex(key)
+
+    def closestValue(self, key) -> Optional[TValue]:
+        return self._value(self.closestIndex(key))
 
     def _valueSlice(self, firstIndex, lastIndex):
         if firstIndex is None or lastIndex is None:

@@ -46,6 +46,34 @@ def ceilIndex(arr, value) -> Optional[int]:
     return None
 
 
+def closestIndex(arr, value) -> Optional[int]:
+    """
+    Finds the index in the given array where the value is closest to the given value.
+    If two subsequent values have the same distance, the smaller index is returned.
+
+    :param arr: the array to search in
+    :param value: the value to search for
+    :return: the index or None if the array is empty
+    """
+    length = len(arr)
+    if length == 0:
+        return None
+    floorIdx = floorIndex(arr, value)
+    if floorIdx is None:
+        return 0
+    ceilIdx = floorIdx + 1
+    if ceilIdx >= length:
+        return floorIdx
+    floorValue = arr[floorIdx]
+    ceilValue = arr[floorIdx]
+    floorDist = abs(floorValue - value)
+    ceilDist = abs(ceilValue - value)
+    if floorDist <= ceilDist:
+        return floorIdx
+    else:
+        return ceilIdx
+
+
 def ceilValue(keys, keyValue, values=None) -> Optional[Any]:
     """
     For a sorted array of keys (and a an array of corresponding values),
@@ -80,6 +108,24 @@ def floorValue(keys, keyValue, values=None, fallbackFirst=False) -> Optional[Any
         if fallbackFirst:
             return values[0]
         return None
+    return values[idx]
+
+
+def closestValue(keys, keyValue, values=None) -> Optional[Any]:
+    """
+    For a sorted array of keys (and an array of corresponding values),
+    finds the value at the index where the key is closest to the given key value.
+    If two subsequent values are equally close, the value at the smaller index is returned.
+
+    :param keys:
+    :param value:
+    :return:
+    """
+    idx = closestIndex(keys, keyValue)
+    if idx is None:
+        return None
+    if values is None:
+        values = keys
     return values[idx]
 
 

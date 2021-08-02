@@ -318,6 +318,13 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
     def getPredictedVariableNames(self):
         return self._predictedVariableNames
 
+    def getModelInputVariableNames(self) -> Optional[List[str]]:
+        """
+        :return: the list of variable names required by the model as input (after feature generation and data frame transformation)
+            or None if the model has not been fitted.
+        """
+        return self._modelInputVariableNames
+
     def getInputTransformer(self, cls: Type[DataFrameTransformer]):
         for it in self._inputTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):

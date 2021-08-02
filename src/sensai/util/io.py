@@ -36,8 +36,7 @@ class ResultWriter:
 
     def path(self, filenameSuffix: str, extensionToAdd=None, validOtherExtensions: Optional[Sequence[str]] = None):
         """
-        :param filenameSuffix: the suffix to add (which may or may not already include the file extension "txt", which
-            will be added if it is not already present)
+        :param filenameSuffix: the suffix to add (which may or may not already include a file extension)
         :param extensionToAdd: if not None, the file extension to add (without the leading ".") unless
             the extension to add or one of the extenions in validExtensions is already present
         :param validOtherExtensions: a sequence of valid other extensions (without the "."), only

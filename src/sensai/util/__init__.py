@@ -1,7 +1,9 @@
 import logging
+import sys
 import time
 from typing import Sequence, TypeVar, List, Union
 
+from . import aggregation
 from . import cache
 from . import cache_mysql
 
@@ -81,3 +83,11 @@ class LogTime:
 
     def __enter__(self):
         return self.start()
+
+
+def _backwardCompatibility():
+    # module 'counter' was moved to 'aggregation'
+    sys.modules[f"{__name__}.counter"] = aggregation
+
+
+_backwardCompatibility()

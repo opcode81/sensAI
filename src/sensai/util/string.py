@@ -132,3 +132,41 @@ class ToStringMixin:
         if len(propertyInfo) > 0:
             info += ", " + propertyInfo
         return f"{self._toStringClassName()}[{info}]"
+
+
+def prettyStringRepr(s):
+    """
+    Creates a pretty string representation (using indentations) from the given string representation (as generated, for example, via
+    ToStringMixin). An indentation level is added for every opening bracket.
+
+    :param s: an object string representation
+    :return: a reformatted version of the input string with added indentations and line break
+    """
+    indent = 0
+    result = ""
+    i = 0
+
+    def nl():
+        nonlocal result
+        result += "\n" + (indent * "    ")
+
+    def take(cnt=1):
+        nonlocal result, i
+        result += s[i:i+cnt]
+        i += cnt
+
+    while i < len(s):
+        if s[i] in "[(":
+            take(1)
+            indent += 1
+            nl()
+        elif s[i] in "])":
+            take(1)
+            indent -= 1
+        elif s[i:i+2] == ", ":
+            take(2)
+            nl()
+        else:
+            take(1)
+
+    return result
