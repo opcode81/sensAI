@@ -565,7 +565,7 @@ class CachedValueProviderMixin(ABC):
 
 
 def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None,
-        backend="pickle") -> T:
+        backend="pickle", protocol=pickle.HIGHEST_PROTOCOL) -> T:
     """
     :param fn: the function whose result is to be cached
     :param picklePath: the path in which to store the cached result
@@ -575,6 +575,7 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
         the function shall return True if the res is still valid and false otherwise. If a cached result is invalid,
         the function fn is called to compute the result and the cached result is updated.
     :param backend: pickle or joblib
+    :param protocol: the pickle protocol version
     :return: the res (either obtained from the cache or the function)
     """
     if functionName is None:
@@ -583,7 +584,7 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
     def callFnAndCacheResult():
         res = fn()
         log.info(f"Saving cached result in {picklePath}")
-        dumpPickle(res, picklePath, backend=backend)
+        dumpPickle(res, picklePath, backend=backend, protocol=protocol)
         return res
 
     if os.path.exists(picklePath):
@@ -603,18 +604,22 @@ class PickleCached(object):
     """
     Function decorator for caching function results via pickle
     """
-    def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle"):
+    def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle",
+            protocol=pickle.HIGHEST_PROTOCOL):
         """
         :param cacheBasePath: the directory where the pickle cache file will be stored
         :param filenamePrefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
             a hash code of the function arguments will be appended and ".cache.pickle" will be appended; if None, use "" (if filename
             has not been provided)
         :param filename: the full file name of the cache file to be created; this is admissible only if the function has no arguments
+        :param backend: the serialisation backend to use (see dumpPickle)
+        :param protocol: the pickle protocol version to use
         """
         self.filename = filename
         self.cacheBasePath = cacheBasePath
         self.filenamePrefix = filenamePrefix
         self.backend = backend
+        self.protocol = protocol
 
         if self.filenamePrefix is None:
             self.filenamePrefix = ""

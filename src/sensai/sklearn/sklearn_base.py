@@ -2,6 +2,7 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from typing import List, Any, Dict
+import re
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,16 @@ def createSkLearnModel(modelConstructor, modelArgs, outputTransformer=None):
     if outputTransformer is not None:
         model = compose.TransformedTargetRegressor(regressor=model, transformer=outputTransformer)
     return model
+
+
+def strSkLearnModel(model):
+    """
+    Creates a cleaned string representation of the model with line breaks and indentations removed
+
+    :param model: the sklearn model for which to generate the cleaned string representation
+    :return: the string representation
+    """
+    return re.sub(r",\s*", ", ", str(model))
 
 
 class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
@@ -111,7 +122,7 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
         if len(self.models) > 0:
-            d["model[0]"] = str(next(iter(self.models.values())))
+            d["model[0]"] = strSkLearnModel(next(iter(self.models.values())))
         else:
             d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
         return d
@@ -146,7 +157,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
         if self.model is not None:
-            d["model"] = str(self.model)
+            d["model"] = strSkLearnModel(self.model)
         else:
             d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
         return d
@@ -187,7 +198,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         if self.model is None:
             d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
         else:
-            d["model"] = str(self.model)
+            d["model"] = strSkLearnModel(self.model)
         return d
 
     def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:

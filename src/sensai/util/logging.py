@@ -83,7 +83,7 @@ class LogTime:
         self.startTime = time.time()
 
     def stop(self):
-        log.info(f"{self.name} completed in {time.time()-self.startTime} seconds")
+        log.info(f"{self.name} completed in {time.time()-self.startTime:.3f} seconds")
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()

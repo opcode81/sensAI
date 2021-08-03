@@ -18,19 +18,19 @@ def loadPickle(path, backend="pickle"):
             raise ValueError(f"Unknown backend '{backend}'")
 
 
-def dumpPickle(obj, picklePath, backend="pickle"):
+def dumpPickle(obj, picklePath, backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
     dirName = os.path.dirname(picklePath)
     if dirName != "":
         os.makedirs(dirName, exist_ok=True)
     with open(picklePath, "wb") as f:
         if backend == "pickle":
             try:
-                pickle.dump(obj, f)
+                pickle.dump(obj, f, protocol=protocol)
             except AttributeError as e:
                 failingPaths = PickleFailureDebugger.debugFailure(obj)
                 raise AttributeError(f"Cannot pickle paths {failingPaths} of {obj}: {str(e)}")
         elif backend == "joblib":
-            joblib.dump(obj, f)
+            joblib.dump(obj, f, protocol=protocol)
         else:
             raise ValueError(f"Unknown backend '{backend}'")
 

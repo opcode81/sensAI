@@ -246,22 +246,36 @@ class DFTRowFilter(RuleBasedDataFrameTransformer):
 
 
 class DFTModifyColumn(RuleBasedDataFrameTransformer):
-    def __init__(self, column: str, columnTransform: Callable):
+    """
+    Modifies a column specified by 'column' using 'columnTransform'
+    """
+    def __init__(self, column: str, columnTransform: Union[Callable, np.ufunc]):
         """
-        Modifies a column specified by 'column' using 'columnTransform'
-        :param column:
-        :param columnTransform:
+        :param column: the name of the column to be modified
+        :param columnTransform: a function operating on single cells or a Numpy ufunc that applies to an entire Series
         """
         super().__init__()
-        self.columnTransform = columnTransform
         self.column = column
+        self.columnTransform = columnTransform
 
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df[self.column] = df[self.column].apply(self.columnTransform)
         return df
 
 
-class DFTModifyColumnVectorized(DFTModifyColumn):
+class DFTModifyColumnVectorized(RuleBasedDataFrameTransformer):
+    """
+    Modifies a column specified by 'column' using 'columnTransform'. This transformer can be used to utilise Numpy vectorisation for
+    performance optimisation.
+    """
+    def __init__(self, column: str, columnTransform: Callable[[np.ndarray], Union[Sequence, pd.Series, np.ndarray]]):
+        """
+        :param column: the name of the column to be modified
+        :param columnTransform: a function that takes a Numpy array and from which the returned value will be assigned to the column as a whole
+        """
+        super().__init__()
+        self.column = column
+        self.columnTransform = columnTransform
 
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df[self.column] = self.columnTransform(df[self.column].values)
