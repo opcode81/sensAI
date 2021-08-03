@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCrossValidationData, \
+from .crossval import VectorModelCrossValidationData, VectorRegressionModelCrossValidationData, \
     VectorClassificationModelCrossValidationData, \
     VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator, VectorModelCrossValidator
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
@@ -35,7 +35,7 @@ TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection
 TEvaluator = TypeVar("TEvaluator", bound=VectorModelEvaluator)
 TCrossValidator = TypeVar("TCrossValidator", bound=VectorModelCrossValidator)
 TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
-TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
+TCrossValData = TypeVar("TCrossValData", bound=VectorModelCrossValidationData)
 
 
 def _isRegression(model: Optional[VectorModel], isRegression: Optional[bool]) -> bool:
@@ -296,7 +296,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
     def _createPlots(self, data: Union[TEvalData, TCrossValData], resultCollector: ResultCollector, subtitle=None):
 
         def createPlots(predVarName, rc, subt):
-            if isinstance(data, PredictorModelCrossValidationData):
+            if isinstance(data, VectorModelCrossValidationData):
                 evalStats = data.getEvalStatsCollection(predictedVarName=predVarName).getGlobalStats()
             elif isinstance(data, VectorModelEvaluationData):
                 evalStats = data.getEvalStats(predictedVarName=predVarName)
