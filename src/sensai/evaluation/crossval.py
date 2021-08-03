@@ -14,11 +14,11 @@ from .evaluator import VectorRegressionModelEvaluationData, VectorClassification
     MetricsDictProvider
 from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, PredictorModel
+from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel, VectorModelBase
 
 log = logging.getLogger(__name__)
 
-TModel = TypeVar("TModel", bound=PredictorModel)
+TModel = TypeVar("TModel", bound=VectorModelBase)
 TEvalStats = TypeVar("TEvalStats", bound=PredictionEvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
 TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)

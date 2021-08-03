@@ -28,11 +28,11 @@ if InputOutputData:
 log = logging.getLogger(__name__)
 
 
-class PredictorModel(ABC):
+class VectorModelBase(ABC):
     """
-    Base class for models that map data frames to predictions
+    Base class for vector models, which defines the fundamental prediction interface.
+    A vector model takes data frames as input, where each row represents a vector of information.
     """
-
     def __init__(self):
         self._name = None
 
@@ -67,7 +67,11 @@ class PredictorModel(ABC):
         return self._name
 
 
-class FittableModel(PredictorModel, ABC):
+class VectorModelFittableBase(VectorModelBase, ABC):
+    """
+    Base class for vector models, which encompasses the fundamental prediction and fitting interfaces.
+    A vector model takes data frames as input, where each row represents a vector of information.
+    """
     @abstractmethod
     def fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
@@ -86,9 +90,12 @@ class TrainingContext:
         self.originalOutput = originalOutput
 
 
-class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
+class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, ABC):
     """
-    Base class for models that map data frames to predictions and can be fitted on data frames
+    Represents a model which uses data frames as inputs and outputs whose rows define individual data points.
+    Every data frame row represents a vector of information (one-dimensional array), hence the name of the model.
+    Note that the vectors in question are not necessarily vectors in the mathematical sense, as the information in each cell is not
+    required to be numeric or uniform but can be arbitrarily complex.
     """
     _TRANSIENT_MEMBERS = ["_trainingContext"]
     _RENAMED_MEMBERS = {"checkInputColumns": "_checkInputColumns"}

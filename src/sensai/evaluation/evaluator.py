@@ -11,7 +11,7 @@ from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEva
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..tracking import TrackingMixin
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorModel, PredictorModel, FittableModel
+from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class MetricsDictProvider(TrackingMixin, ABC):
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: PredictorModel):
+    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: VectorModelBase):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
         :param inputData: the input data that was used to produce the results
@@ -133,7 +133,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
             self.trainingData = data
             self.testData = testData
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> TEvalData:
+    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> TEvalData:
         """
         Evaluates the given model
 
@@ -145,15 +145,15 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         return self._evalModel(model, data)
 
     @abstractmethod
-    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> TEvalData:
+    def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> TEvalData:
         pass
 
-    def _computeMetrics(self, model: FittableModel, onTrainingData=False) -> Dict[str, float]:
+    def _computeMetrics(self, model: VectorModelFittableBase, onTrainingData=False) -> Dict[str, float]:
         self.fitModel(model)
         evalData = self.evalModel(model, onTrainingData=onTrainingData)
         return evalData.getEvalStats().getAll()
 
-    def fitModel(self, model: FittableModel):
+    def fitModel(self, model: VectorModelFittableBase):
         """Fits the given model's parameters using this evaluator's training data"""
         if self.trainingData is None:
             raise Exception(f"Cannot fit model with evaluator {self.__class__.__name__}: no training data provided")
@@ -166,7 +166,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.additionalMetrics = additionalMetrics
 
-    def _evalModel(self, model: PredictorModel, data: InputOutputData) -> VectorRegressionModelEvaluationData:
+    def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
@@ -177,7 +177,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
             evalStatsByVarName[predictedVarName] = evalStats
         return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
 
-    def computeTestDataOutputs(self, model: PredictorModel) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def computeTestDataOutputs(self, model: VectorModelBase) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Applies the given model to the test data
 
@@ -186,7 +186,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         """
         return self._computeOutputs(model, self.testData)
 
-    def _computeOutputs(self, model: PredictorModel, inputOutputData: InputOutputData):
+    def _computeOutputs(self, model: VectorModelBase, inputOutputData: InputOutputData):
         """
         Applies the given model to the given data
 
@@ -250,7 +250,7 @@ class RuleBasedVectorClassificationModelEvaluator(VectorClassificationModelEvalu
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorClassificationModelEvaluationData:
+    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> VectorClassificationModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
@@ -271,7 +271,7 @@ class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: PredictorModel, onTrainingData=False) -> VectorRegressionModelEvaluationData:
+    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> VectorRegressionModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
