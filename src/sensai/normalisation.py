@@ -34,7 +34,7 @@ class VectorDataScaler:
                 raise ValueError(f"Only 2D arrays are supported by {cls.__name__} with mode {normalisationMode}")
             dim = rawArray.shape[1]
             if normalisationMode == NormalisationMode.MAX_ALL:
-                scale = np.ones(dim) * np.max(rawArray)
+                scale = np.ones(dim) * np.max(np.abs(rawArray))
             elif normalisationMode == NormalisationMode.MAX_BY_COLUMN:
                 scale = np.ones(dim)
                 for i in range(dim):
