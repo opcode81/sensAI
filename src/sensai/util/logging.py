@@ -1,8 +1,29 @@
+import logging as lg
 from logging import *
+import sys
 import time
+
+import pandas as pd
 
 
 log = getLogger(__name__)
+
+LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(message)s'
+
+
+def configureLogging(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
+    basicConfig(level=level, format=format, stream=sys.stdout)
+    getLogger("matplotlib").setLevel(lg.INFO)
+    getLogger("urllib3").setLevel(lg.INFO)
+    getLogger("msal").setLevel(lg.INFO)
+    pd.set_option('display.max_colwidth', 255)
+
+
+def addFileLogger(path):
+    log.info(f"Logging to {path} ...")
+    handler = FileHandler(path)
+    handler.setFormatter(Formatter(LOG_DEFAULT_FORMAT))
+    Logger.root.addHandler(handler)
 
 
 class StopWatch:

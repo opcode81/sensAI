@@ -15,6 +15,7 @@ from .data_transformation import DataFrameTransformer, DataFrameTransformerChain
 from .featuregen import FeatureGenerator, FeatureCollector
 from .util.cache import PickleLoadSaveMixin
 from .util.logging import StopWatch
+from .util.pickle import setstate, getstate
 from .util.sequences import getFirstDuplicate
 from .util.string import ToStringMixin
 
@@ -90,6 +91,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
     Base class for models that map data frames to predictions and can be fitted on data frames
     """
     _TRANSIENT_MEMBERS = ["_trainingContext"]
+    _RENAMED_MEMBERS = {"checkInputColumns": "_checkInputColumns"}
 
     def __init__(self, checkInputColumns=True):
         """
@@ -104,17 +106,13 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
         self._isFitted = False  # Note: this keeps track only of the actual model being fitted, not the pre/postprocessors
         self._predictedVariableNames: Optional[list] = None
         self._modelInputVariableNames: Optional[list] = None
-        self.checkInputColumns = checkInputColumns
+        self._checkInputColumns = checkInputColumns
 
         # transient members
         self._trainingContext: Optional[TrainingContext] = None
 
     def __getstate__(self):
-        s = super()
-        if hasattr(s, '__getstate__'):
-            state = s.__getstate__()
-        else:
-            state = self.__dict__.copy()
+        state = getstate(VectorModel, self)
         for m in VectorModel._TRANSIENT_MEMBERS:
             if m in state:
                 del state[m]
@@ -123,22 +121,21 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
     def __setstate__(self, state):
         for m in VectorModel._TRANSIENT_MEMBERS:
             state[m] = None
-        s = super()
-        if hasattr(s, '__setstate__'):
-            s.__setstate__(state)
-        else:
-            self.__dict__ = state
+        for mOld, mNew in VectorModel._RENAMED_MEMBERS.items():
+            if mOld in state:
+                state[mNew] = state[mOld]
+                del state[mOld]
+        setstate(VectorModel, self, state)
 
     def _toStringExcludePrivate(self) -> bool:
         return True
-
-    def _toStringExcludes(self) -> List[str]:
-        return ["checkInputColumns"]
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
         if self._featureGenerator is not None:
             d["featureGeneratorNames"] = self._featureGenerator.getNames()
+        if self._name is not None:
+            d["name"] = self._name
         return d
 
     def withInputTransformers(self, *inputTransformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> __qualname__:
@@ -197,7 +194,7 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
         return underlyingModelIsFitted
 
     def _checkModelInputColumns(self, modelInput: pd.DataFrame):
-        if self.checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
+        if self._checkInputColumns and list(modelInput.columns) != self._modelInputVariableNames:
             raise Exception(f"Inadmissible input data frame: "
                             f"expected columns {self._modelInputVariableNames}, got {list(modelInput.columns)}")
 
