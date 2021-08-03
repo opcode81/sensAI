@@ -290,7 +290,9 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
             sw = StopWatch()
             self._predictedVariableNames = list(Y.columns)
             if not self._underlyingModelRequiresFitting():
-                self._fitPreprocessors(X, Y=Y)
+                if fitPreprocessors:
+                    self._fitPreprocessors(X, Y=Y)
+                self._modelInputVariableNames = None  # not known for rule-based models because the fitting process is optimised
             else:
                 if Y is None:
                     raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
@@ -317,8 +319,8 @@ class VectorModel(FittableModel, PickleLoadSaveMixin, ToStringMixin, ABC):
 
     def getModelInputVariableNames(self) -> Optional[List[str]]:
         """
-        :return: the list of variable names required by the model as input (after feature generation and data frame transformation)
-            or None if the model has not been fitted.
+        :return: the list of variable names required by the underlying model as input (after feature generation and data frame
+            transformation) or None if the model has not been fitted (or is a rule-based model which does not determine the variable names).
         """
         return self._modelInputVariableNames
 
@@ -578,16 +580,6 @@ class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame):
         pass
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, **kwargs):
-        """
-        Fits the model using the given data
-
-        :param X: a data frame containing input data
-        :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
-        :param kwargs: for consistency with VectorModel interface, will be ignored
-        """
-        super().fit(X, Y, fitPreprocessors=True)
-
 
 class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
     def __init__(self, labels: list, predictedVariableName="predictedLabel"):
@@ -611,13 +603,3 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
 
     def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
         pass
-
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, **kwargs):
-        """
-        Fits the model using the given data
-
-        :param X: a data frame containing input data
-        :param Y: a data frame containing output data or None. Preprocessors may require Y for fitting.
-        :param kwargs: for consistency with VectorModel interface, will be ignored
-        """
-        super().fit(X, Y, fitPreprocessors=True)
