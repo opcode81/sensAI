@@ -21,7 +21,7 @@ from .crossval import PredictorModelCrossValidationData, VectorRegressionModelCr
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
-from .evaluator import PredictorModelEvaluator, PredictorModelEvaluationData, VectorRegressionModelEvaluator, \
+from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRegressionModelEvaluator, \
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
 from ..data import InputOutputData
 from ..util.io import ResultWriter
@@ -32,9 +32,9 @@ log = logging.getLogger(__name__)
 TModel = TypeVar("TModel", bound=VectorModel)
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
-TEvaluator = TypeVar("TEvaluator", bound=PredictorModelEvaluator)
+TEvaluator = TypeVar("TEvaluator", bound=VectorModelEvaluator)
 TCrossValidator = TypeVar("TCrossValidator", bound=VectorModelCrossValidator)
-TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
+TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 TCrossValData = TypeVar("TCrossValData", bound=PredictorModelCrossValidationData)
 
 
@@ -298,7 +298,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         def createPlots(predVarName, rc, subt):
             if isinstance(data, PredictorModelCrossValidationData):
                 evalStats = data.getEvalStatsCollection(predictedVarName=predVarName).getGlobalStats()
-            elif isinstance(data, PredictorModelEvaluationData):
+            elif isinstance(data, VectorModelEvaluationData):
                 evalStats = data.getEvalStats(predictedVarName=predVarName)
             else:
                 raise ValueError(f"Unexpected argument: data={data}")

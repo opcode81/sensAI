@@ -10,7 +10,7 @@ from .eval_stats.eval_stats_base import PredictionEvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationEvalStatsCollection
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
 from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
-    PredictorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
+    VectorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     MetricsDictProvider
 from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 TModel = TypeVar("TModel", bound=PredictorModel)
 TEvalStats = TypeVar("TEvalStats", bound=PredictionEvalStats)
 TEvalStatsCollection = TypeVar("TEvalStatsCollection", bound=EvalStatsCollection)
-TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
+TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
 
 class PredictorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):

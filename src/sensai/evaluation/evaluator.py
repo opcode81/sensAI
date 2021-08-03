@@ -50,7 +50,7 @@ class MetricsDictProvider(TrackingMixin, ABC):
         return valuesDict
 
 
-class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
+class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
     def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: PredictorModel):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
@@ -94,15 +94,15 @@ class PredictorModelEvaluationData(ABC, Generic[TEvalStats]):
             yield namedTuple, evalStats.y_predicted[i], evalStats.y_true[i]
 
 
-class VectorRegressionModelEvaluationData(PredictorModelEvaluationData[RegressionEvalStats]):
+class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEvalStats]):
     def getEvalStatsCollection(self):
         return RegressionEvalStatsCollection(list(self.evalStatsByVarName.values()))
 
 
-TEvalData = TypeVar("TEvalData", bound=PredictorModelEvaluationData)
+TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
 
-class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
+class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
             testFraction: float = None, randomSeed=42, shuffle=True):
         """
@@ -160,7 +160,7 @@ class PredictorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
 
 
-class VectorRegressionModelEvaluator(PredictorModelEvaluator[VectorRegressionModelEvaluationData]):
+class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
             additionalMetrics: Sequence[RegressionMetric] = None):
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
@@ -199,11 +199,11 @@ class VectorRegressionModelEvaluator(PredictorModelEvaluator[VectorRegressionMod
         return predictions, groundTruth
 
 
-class VectorClassificationModelEvaluationData(PredictorModelEvaluationData[ClassificationEvalStats]):
+class VectorClassificationModelEvaluationData(VectorModelEvaluationData[ClassificationEvalStats]):
     pass
 
 
-class VectorClassificationModelEvaluator(PredictorModelEvaluator[VectorClassificationModelEvaluationData]):
+class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
     def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
             randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
