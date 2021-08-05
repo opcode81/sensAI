@@ -106,6 +106,123 @@ class NNLossEvaluator(ABC):
     """
     Base class defining the interface for training and validation loss evaluation.
     """
+    class Evaluation(ABC):
+        @abstractmethod
+        def startEpoch(self) -> None:
+            """
+            Starts a new epoch, resetting any aggregated values required to ultimately return the
+            epoch's overall training loss (via getEpochTrainLoss) and validation metrics (via getValidationMetrics)
+            """
+            pass
+
+        @abstractmethod
+        def computeTrainBatchLoss(self, modelOutput, groundTruth, X, Y) -> torch.Tensor:
+            """
+            Computes the loss for the given model outputs and ground truth values for a batch
+            and aggregates the computed loss values such that getEpochLoss can return an appropriate
+            result for the entire epoch.
+            The original batch tensors X and Y are provided as meta-information only.
+
+            :param modelOutput: the model output
+            :param groundTruth: the ground truth values
+            :param X: the original batch input tensor
+            :param Y: the original batch output (ground truth) tensor
+            :return: the loss (scalar tensor)
+            """
+            pass
+
+        @abstractmethod
+        def getEpochTrainLoss(self) -> torch.Tensor:
+            """
+            :return: the epoch's overall training loss (as obtained by collecting data from individual training
+                batch data passed to computeTrainBatchLoss)
+            """
+            pass
+
+        @abstractmethod
+        def processValidationBatch(self, modelOutput, groundTruth, X, Y) -> None:
+            """
+            Processes the given model outputs and ground truth values in order to compute sufficient statistics for
+            velidation metrics, which at the end of the epoch, shall be retrievable via method getValidationMetrics
+
+            :param modelOutput: the model output
+            :param groundTruth: the ground truth values
+            :param X: the original batch input tensor
+            :param Y: the original batch output (ground truth) tensor
+            :return: the loss (scalar tensor)
+            """
+            pass
+
+        @abstractmethod
+        def getValidationMetrics(self) -> OrderedDict:
+            pass
+
+    @abstractmethod
+    def startEvaluation(self, cuda: bool) -> Evaluation:
+        """
+        Begins the evaluation of a model, returning a (stateful) object which is to perform the necessary computations.
+
+        :param cuda: whether CUDA is being applied (all tensors/models on the GPU)
+        :return: the evaluation object
+        """
+        pass
+
+    @abstractmethod
+    def getValidationMetricName(self) -> str:
+        """
+        :return: the name of the validation metric which is to be used to determine the best model (key for the ordered
+            dictionary returned by method Evaluation.getValidationMetrics)
+        """
+        pass
+
+
+class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
+    """
+    Base class defining the interface for training and validation loss evaluation, which uses fixed-dimension
+    outputs and aggregates individual training batch losses that are summed losses per batch
+    (averaging appropriately internally).
+    """
+    class Evaluation(NNLossEvaluator.Evaluation):
+        def __init__(self, criterion, validationLossEvaluator: "NNLossEvaluatorFixedDim.ValidationLossEvaluator"):
+            self.validationLossEvaluator = validationLossEvaluator
+            self.criterion = criterion
+            self.totalLoss = None
+            self.numSamples = None
+            self.numOutputsPerDataPoint = None
+            self.validationGroundTruthShape = None
+
+        def startEpoch(self):
+            self.totalLoss = 0
+            self.numSamples = 0
+            self.validationGroundTruthShape = None
+
+        def computeTrainBatchLoss(self, modelOutput, groundTruth, X, Y) -> torch.Tensor:
+            if self.numOutputsPerDataPoint is None:
+                outputShape = Y.shape[1:]
+                self.numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
+            loss = self.criterion(modelOutput, groundTruth)
+            numDataPointsInBatch = Y.size(0)
+            self.numSamples += numDataPointsInBatch * self.numOutputsPerDataPoint
+            self.totalLoss += loss.item()
+            return loss
+
+        def getEpochTrainLoss(self):
+            return self.totalLoss / self.numSamples
+
+        def processValidationBatch(self, modelOutput, groundTruth, X, Y):
+            if self.validationGroundTruthShape is None:
+                self.validationGroundTruthShape = Y.shape[1:]  # the shape of the output of a single model application
+                self.validationLossEvaluator.startValidationCollection(self.validationGroundTruthShape)
+            self.validationLossEvaluator.processValidationResultBatch(modelOutput, groundTruth)
+
+        def getValidationMetrics(self) -> OrderedDict:
+            return self.validationLossEvaluator.endValidationCollection()
+
+    def startEvaluation(self, cuda: bool) -> Evaluation:
+        criterion = self.getTrainingCriterion()
+        if cuda:
+            criterion = criterion.cuda()
+        return self.Evaluation(criterion, self.createValidationLossEvaluator(cuda))
 
     @abstractmethod
     def getTrainingCriterion(self) -> nn.Module:
@@ -132,7 +249,6 @@ class NNLossEvaluator(ABC):
         :return: the name of the metric
         """
         pass
-
 
     class ValidationLossEvaluator(ABC):
         @abstractmethod
@@ -166,7 +282,7 @@ class NNLossEvaluator(ABC):
             pass
 
 
-class NNLossEvaluatorRegression(NNLossEvaluator):
+class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
     """A loss evaluator for (multi-variate) regression."""
 
     class LossFunction(Enum):
@@ -200,7 +316,7 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
-    class ValidationLossEvaluator(NNLossEvaluator.ValidationLossEvaluator):
+    class ValidationLossEvaluator(NNLossEvaluatorFixedDim.ValidationLossEvaluator):
         def __init__(self, cuda: bool):
             self.total_loss_l1 = None
             self.total_loss_l2 = None
@@ -266,7 +382,7 @@ class NNLossEvaluatorRegression(NNLossEvaluator):
             raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
 
 
-class NNLossEvaluatorClassification(NNLossEvaluator):
+class NNLossEvaluatorClassification(NNLossEvaluatorFixedDim):
     """A loss evaluator for classification"""
 
     class LossFunction(Enum):
@@ -308,7 +424,7 @@ class NNLossEvaluatorClassification(NNLossEvaluator):
     def getTrainingCriterion(self):
         return self.lossFn.createCriterion()
 
-    class ValidationLossEvaluator(NNLossEvaluator.ValidationLossEvaluator):
+    class ValidationLossEvaluator(NNLossEvaluatorFixedDim.ValidationLossEvaluator):
         def __init__(self, cuda: bool, lossFn: "NNLossEvaluatorClassification.LossFunction"):
             self.lossFn = lossFn
             self.totalLoss = None
@@ -446,14 +562,13 @@ class NNOptimiser:
             raise ValueError("Must provide a loss evaluator")
 
         self.params = params
-        self.lossEvaluatorState = None
         self.cuda = None
 
     def __str__(self):
         return f"{self.__class__.__name__}[params={self.params}]"
 
     def fit(self, model: "TorchModel", data: Union[DataUtil, List[DataUtil], TorchDataSetProvider, List[TorchDataSetProvider],
-            TorchDataSet, List[TorchDataSet], Tuple[TorchDataSet, TorchDataSet], List[Tuple[TorchDataSet, TorchDataSet]]],
+                                                   TorchDataSet, List[TorchDataSet], Tuple[TorchDataSet, TorchDataSet], List[Tuple[TorchDataSet, TorchDataSet]]],
             createTorchModule=True) -> "TrainingInfo":
         """
         Fits the parameters of the given model to the given data, which can be a list of or single instance of one of the following:
@@ -537,10 +652,6 @@ class NNOptimiser:
         trainingLog(f"Starting training process via {self}")
 
         lossEvaluator = self.params.lossEvaluator
-        criterion = lossEvaluator.getTrainingCriterion()
-
-        if self.cuda:
-            criterion = criterion.cuda()
 
         totalEpochs = None
         best_val = 1e9
@@ -549,7 +660,7 @@ class NNOptimiser:
             max_grad_norm=self.params.shrinkageClip, use_shrinkage=self.params.useShrinkage, **self.params.optimiserArgs)
 
         bestModelBytes = model.getModuleBytes()
-        self.lossEvaluatorState = lossEvaluator.createValidationLossEvaluator(self.cuda)
+        lossEvaluation = lossEvaluator.startEvaluation(self.cuda)
         validationMetricName = lossEvaluator.getValidationMetricName()
         trainingLossValues = []
         validationMetricValues = []
@@ -557,10 +668,11 @@ class NNOptimiser:
             self.log.info(f'Begin training with cuda={self.cuda}')
             self.log.info('Press Ctrl+C to end training early')
             for epoch in range(1, self.params.epochs + 1):
+                lossEvaluation.startEpoch()
                 epoch_start_time = time.time()
 
                 # perform training step, processing all the training data once
-                train_loss = self._train(trainingSets, torchModel, criterion, optim, self.params.batchSize, self.cuda, outputScalers)
+                train_loss = self._train(trainingSets, torchModel, optim, lossEvaluation, self.params.batchSize, outputScalers)
                 trainingLossValues.append(train_loss)
 
                 # perform validation, computing the mean metrics across all validation sets (if more than one),
@@ -570,7 +682,7 @@ class NNOptimiser:
                     metricsSum = None
                     metricsKeys = None
                     for i, (validationSet, outputScaler) in enumerate(zip(validationSets, outputScalers)):
-                        metrics = self._evaluate(validationSet, torchModel, outputScaler)
+                        metrics = self._evaluate(validationSet, torchModel, lossEvaluation, outputScaler)
                         metricsArray = np.array(list(metrics.values()))
                         if i == 0:
                             metricsSum = metricsArray
@@ -616,7 +728,7 @@ class NNOptimiser:
             model.setModuleBytes(bestModelBytes)
 
         return TrainingInfo(bestEpoch=best_epoch if useValidation else None, log=trainingLogEntries, totalEpochs=totalEpochs,
-                trainingLossSequence=trainingLossValues, validationMetricSequence=validationMetricValues)
+            trainingLossSequence=trainingLossValues, validationMetricSequence=validationMetricValues)
 
     def _applyModel(self, model, input: Union[torch.Tensor, Sequence[torch.Tensor]], groundTruth, outputScaler: TensorScaler):
         if isinstance(input, torch.Tensor):
@@ -633,46 +745,31 @@ class NNOptimiser:
         scaledTruth = outputScaler.denormalise(groundTruth)
         return scaledOutput, scaledTruth
 
-    def _train(self, dataSets: Sequence[TorchDataSet], model: nn.Module, criterion: nn.modules.loss._Loss,
-            optim: _Optimiser, batch_size: int, cuda: bool, outputScalers: Sequence[TensorScaler]):
+    def _train(self, dataSets: Sequence[TorchDataSet], model: nn.Module, optim: _Optimiser,
+            lossEvaluation: NNLossEvaluator.Evaluation, batch_size: int, outputScalers: Sequence[TensorScaler]):
         """Performs one training epoch"""
         model.train()
-        total_loss = 0
-        n_samples = 0
-        numOutputsPerDataPoint = None
         for dataSet, outputScaler in zip(dataSets, outputScalers):
             for X, Y in dataSet.iterBatches(batch_size, shuffle=self.params.shuffle):
-                if numOutputsPerDataPoint is None:
-                    outputShape = Y.shape[1:]
-                    numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
-
                 def closure():
                     model.zero_grad()
                     output, groundTruth = self._applyModel(model, X, Y, outputScaler)
-                    loss = criterion(output, groundTruth)
+                    loss = lossEvaluation.computeTrainBatchLoss(output, groundTruth, X, Y)
                     loss.backward()
                     return loss
 
-                loss = optim.step(closure)
-                total_loss += loss.item()
-                numDataPointsInBatch = Y.size(0)
-                n_samples += numDataPointsInBatch * numOutputsPerDataPoint
-        return total_loss / n_samples
+                optim.step(closure)
+        return lossEvaluation.getEpochTrainLoss()
 
-    def _evaluate(self, dataSet: TorchDataSet, model: nn.Module, outputScaler: TensorScaler):
+    def _evaluate(self, dataSet: TorchDataSet, model: nn.Module, lossEvaluation: NNLossEvaluator.Evaluation,
+            outputScaler: TensorScaler):
         """Evaluates the model on the given data set (a validation set)"""
         model.eval()
-
-        groundTruthShape = None
         for X, Y in dataSet.iterBatches(self.params.batchSize, shuffle=False):
-            if groundTruthShape is None:
-                groundTruthShape = Y.shape[1:]  # the shape of the output of a single model application
-                self.lossEvaluatorState.startValidationCollection(groundTruthShape)
             with torch.no_grad():
                 output, groundTruth = self._applyModel(model, X, Y, outputScaler)
-            self.lossEvaluatorState.processValidationResultBatch(output, groundTruth)
-
-        return self.lossEvaluatorState.endValidationCollection()
+            lossEvaluation.processValidationBatch(output, groundTruth, X, Y)
+        return lossEvaluation.getValidationMetrics()
 
     def _init_cuda(self):
         """Initialises CUDA (for learning) by setting the appropriate device if necessary"""
@@ -693,7 +790,7 @@ class NNOptimiser:
 
 class TrainingInfo:
     def __init__(self, bestEpoch: int = None, log: List[str] = None, trainingLossSequence: Sequence[float] = None, validationMetricSequence:
-            Sequence[float] = None, totalEpochs=None):
+    Sequence[float] = None, totalEpochs=None):
         self.validationMetricSequence = validationMetricSequence
         self.trainingLossSequence = trainingLossSequence
         self.log = log
