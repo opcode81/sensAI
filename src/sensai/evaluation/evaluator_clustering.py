@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Sequence, Generic, TypeVar
 
-from sensai.evaluation.eval_stats.eval_stats_clustering import ClusteringUnsupervisedEvalStats, \
+from .eval_stats.eval_stats_clustering import ClusteringUnsupervisedEvalStats, \
     ClusteringSupervisedEvalStats, ClusterLabelsEvalStats
 from .evaluator import MetricsDictProvider
 from ..clustering import EuclideanClusterer
