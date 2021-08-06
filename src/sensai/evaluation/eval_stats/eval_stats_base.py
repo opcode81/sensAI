@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 from typing import Generic, TypeVar, List, Union, Dict, Sequence, Optional
 
 from ...util.string import ToStringMixin, dictString
-from ...util.tracking import timed
 from ...vector_model import VectorModel
 
 # Note: in the 2020.2 version of PyCharm passing strings to bound is highlighted as error

@@ -9,7 +9,7 @@ from ..clustering import SkLearnEuclideanClusterer
 from ..clustering.sklearn_clustering import SkLearnClustererProtocol
 from ..util.cache import LoadSaveInterface
 from .coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
-from ..util.tracking import timed
+from ..util.profiling import timed
 
 log = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from .eval_stats.eval_stats_clustering import ClusteringUnsupervisedEvalStats, \
     ClusteringSupervisedEvalStats, ClusterLabelsEvalStats
 from .evaluator import MetricsDictProvider
 from ..clustering import EuclideanClusterer
-from ..util.tracking import timed
+from ..util.profiling import timed
 
 TClusteringEvalStats = TypeVar("TClusteringEvalStats", bound=ClusterLabelsEvalStats)
 
