@@ -66,8 +66,6 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
         return cnt / len(y_true)
 
 
-# TODO: make some kwargs to args, infer y_predicted when classProbabilities are passed. We can also infer labels
-#  (though not reliably) if they are not passed
 class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def __init__(self, y_predicted: PredictionArray = None,
                  y_true: PredictionArray = None,

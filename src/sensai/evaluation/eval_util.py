@@ -168,7 +168,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, **self.crossValidatorParams)
 
     def performSimpleEvaluation(self, model: TModel, createPlots=True, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
-            additionalEvaluationOnTrainingData=False, fitModel=True) -> TEvalData:
+            additionalEvaluationOnTrainingData=False, fitModel=True, writeEvalStats=False) -> TEvalData:
         if showPlots and not createPlots:
             raise ValueError("showPlots=True requires createPlots=True")
         resultWriter = self._resultWriterForModel(resultWriter, model)
@@ -180,10 +180,13 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         def gatherResults(evalResultData, resultWriter, subtitlePrefix=""):
             strEvalResults = f"{model}\n\n"
             for predictedVarName in model.getPredictedVariableNames():
-                strEvalResult = str(evalResultData.getEvalStats(predictedVarName))
+                evalStats = evalResultData.getEvalStats(predictedVarName)
+                strEvalResult = str(evalStats)
                 if logResults:
                     log.info(f"{subtitlePrefix}Evaluation results for {predictedVarName}: {strEvalResult}")
                 strEvalResults += predictedVarName + ": " + strEvalResult + "\n"
+                if writeEvalStats and resultWriter is not None:
+                    resultWriter.writePickle(f"eval-stats-{predictedVarName}", evalStats)
             if resultWriter is not None:
                 resultWriter.writeTextFile("evaluator-results", strEvalResults)
             if createPlots:

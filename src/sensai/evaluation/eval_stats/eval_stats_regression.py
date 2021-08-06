@@ -99,17 +99,18 @@ class RegressionMetricMedianAE(RegressionMetric):
 
 
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
-    # class members controlling plot appearince, which can be centrally overridden by a user if necessary
+    """
+    Collects data for the evaluation of predicted continuous values and computes corresponding metrics
+    """
+
+    # class members controlling plot appearance, which can be centrally overridden by a user if necessary
     HEATMAP_COLORMAP_FACTORY = lambda self: LinearSegmentedColormap.from_list("whiteToRed", ((0, (1, 1, 1)), (1/len(self.y_predicted), (1, 0.96, 0.96)), (1, (0.7, 0, 0))), len(self.y_predicted))
     HEATMAP_DIAGONAL_COLOR = "green"
     HEATMAP_ERROR_BOUNDARY_VALUE = None
     HEATMAP_ERROR_BOUNDARY_COLOR = (0.8, 0.8, 0.8)
     SCATTER_PLOT_POINT_COLOR = (0, 0, 1, 0.05)
 
-    """
-    Collects data for the evaluation of predicted continuous values and computes corresponding metrics
-    """
-    def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray,
+    def __init__(self, y_predicted: Optional[PredictionArray] = None, y_true: Optional[PredictionArray] = None,
             metrics: Sequence["RegressionMetric"] = None, additionalMetrics: Sequence["RegressionMetric"] = None):
         """
         :param y_predicted: the predicted values

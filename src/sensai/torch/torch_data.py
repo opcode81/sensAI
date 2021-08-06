@@ -127,7 +127,7 @@ class Tensoriser(ABC):
 
 class RuleBasedTensoriser(Tensoriser, ABC):
     """
-    Base class for tensorisers which transforms data frames into tensors based on a predefined set of rules and does not require fitting
+    Base class for tensorisers which transform data frames into tensors based on a predefined set of rules and do not require fitting
     """
     def fit(self, df: pd.DataFrame, model=None):
         pass

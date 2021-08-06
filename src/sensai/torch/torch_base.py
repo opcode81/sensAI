@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
-    TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames
+    TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames, RuleBasedTensoriser
 from .torch_enums import ClassificationOutputMode
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..data import DataFrameSplitter
@@ -389,12 +389,15 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
+        self.outputTensoriser: Optional[Tensoriser] = None
+        self.outputTensorToArrayConverter = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
-        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter"]
+        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
+            "outputTensorToArrayConverter"]
         for m in newOptionalMembers:
             if m not in state:
                 state[m] = None
@@ -407,6 +410,29 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
         self.inputTensoriser = tensoriser
         return self
+
+    def withOutputTensoriser(self, tensoriser: RuleBasedTensoriser) -> __qualname__:
+        """
+        :param tensoriser: tensoriser to use in order to convert the output data frame to a tensor.
+            NOTE: It is required to be a rule-based tensoriser, because mechanisms that require fitting on the data
+            and thus perform a data-dependendent conversion are likely to cause problems because they would need
+            to be reversed at inference time (since the model will be trained on the converted values). If you require
+            a transformation, use a target transformer, which will be applied before the tensoriser.
+        """
+        self.outputTensoriser = tensoriser
+        return self
+
+    def withOutputTensorToArrayConverter(self, outputTensorToArrayConverter) -> __qualname__:
+        """
+        Configures the use of a custom converter from tensors to numpy arrays, which is applied during inference.
+        A custom converter can be required, for example, to handle variable-length outputs (where the output tensor
+        will typically contain unwanted padding). Note that since the converter is for inference only, it may be
+        required to use a custom loss evaluator during training.
+
+        :param outputTensorToArrayConverter: the converter
+        :return: self
+        """
+        self.outputTensorToArrayConverter = outputTensorToArrayConverter
 
     def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
         self.torchDataSetProviderFactory = torchDataSetProviderFactory
@@ -422,8 +448,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         factory = self.torchDataSetProviderFactory
         if factory is None:
-            factory = DefaultRegressionTorchDataSetProviderFactory()
-        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, self.inputTensoriser, self.dataFrameSplitter)
+            factory = TorchDataSetProviderFactoryRegressionDefault()
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, inputTensoriser=self.inputTensoriser,
+            outputTensoriser=self.outputTensoriser, dataFrameSplitter=self.dataFrameSplitter)
 
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if self.inputTensoriser is not None:
@@ -437,8 +464,14 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         batchSize = self.nnOptimiserParams.batchSize
         results = []
         dataSet = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, inputTensoriser=self.inputTensoriser)
-        for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
-            results.append(self.model.applyScaled(inputBatch, asNumpy=True))
+        if self.outputTensorToArrayConverter is None:
+            for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
+                results.append(self.model.applyScaled(inputBatch, asNumpy=True))
+        else:
+            for inputBatch in dataSet.iterBatches(batchSize, inputOnly=True):
+                outputBatch = self.model.applyScaled(inputBatch, asNumpy=False)
+                result = self.outputTensorToArrayConverter.convert(outputBatch, inputBatch)
+                results.append(result)
         return np.concatenate(results)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
@@ -486,12 +519,13 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.modelKwArgs = modelKwArgs
         self.model: Optional[VectorTorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
+        self.outputTensoriser: Optional[Tensoriser] = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
-        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter"]
+        newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser"]
         for m in newOptionalMembers:
             if m not in state:
                 state[m] = None
@@ -505,6 +539,17 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
         self.inputTensoriser = tensoriser
+        return self
+
+    def withOutputTensoriser(self, tensoriser: RuleBasedTensoriser) -> __qualname__:
+        """
+        :param tensoriser: tensoriser to use in order to convert the output data frame to a tensor.
+            NOTE: It is required to be a rule-based tensoriser, because mechanisms that require fitting on the data
+            and thus perform a data-dependendent conversion are likely to cause problems because they would need
+            to be reversed at inference time (since the model will be trained on the converted values). If you require
+            a transformation, use a target transformer, which will be applied before the tensoriser.
+        """
+        self.outputTensoriser = tensoriser
         return self
 
     def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
@@ -521,8 +566,9 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         factory = self.torchDataSetProviderFactory
         if factory is None:
-            factory = DefaultClassificationTorchDataSetProviderFactory()
-        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, self.inputTensoriser, self.dataFrameSplitter)
+            factory = TorchDataSetProviderFactoryClassificationDefault()
+        return factory.createDataSetProvider(inputs, outputs, self, self._trainingContext, inputTensoriser=self.inputTensoriser,
+            outputTensoriser=self.outputTensoriser, dataFrameSplitter=self.dataFrameSplitter)
 
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
         if len(outputs.columns) != 1:
@@ -569,23 +615,37 @@ class TorchDataSetProviderFactory(ABC):
     @abstractmethod
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame,
             model: Union[TorchVectorRegressionModel, TorchVectorClassificationModel], trainingContext: TrainingContext,
-            inputTensoriser: Optional[Tensoriser], dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
+            inputTensoriser: Optional[Tensoriser], outputTensoriser: Optional[Tensoriser],
+            dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         pass
 
 
-class DefaultClassificationTorchDataSetProviderFactory(TorchDataSetProviderFactory):
+class TorchDataSetProviderFactoryClassificationDefault(TorchDataSetProviderFactory):
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorClassificationModel,
-            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser],
+            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser], outputTensoriser: Optional[Tensoriser],
             dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, model.model.cuda, len(model._labels),
-            normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser, dataFrameSplitter=dataFrameSplitter)
+            normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser, outputTensoriser=outputTensoriser,
+            dataFrameSplitter=dataFrameSplitter)
         return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
 
 
-class DefaultRegressionTorchDataSetProviderFactory(TorchDataSetProviderFactory):
+class TorchDataSetProviderFactoryRegressionDefault(TorchDataSetProviderFactory):
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorRegressionModel,
-            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser],
+            trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser], outputTensoriser: Optional[Tensoriser],
             dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = VectorDataUtil(inputs, outputs, model.model.cuda, normalisationMode=model.normalisationMode,
-            inputTensoriser=inputTensoriser, dataFrameSplitter=dataFrameSplitter)
+            inputTensoriser=inputTensoriser, outputTensoriser=outputTensoriser, dataFrameSplitter=dataFrameSplitter)
         return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
+
+
+class OutputTensorToArrayConverter(ABC):
+    @abstractmethod
+    def convert(self, modelOutput: torch.Tensor, modelInput: Union[torch.Tensor, Sequence[torch.Tensor]]) -> np.ndarray:
+        """
+        :param modelOutput: the output tensor generated by the model
+        :param modelInput: the input tensor(s) for which the model produced the output (which may provide relevant meta-data)
+        :return: a numpy array of shape (N, D) where N=output.shape[0] is the number of data points and D is the number of
+            variables predicted by the model 
+        """
+        pass

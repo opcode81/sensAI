@@ -12,6 +12,7 @@ from typing_extensions import Protocol
 from .columngen import ColumnGenerator
 from .util import flattenArguments
 from .util.pandas import DataFrameColumnChangeTracker
+from .util.pickle import setstate
 from .util.string import orRegexGroup
 
 log = logging.getLogger(__name__)
@@ -679,23 +680,40 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
     """
     Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame
     """
-    def __init__(self, sklearnTransformer: SklearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False):
+    def __init__(self, sklearnTransformer: SklearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False,
+            arrayValued=False):
         """
         :param sklearnTransformer: the transformer instance (from sklearn.preprocessing) to use (which will be fitted & applied)
         :param columns: the set of column names to which the transformation shall apply; if None, apply it to all columns
         :param inplace: whether to apply the transformation in-place
+        :param arrayValued: whether to apply transformation not to scalar-valued columns but to a single array-valued column,
+            where the values of all arrays (which may vary in length) are to be transformed in the same way.
+            It is a requirement that either the data frames being transformed contain or a single column or that the name of a single
+            column be specified in parameter `columns`.
         """
         super().__init__()
         self.setName(f"{self.__class__.__name__}_wrapped_{sklearnTransformer.__class__.__name__}")
         self.sklearnTransformer = sklearnTransformer
         self.columns = columns
         self.inplace = inplace
+        self.arrayValued = arrayValued
+
+    def __setstate__(self, state):
+        state["arrayValued"] = state.get("arrayValued", False)
+        setstate(DFTSkLearnTransformer, self, state)
 
     def _fit(self, df: pd.DataFrame):
         cols = self.columns
         if cols is None:
             cols = df.columns
-        self.sklearnTransformer.fit(df[cols].values)
+        if not self.arrayValued:
+            values = df[cols].values
+        else:
+            if len(cols) > 1:
+                raise Exception("Array-valued case is only supported for a single column")
+            values = np.concatenate(df[cols[0]].values.flatten())
+            values = values.reshape((len(values), 1))
+        self.sklearnTransformer.fit(values)
 
     def _apply_transformer(self, df: pd.DataFrame, inverse: bool) -> pd.DataFrame:
         if not self.inplace:
@@ -703,10 +721,14 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
         cols = self.columns
         if cols is None:
             cols = df.columns
-        if inverse:
-            df[cols] = self.sklearnTransformer.inverse_transform(df[cols].values)
+        transform = (lambda x: self.sklearnTransformer.inverse_transform(x)) if inverse else lambda x: self.sklearnTransformer.transform(x)
+        if not self.arrayValued:
+            df[cols] = transform(df[cols].values)
         else:
-            df[cols] = self.sklearnTransformer.transform(df[cols].values)
+            if len(cols) > 1:
+                raise Exception("Array-valued case is only supported for a single column")
+            c = cols[0]
+            df[c] = [transform(np.array([x]).T)[:, 0] for x in df[c]]
         return df
 
     def _apply(self, df):

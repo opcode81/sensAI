@@ -3,6 +3,7 @@ from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Ite
 
 import numpy as np
 
+from dcs.sensai.util.pickle import setstate
 from .util.string import listString, ToStringMixin, dictString
 
 T = TypeVar("T")
@@ -111,26 +112,48 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
     are used for training, we take into consideration the fact that the sequences of T may overlap and thus training
     is performed on the set of unique instances.
     """
-    def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]]):
+    class FittingMode(Enum):
+        """
+        Determines how the individual vectorisers are fitted based on several sequences of objects of type T that are given.
+        If NONE, no fitting is performed, otherwise the mode determines how a single sequence of objects of type T for fitting
+        is obtained from the collection of sequences: either by forming the set of unique objects from the sequences (UNIQUE)
+        """
+        NONE = "none"  # no fitting is performed
+        UNIQUE = "unique"  # use collection of unique items
+        CONCAT = "concat"  # use collection obtained by concatenating all sequences using numpy.concatenate
+
+    def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]], fittingMode: FittingMode = FittingMode.UNIQUE):
         """
         :param vectorisers: one or more vectorisers that are to be applied. If more than one vectoriser is supplied,
             vectors are generated from input instances of type T by concatenating the results of the vectorisers in
             the order the vectorisers are given.
         """
+        self.fittingMode = fittingMode
         if isinstance(vectorisers, Vectoriser):
             self.vectorisers = [vectorisers]
         else:
             self.vectorisers = vectorisers
 
+    def __setstate__(self, state):
+        state["fittingMode"] = state.get("fittingMode", self.FittingMode.UNIQUE)
+        setstate(SequenceVectoriser, self, state)
+
     def _toStringObjectInfo(self) -> str:
         return dictString(dict(vectoriserNames=[v.getName() for v in self.vectorisers]))
 
     def fit(self, data: Iterable[Sequence[T]]):
-        uniqueItems = set()
-        for seq in data:
-            uniqueItems.update(seq)
+        if self.fittingMode == self.FittingMode.NONE:
+            return
+        if self.fittingMode == self.FittingMode.UNIQUE:
+            items = set()
+            for seq in data:
+                items.update(seq)
+        elif self.fittingMode == self.FittingMode.CONCAT:
+            items = np.concatenate(data)
+        else:
+            raise ValueError(self.fittingMode)
         for v in self.vectorisers:
-            v.fit(uniqueItems)
+            v.fit(items)
 
     def apply(self, seq: Sequence[T], transform=True) -> List[np.array]:
         """

@@ -3,8 +3,9 @@ import pandas as pd
 import seaborn as sns
 from abc import ABC, abstractmethod
 from matplotlib import pyplot as plt
-from typing import Generic, TypeVar, List, Union, Dict, Sequence
+from typing import Generic, TypeVar, List, Union, Dict, Sequence, Optional
 
+from ...util.string import ToStringMixin, dictString
 from ...util.tracking import timed
 from ...vector_model import VectorModel
 
@@ -20,7 +21,7 @@ TVectorModel = TypeVar("TVectorModel", bound=VectorModel)
 PredictionArray = Union[np.ndarray, pd.Series, pd.DataFrame, list]
 
 
-class EvalStats(Generic[TMetric]):
+class EvalStats(Generic[TMetric], ToStringMixin):
     def __init__(self, metrics: List[TMetric], additionalMetrics: List[TMetric] = None):
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
@@ -40,7 +41,6 @@ class EvalStats(Generic[TMetric]):
     def computeMetricValue(self, metric: TMetric) -> float:
         return metric.computeValueForEvalStats(self)
 
-    @timed
     def getAll(self) -> Dict[str, float]:
         """Gets a dictionary with all metrics"""
         d = {}
@@ -48,9 +48,8 @@ class EvalStats(Generic[TMetric]):
             d[metric.name] = self.computeMetricValue(metric)
         return d
 
-    def __str__(self):
-        d = self.getAll()
-        return "EvalStats[%s]" % ", ".join([f"{k}={v:4f}" for (k, v) in d.items()])
+    def _toStringObjectInfo(self) -> str:
+        return dictString(self.getAll())
 
 
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
@@ -121,14 +120,14 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
 
 class PredictionEvalStats(EvalStats[TMetric], ABC):
     """
-    Collects data for the evaluation of predicted labels (including multi-dimensional predictions)
+    Collects data for the evaluation of predicted values (including multi-dimensional predictions)
     and computes corresponding metrics
     """
-    def __init__(self, y_predicted: PredictionArray, y_true: PredictionArray,
+    def __init__(self, y_predicted: Optional[PredictionArray], y_true: Optional[PredictionArray],
                  metrics: List[TMetric], additionalMetrics: List[TMetric] = None):
         """
-        :param y_predicted: sequence of predicted labels. In case of multi-dimensional predictions, a data frame with
-            one column per dimension should be passed
+        :param y_predicted: sequence of predicted values, or, in case of multi-dimensional predictions, either a data frame with
+            one column per dimension or a nested sequence of values
         :param y_true: sequence of ground truth labels of same shape as y_predicted
         :param metrics: list of metrics to be computed on the provided data
         :param additionalMetrics: the metrics to additionally compute. This should only be provided if metrics is None
@@ -138,10 +137,10 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
         self.y_true_multidim = None
         self.y_predicted_multidim = None
         if y_predicted is not None:
-            self._addAll(y_predicted, y_true)
+            self.addAll(y_predicted, y_true)
         super().__init__(metrics, additionalMetrics=additionalMetrics)
 
-    def _add(self, y_predicted, y_true):
+    def add(self, y_predicted, y_true):
         """
         Adds a single pair of values to the evaluation
         Parameters:
@@ -151,20 +150,28 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
         self.y_true.append(y_true)
         self.y_predicted.append(y_predicted)
 
-    def _addAll(self, y_predicted, y_true):
+    def addAll(self, y_predicted: PredictionArray, y_true: PredictionArray):
         """
-        Adds multiple predicted values and the corresponding ground truth values to the evaluation
-        Parameters:
-            y_predicted: pandas.Series, array or list of predicted values or, in the case of multi-dimensional models,
-                        a pandas DataFrame (multiple series) containing predicted values
-            y_true: an object of the same type/shape as y_predicted containing the corresponding ground truth values
+        :param y_predicted: sequence of predicted values, or, in case of multi-dimensional predictions, either a data frame with
+            one column per dimension or a nested sequence of values
+        :param y_true: sequence of ground truth labels of same shape as y_predicted
         """
-        if (isinstance(y_predicted, pd.Series) or isinstance(y_predicted, list) or isinstance(y_predicted, np.ndarray)) \
-                and (isinstance(y_true, pd.Series) or isinstance(y_true, list) or isinstance(y_true, np.ndarray)):
+        def isSequence(x):
+            return isinstance(x, pd.Series) or isinstance(x, list) or isinstance(x, np.ndarray)
+
+        if isSequence(y_predicted) and isSequence(y_true):
             a, b = len(y_predicted), len(y_true)
             if a != b:
                 raise Exception(f"Lengths differ (predicted {a}, truth {b})")
-        elif isinstance(y_predicted, pd.DataFrame) and isinstance(y_true, pd.DataFrame):  # multiple time series
+            if a > 0:
+                isNestedSequence = isSequence(y_predicted[0])
+                if isNestedSequence:
+                    for y_true_i, y_predicted_i in zip(y_true, y_predicted):
+                        self.addAll(y_predicted=y_predicted_i, y_true=y_true_i)
+                else:
+                    self.y_true.extend(y_true)
+                    self.y_predicted.extend(y_predicted)
+        elif isinstance(y_predicted, pd.DataFrame) and isinstance(y_true, pd.DataFrame):
             # keep track of multidimensional data (to be used later in getEvalStatsCollection)
             y_predicted_multidim = y_predicted.values
             y_true_multidim = y_true.values
@@ -182,10 +189,13 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
             # convert to flat data for this stats object
             y_predicted = y_predicted_multidim.reshape(-1)
             y_true = y_true_multidim.reshape(-1)
+            self.y_true.extend(y_true)
+            self.y_predicted.extend(y_predicted)
         else:
             raise Exception(f"Unhandled data types: {type(y_predicted)}, {type(y_true)}")
-        self.y_true.extend(y_true)
-        self.y_predicted.extend(y_predicted)
+
+    def _toStringObjectInfo(self) -> str:
+        return f"{super()._toStringObjectInfo()}, N={len(self.y_predicted)}"
 
 
 def meanStats(evalStatsList: Sequence[EvalStats]) -> Dict[str, float]:
