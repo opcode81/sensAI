@@ -97,6 +97,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
     Note that the vectors in question are not necessarily vectors in the mathematical sense, as the information in each cell is not
     required to be numeric or uniform but can be arbitrarily complex.
     """
+    TOSTRING_INCLUDE_PREPROCESSORS = False
     _TRANSIENT_MEMBERS = ["_trainingContext"]
     _RENAMED_MEMBERS = {"checkInputColumns": "_checkInputColumns"}
 
@@ -136,6 +137,12 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
 
     def _toStringExcludePrivate(self) -> bool:
         return True
+
+    def _toStringExcludeExceptions(self) -> List[str]:
+        e = super()._toStringExcludeExceptions()
+        if self.TOSTRING_INCLUDE_PREPROCESSORS:
+            e += ["_featureGenerator", "_inputTransformerChain"]
+        return e
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
@@ -359,6 +366,12 @@ class VectorRegressionModel(VectorModel, ABC):
         self._outputTransformerChain = DataFrameTransformerChain()
         self._modelOutputVariableNames: Optional[list] = None
         self._targetTransformer: Optional[InvertibleDataFrameTransformer] = None
+
+    def _toStringExcludeExceptions(self) -> List[str]:
+        e = super()._toStringExcludeExceptions()
+        if self.TOSTRING_INCLUDE_PREPROCESSORS:
+            e += ["_targetTransformer"]
+        return e
 
     def isRegressionModel(self) -> bool:
         return True

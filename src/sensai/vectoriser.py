@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional
+from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional, Any
 
 import numpy as np
 
@@ -9,7 +9,7 @@ from .util.string import listString, ToStringMixin, dictString
 T = TypeVar("T")
 
 
-class Vectoriser(Generic[T]):
+class Vectoriser(Generic[T], ToStringMixin):
     """
     A vectoriser represents a method for the conversion of instances of some type T into
     vectors, i.e. one-dimensional (numeric) arrays, or (in the special case of a 1D vector) scalars
@@ -20,16 +20,16 @@ class Vectoriser(Generic[T]):
         :param transformer: an optional transformer (e.g. instance of one of the classes in sklearn.preprocessing)
             which can be used to transform/normalise the generated arrays
         """
-        self.f = f
+        self._fn = f
         self.transformer = transformer
         self._resultType = None
         self.name = None
 
     def __setstate__(self, state):
-        for newOptionalProperty in ["_resultType", "name"]:
-            if newOptionalProperty not in state:
-                state[newOptionalProperty] = None
-        self.__dict__ = state
+        setstate(Vectoriser, self, state, newOptionalProperties=["_resultType", "name"], renamedProperties={"f": "_fn"})
+
+    def _toStringExcludePrivate(self) -> bool:
+        return True
 
     def setName(self, name):
         self.name = name
@@ -49,7 +49,7 @@ class Vectoriser(Generic[T]):
             self.transformer.fit(np.array(values))
 
     def _f(self, x) -> np.array:
-        y = self.f(x)
+        y = self._fn(x)
 
         if self._resultType is None:
             self._resultType = self.ResultType.fromValue(y)
@@ -138,9 +138,6 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         state["fittingMode"] = state.get("fittingMode", self.FittingMode.UNIQUE)
         setstate(SequenceVectoriser, self, state)
 
-    def _toStringObjectInfo(self) -> str:
-        return dictString(dict(vectoriserNames=[v.getName() for v in self.vectorisers]))
-
     def fit(self, data: Iterable[Sequence[T]]):
         if self.fittingMode == self.FittingMode.NONE:
             return
@@ -217,6 +214,15 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
             for i in range(maxLength - len(seq)):
                 seq.append(dummyVec)
         return result, lengths
+
+    def getVectorDim(self, seq: Sequence[T]):
+        """
+        Determines the dimensionality of generated vectors by applying the vectoriser to the given sequence
+
+        :param seq: the sequence
+        :return: the number of dimensions in generated output vectors (per item)
+        """
+        return len(self.apply(seq, transform=False)[0])
 
 
 if __name__ == '__main__':

@@ -114,7 +114,7 @@ class PickleFailureDebugger:
                 log.info(f"{prefix}: is picklable")
 
 
-def setstate(cls, obj, state: Dict[str, Any]) -> None:
+def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] = None, newOptionalProperties: List[str] = None) -> None:
     """
     Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
     a parent class already implements __setstate__ and where it does not. Call this function whenever you would actually
@@ -124,7 +124,20 @@ def setstate(cls, obj, state: Dict[str, Any]) -> None:
     :param cls: the class in which you are implementing __setstate__
     :param obj: the instance of cls
     :param state: the state dictionary
+    :param renamedProperties: a mapping from old property names to new property names
+    :param newOptionalProperties: a list of names of new property names, which, if not present, shall be initialised with None
     """
+    # handle new/changed properties
+    if renamedProperties is not None:
+        for mOld, mNew in renamedProperties.items():
+            if mOld in state:
+                state[mNew] = state[mOld]
+                del state[mOld]
+    if newOptionalProperties is not None:
+        for mNew in newOptionalProperties:
+            if mNew not in state:
+                state[mNew] = None
+    # call super implementation, if any
     s = super(cls, obj)
     if hasattr(s, '__setstate__'):
         s.__setstate__(state)

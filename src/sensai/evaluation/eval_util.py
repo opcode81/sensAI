@@ -25,6 +25,7 @@ from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRe
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
 from ..data import InputOutputData
 from ..util.io import ResultWriter
+from ..util.string import prettyStringRepr
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
 
 log = logging.getLogger(__name__)
@@ -178,7 +179,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             evaluator.fitModel(model)
 
         def gatherResults(evalResultData, resultWriter, subtitlePrefix=""):
-            strEvalResults = f"{model}\n\n"
+            strEvalResults = ""
             for predictedVarName in model.getPredictedVariableNames():
                 evalStats = evalResultData.getEvalStats(predictedVarName)
                 strEvalResult = str(evalStats)
@@ -187,6 +188,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                 strEvalResults += predictedVarName + ": " + strEvalResult + "\n"
                 if writeEvalStats and resultWriter is not None:
                     resultWriter.writePickle(f"eval-stats-{predictedVarName}", evalStats)
+            strEvalResults += f"\n\n{prettyStringRepr(model)}"
             if resultWriter is not None:
                 resultWriter.writeTextFile("evaluator-results", strEvalResults)
             if createPlots:

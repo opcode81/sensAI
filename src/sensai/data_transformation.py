@@ -13,12 +13,12 @@ from .columngen import ColumnGenerator
 from .util import flattenArguments
 from .util.pandas import DataFrameColumnChangeTracker
 from .util.pickle import setstate
-from .util.string import orRegexGroup
+from .util.string import orRegexGroup, ToStringMixin
 
 log = logging.getLogger(__name__)
 
 
-class DataFrameTransformer(ABC):
+class DataFrameTransformer(ABC, ToStringMixin):
     """
     Base class for data frame transformers, i.e. objects which can transform one data frame into another
     (possibly applying the transformation to the original data frame - in-place transformation).
@@ -38,6 +38,9 @@ class DataFrameTransformer(ABC):
         d["_columnChangeTracker"] = d.get("_columnChangeTracker", None)
         d["_paramInfo"] = d.get("_paramInfo", {})
         self.__dict__ = d
+
+    def _toStringExcludePrivate(self) -> bool:
+        return True
 
     def getName(self) -> str:
         """
@@ -331,6 +334,11 @@ class DFTOneHotEncoder(DataFrameTransformer):
             state["arrayValuedResult"] = False
         super().__setstate__(state)
 
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
+        d["columns"] = self._paramInfo["columns"]
+        return d
+
     def _fit(self, df: pd.DataFrame):
         if self._columnsToEncode is None:
             self._columnsToEncode = [c for c in df.columns if re.fullmatch(self._columnNameRegex, c) is not None]
@@ -447,7 +455,7 @@ class DFTNormalisation(DataFrameTransformer):
         def toPlaceholderRule(self):
             return self.toRule(None)
 
-    class Rule:
+    class Rule(ToStringMixin):
         def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None, arrayValued=False, fit=True,
                 independentColumns=False):
             """
@@ -485,6 +493,15 @@ class DFTNormalisation(DataFrameTransformer):
                 d["independentColumns"] = False
             self.__dict__ = d
 
+        def _toStringExcludes(self) -> List[str]:
+            return super()._toStringExcludes() + ["regex"]
+
+        def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+            d = super()._toStringAdditionalEntries()
+            if self.regex is not None:
+                d["regex"] = f"'{self.regex.pattern}'"
+            return d
+
         def setRegex(self, regex: str):
             self.regex = re.compile(regex)
 
@@ -495,9 +512,6 @@ class DFTNormalisation(DataFrameTransformer):
 
         def matchingColumns(self, columns: Sequence[str]):
             return [col for col in columns if self.matches(col)]
-
-        def __str__(self):
-            return f"{self.__class__.__name__}[regex='{self.regex.pattern}', unsupported={self.unsupported}, skip={self.skip}, transformer={self.transformer}]"
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
@@ -515,6 +529,14 @@ class DFTNormalisation(DataFrameTransformer):
         self._userRules = rules
         self._defaultTransformerFactory = defaultTransformerFactory
         self._rules = None
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = super()._toStringAdditionalEntries()
+        if self._rules is not None:
+            d["rules"] = self._rules
+        else:
+            d["userRules"] = self._userRules
+        return d
 
     def _fit(self, df: pd.DataFrame):
         matchedRulesByColumn = {}
