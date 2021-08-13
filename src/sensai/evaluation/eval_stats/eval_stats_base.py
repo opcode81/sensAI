@@ -163,7 +163,8 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
             if a != b:
                 raise Exception(f"Lengths differ (predicted {a}, truth {b})")
             if a > 0:
-                isNestedSequence = isSequence(y_predicted[0])
+                firstItem = y_predicted.iloc[0] if isinstance(y_predicted, pd.Series) else y_predicted[0]
+                isNestedSequence = isSequence(firstItem)
                 if isNestedSequence:
                     for y_true_i, y_predicted_i in zip(y_true, y_predicted):
                         self.addAll(y_predicted=y_predicted_i, y_true=y_true_i)
