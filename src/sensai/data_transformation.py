@@ -336,7 +336,7 @@ class DFTOneHotEncoder(DataFrameTransformer):
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
-        d["columns"] = self._paramInfo["columns"]
+        d["columns"] = self._paramInfo.get("columns")
         return d
 
     def _fit(self, df: pd.DataFrame):

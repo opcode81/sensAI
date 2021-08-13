@@ -29,6 +29,8 @@ class ResidualFeedForwardNetwork(nn.Module):
     regularisation, but also normalises the distribution of the inputs of each layer and therefore addresses the problem
     of "internal covariate shift"[5]. The mechanism behind this is not yet fully understood (see e.g. the Wikipedia
     article on batch normalisation for further references).
+    Our batch normalisation module will normalise batches per dimension C in 2D tensors of shape (N, C) or 3D tensors
+    of shape (N, L, C).
 
     References:
 
@@ -79,7 +81,7 @@ class ResidualFeedForwardNetwork(nn.Module):
             blocks.append(block)
             prevDim = hiddenDim
 
-        self.bnOutput = nn.BatchNorm1d(self.hiddenDims[-1]) if self.useBatchNormalisation else None
+        self.bnOutput = self._BatchNorm(self.hiddenDims[-1]) if self.useBatchNormalisation else None
         self.outputLayer = nn.Linear(self.hiddenDims[-1], outputDim)
         self.blocks = nn.ModuleList(blocks)
 
@@ -95,6 +97,22 @@ class ResidualFeedForwardNetwork(nn.Module):
         x = self.outputLayer(x)
         return x
 
+    class _BatchNorm(nn.Module):
+        def __init__(self, dim):
+            super().__init__()
+            self.bn = nn.BatchNorm1d(dim)
+
+        def forward(self, x):
+            # BatchNorm1D normalises a 3D tensor per dimension C for shape (N, C, SeqLen).
+            # For a 3D tensor (N, SeqLen, C), we thus permute to obtain (N, C, SeqLen), adopting the "regular" broadcasting semantics.
+            is3D = len(x.shape) == 3
+            if is3D:
+                x = x.permute((0, 2, 1))
+            x = self.bn(x)
+            if is3D:
+                x = x.permute((0, 2, 1))
+            return x
+
     class _ResidualBlock(nn.Module, ABC):
         """
         A generic residual block which need to be specified by defining the skip path.
@@ -107,9 +125,9 @@ class ResidualFeedForwardNetwork(nn.Module):
             self.outputDim = outputDim
             self.dropout = dropout
             self.useBatchNormalisation = useBatchNormalisation
-            self.bnIn = nn.BatchNorm1d(self.inputDim) if useBatchNormalisation else None
+            self.bnIn = ResidualFeedForwardNetwork._BatchNorm(self.inputDim) if useBatchNormalisation else None
             self.denseIn = nn.Linear(self.inputDim, self.hiddenDim)
-            self.bnOut = nn.BatchNorm1d(self.hiddenDim) if useBatchNormalisation else None
+            self.bnOut = ResidualFeedForwardNetwork._BatchNorm(self.hiddenDim) if useBatchNormalisation else None
             self.denseOut = nn.Linear(self.hiddenDim, self.outputDim)
 
         def forward(self, x):
