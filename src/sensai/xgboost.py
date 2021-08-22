@@ -1,6 +1,6 @@
 import xgboost
 
-from dcs.sensai.sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
+from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
 
 class XGBGradientBosstedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
