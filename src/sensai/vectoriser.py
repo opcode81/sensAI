@@ -1,10 +1,10 @@
 from enum import Enum
-from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional, Any
+from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional
 
 import numpy as np
 
-from dcs.sensai.util.pickle import setstate
-from .util.string import listString, ToStringMixin, dictString
+from .util.pickle import setstate
+from .util.string import listString, ToStringMixin
 
 T = TypeVar("T")
 
