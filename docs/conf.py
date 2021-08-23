@@ -116,6 +116,7 @@ autodoc_mock_imports = [
     "mlflow",
     "MySQLdb",
     "catboost",
+    "xgboost",
     "clearml",
     "azure",
     "geopandas",
