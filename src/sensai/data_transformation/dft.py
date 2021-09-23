@@ -7,13 +7,13 @@ from typing import List, Sequence, Union, Dict, Callable, Any, Optional, Set
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
-from typing_extensions import Protocol
 
-from .columngen import ColumnGenerator
-from .util import flattenArguments
-from .util.pandas import DataFrameColumnChangeTracker
-from .util.pickle import setstate
-from .util.string import orRegexGroup, ToStringMixin
+from .sklearn_transformer import SklearnTransformerProtocol
+from ..columngen import ColumnGenerator
+from ..util import flattenArguments
+from ..util.pandas import DataFrameColumnChangeTracker
+from ..util.pickle import setstate
+from ..util.string import orRegexGroup, ToStringMixin
 
 log = logging.getLogger(__name__)
 
@@ -685,17 +685,6 @@ class DFTRoundFloats(RuleBasedDataFrameTransformer):
         info = super().info()
         info["decimals"] = self.decimals
         return info
-
-
-class SklearnTransformerProtocol(Protocol):
-    def inverse_transform(self, arr: np.ndarray) -> np.ndarray:
-        pass
-
-    def transform(self, arr: np.ndarray) -> np.ndarray:
-        pass
-
-    def fit(self, arr: np.ndarray):
-        pass
 
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
