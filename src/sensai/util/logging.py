@@ -12,6 +12,11 @@ LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(m
 
 
 def configureLogging(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
+    # remove any previously defined loggers
+    logger = getLogger()
+    while logger.hasHandlers():
+        logger.removeHandler(logger.handlers[0])
+
     basicConfig(level=level, format=format, stream=sys.stdout)
     getLogger("matplotlib").setLevel(lg.INFO)
     getLogger("urllib3").setLevel(lg.INFO)

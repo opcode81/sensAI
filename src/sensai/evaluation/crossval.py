@@ -1,7 +1,7 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union
+from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable
 
 import numpy as np
 
@@ -57,32 +57,63 @@ class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats,
 TCrossValData = TypeVar("TCrossValData", bound=VectorModelCrossValidationData)
 
 
-class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC):
-    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None,
-            shuffle=True):
+class CrossValidationSplitter(ABC):
+    """
+    Defines a mechanism with which to generate data splits for cross-validation
+    """
+    @abstractmethod
+    def createFolds(self, data: InputOutputData, numFolds: int) -> List[Tuple[Sequence[int], Sequence[int]]]:
         """
-        :param data: the data set
-        :param folds: the number of folds
-        :param randomSeed: the random seed to use
-        :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
-            (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
-        :param evaluatorParams: keyword parameters with which to instantiate model evaluators
-        :param shuffle: whether to shuffle the data (using randomSeed) before creating the folds
+        :param data: the data from which to obtain the folds
+        :param numFolds: the number of splits/folds
+        :return: a list containing numSplits tuples (t, e) where t and e are sequences of data point indices to use for training
+            and evaluation respectively
         """
-        self.returnTrainedModels = returnTrainedModels
-        self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
+        pass
+
+
+class CrossValidationSplitterDefault(CrossValidationSplitter):
+    def __init__(self, shuffle=True, randomSeed=42):
+        self.shuffle = shuffle
+        self.randomSeed = randomSeed
+
+    def createFolds(self, data: InputOutputData, numSplits: int) -> List[Tuple[Sequence[int], Sequence[int]]]:
         numDataPoints = len(data)
-        if shuffle:
-            indices = np.random.RandomState(randomSeed).permutation(numDataPoints)
+        numTestPoints = numDataPoints // numSplits
+        if self.shuffle:
+            indices = np.random.RandomState(self.randomSeed).permutation(numDataPoints)
         else:
             indices = list(range(numDataPoints))
-        numTestPoints = numDataPoints // folds
-        self.modelEvaluators = []
-        for i in range(folds):
+        result = []
+        for i in range(numSplits):
             testStartIdx = i * numTestPoints
             testEndIdx = testStartIdx + numTestPoints
             testIndices = indices[testStartIdx:testEndIdx]
             trainIndices = np.concatenate((indices[:testStartIdx], indices[testEndIdx:]))
+            result.append((trainIndices, testIndices))
+        return result
+
+
+class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC):
+    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None,
+            shuffle=True, splitter: CrossValidationSplitter = None):
+        """
+        :param data: the data set
+        :param folds: the number of folds
+        :param randomSeed: [if splitter is None] the random seed to use for splits
+        :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
+            (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
+        :param evaluatorParams: keyword parameters with which to instantiate model evaluators
+        :param shuffle: [if splitter is None] whether to shuffle the data (using randomSeed) before creating the folds
+        :param splitter: the splitter to use in order to generate the folds; if None, use default split (using parameters randomSeed
+            and shuffle above)
+        """
+        self.returnTrainedModels = returnTrainedModels
+        self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
+        self.modelEvaluators = []
+        if splitter is None:
+            splitter = CrossValidationSplitterDefault(shuffle=shuffle, randomSeed=randomSeed)
+        for trainIndices, testIndices in splitter.createFolds(data, folds):
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
 
     @staticmethod
@@ -104,14 +135,17 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
         evalDataList = []
         testIndicesList = []
         predictedVarNames = None
-        for evaluator in self.modelEvaluators:
+        for i, evaluator in enumerate(self.modelEvaluators, start=1):
+            log.info(f"Training and evaluating model with fold {i}/{len(self.modelEvaluators)} ...")
             modelToFit: VectorModel = copy.deepcopy(model) if self.returnTrainedModels else model
             evaluator.fitModel(modelToFit)
             if predictedVarNames is None:
                 predictedVarNames = modelToFit.getPredictedVariableNames()
             if self.returnTrainedModels:
                 trainedModels.append(modelToFit)
-            evalDataList.append(evaluator.evalModel(modelToFit))
+            evalData = evaluator.evalModel(modelToFit)
+            log.info(f"Evaluation result for fold {i}/{len(self.modelEvaluators)}: {evalData.getEvalStats()}")
+            evalDataList.append(evalData)
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 

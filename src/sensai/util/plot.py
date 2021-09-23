@@ -117,19 +117,18 @@ class HeatMapPlot(Plot):
             x_range = [min(x), max(x)]
             y_range = [min(y), max(y)]
             range = [min(x_range[0], y_range[0]), max(x_range[1], y_range[1])]
+            if commonRange:
+                x_range = y_range = range
             if diagonal:
                 plt.plot(range, range, '-', lw=0.75, label="_not in legend", color=diagonalColor, zorder=2)
             heatmap, _, _ = np.histogram2d(x, y, range=[x_range, y_range], bins=bins, density=False)
-            if commonRange:
-                extent = [range[0], range[1], range[0], range[1]]
-            else:
-                extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
+            extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
             if cmap is None:
                 cmap = HeatMapPlot.DEFAULT_CMAP_FACTORY(len(x))
             if xLabel is not None:
                 plt.xlabel(xLabel)
             if yLabel is not None:
                 plt.ylabel(yLabel)
-            return plt.imshow(heatmap.T, extent=extent, origin='lower', cmap=cmap, zorder=1, aspect="auto", **kwargs)
+            return plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation="none", cmap=cmap, zorder=1, aspect="auto", **kwargs)
 
         super().__init__(draw)

@@ -304,7 +304,7 @@ class SAState(ABC):
     def getStateRepresentation(self):
         """
         Returns a compact state representation (for the purpose of archiving a hitherto best result), which can later be
-        written to output data structures via applyStateRepresentation.
+        applied via applyStateRepresentation.
 
         :return: a compact state representation of some sort
         """
@@ -313,10 +313,12 @@ class SAState(ABC):
     @abstractmethod
     def applyStateRepresentation(self, representation):
         """
-        Writes the given state representation to a suitable object given at construction.
-        This function serves to write the results of the optimisation.
+        Applies the given state representation (as returned via `getStateRepresentation`) in order for the optimisation result to
+        be obtained by the user.
+        Note that the function does not necessarily need to change this state to reflect the representation, as its sole
+        purpose is for the optimsation result to be obtainable thereafter (it is not used during the optimisation process as such).
 
-        :param representation: a representation as returned by getStateRepresentation
+        :param representation: a representation as returned by `getStateRepresentation`
         """
         pass
 
@@ -404,13 +406,13 @@ class RelativeFrequencyCounter:
         return f"RelativeFrequencyCounter[{info}]"
 
 
-class SAChain:
+class SAChain(Generic[TSAState]):
     """Manages the progression of one state during simulated annealing"""
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, stateFactory: Callable[[random.Random], SAState], schedule: SATemperatureSchedule,
-            opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]], randomSeed, collectStats=False):
+    def __init__(self, stateFactory: Callable[[random.Random], TSAState], schedule: SATemperatureSchedule,
+            opsAndWeights: Sequence[Tuple[Callable[[TSAState], SAOperator[TSAState]], float]], randomSeed, collectStats=False):
         self.schedule = schedule
         self.r = random.Random(randomSeed)
         self.state = stateFactory(self.r)
@@ -480,8 +482,8 @@ class SAChain:
             self.log.debug(f"Step {self.stepsTaken}: cost={self.state.cost}; best cost={self.bestCost}")
 
     def logStats(self):
-        stats = {"useless moves total (None params)": f"{self.countNoneParams}/{self.stepsTaken}"}
         if self.collectStats:
+            stats = {"useless moves total (None params)": f"{self.countNoneParams}/{self.stepsTaken}"}
             for op, counter in self.operatorInapplicabilityCounters.items():
                 stats[f"useless moves of {op}"] = str(counter)
             loggedCostDeltas = self.loggedSeries["costDeltas"]
@@ -493,13 +495,14 @@ class SAChain:
                 if positiveCostDeltas:
                     stats["positive cost delta"] = f"mean={np.mean(positiveCostDeltas):.3f} +- {np.std(positiveCostDeltas):.3f}," \
                                                    f" max={np.max(positiveCostDeltas):.3f}"
-        statsJoin = "\n    " if self.collectStats else "; "
-        self.log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
+            statsJoin = "\n    "
+            self.log.info(f"Stats: {statsJoin.join([key + ': ' + value for (key, value) in stats.items()])}")
         self.log.info(f"Best solution has {self.bestCost} after {self.countBestUpdates} updates of best state")
 
     def applyBestState(self):
-        """Writes the best state found in this chain to the result object"""
+        """Applies the best state representation found in this chain to the chain's state"""
         self.state.applyStateRepresentation(self.bestStateRepr)
+        self.state.cost = self.bestCost
 
     def plotSeries(self, seriesName):
         """
@@ -524,18 +527,19 @@ class SAChain:
         return pd.Series(self.loggedSeries[seriesName])
 
 
-class SimulatedAnnealing:
+class SimulatedAnnealing(Generic[TSAState]):
     """
     The simulated annealing algorithm for discrete optimisation (cost minimisation)
     """
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule], opsAndWeights: Sequence[Tuple[Callable[[SAState], SAOperator], float]],
+    def __init__(self, scheduleFactory: Callable[[], SATemperatureSchedule],
+            opsAndWeights: Sequence[Tuple[Callable[[TSAState], SAOperator[TSAState]], float]],
             maxSteps: int = None, duration: float = None, randomSeed=42, collectStats=False):
         """
         :param scheduleFactory: a factory for the creation of the temperature schedule for the annealing process
-        :param opsAndWeights: a list of operators with associated weights (which are to indicate the non-normalised probability of chosing the associated operator)
+        :param opsAndWeights: a list of operator factories with associated weights, where weights are to indicate the (non-normalised) probability of choosing the associated operator
         :param maxSteps: the number of steps for which to run the optimisation; may be None (if not given, duration must be provided)
         :param duration: the duration, in seconds, for which to run the optimisation; may be None (if not given, maxSteps must be provided)
         :param randomSeed: the random seed to use for all random choices
@@ -555,13 +559,12 @@ class SimulatedAnnealing:
         self.collectStats = collectStats
         self._chain = None
 
-    def optimise(self, stateFactory: Callable[[random.Random], SAState]):
+    def optimise(self, stateFactory: Callable[[random.Random], TSAState]) -> TSAState:
         """
-        Applies the annealing process starting with a state created via the given factory.
-        The result of the optimisation (i.e. the final best state representation) is written via the state's
-        applyStateRepresentation method, which should write to an object the state receives at construction.
+        Applies the annealing process, starting with a state created via the given factory.
 
         :param stateFactory: the factory with which to create the (initial) state
+        :return: the state with the least-cost representation found during the optimisation applied
         """
         chain = SAChain(stateFactory, self.scheduleFactory(), opsAndWeights=self.opsAndWeights, randomSeed=self.randomSeed, collectStats=self.collectStats)
         self.log.info(f"Running simulated annealing with {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
@@ -580,8 +583,9 @@ class SimulatedAnnealing:
         chain.applyBestState()
         if self.collectStats:
             self._chain = chain
+        return chain.state
 
-    def getChain(self) -> Optional[SAChain]:
+    def getChain(self) -> Optional[SAChain[TSAState]]:
         """
         Gets the chain used by the most recently completed application (optimise call) of this object
         for the case where stats collection was enabled; the chain then contains relevant series and may be used
@@ -590,14 +594,14 @@ class SimulatedAnnealing:
         return self._chain
 
 
-class ParallelTempering:
+class ParallelTempering(Generic[TSAState]):
     """
     The parallel tempering algorithm for discrete optimisation (cost minimisation)
     """
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, numChains, opsAndWeights: Sequence[Tuple[Type[SAOperator], float]],
+    def __init__(self, numChains, opsAndWeights: Sequence[Tuple[Callable[[TSAState], SAOperator[TSAState]], float]],
                  schedule: SATemperatureSchedule = None, probabilityFunction: SAProbabilityFunction = None,
                  maxSteps: int = None, duration: float = None, randomSeed=42, logCostProgression=False):
         """
@@ -651,14 +655,12 @@ class ParallelTempering:
             self._scheduleParamStrings = ["p=%.3f" % p for p in probabilities]
             return [SAProbabilitySchedule(None, SAProbabilityFunctionConstant(p)) for p in probabilities]
 
-    def optimise(self, stateFactory: Callable[[random.Random], SAState]):
+    def optimise(self, stateFactory: Callable[[random.Random], SAState]) -> SAState:
         """
-        Applies the optimisation process starting, in each chain, with a state created via the given factory.
-        The result of the optimisation (i.e. the final best state representation) is written by calling the
-        applyStateRepresentation method on one of the states, which should write to a suitable object each
-        state receives at construction.
+        Applies the optimisation process, starting, in each chain, with a state created via the given factory.
 
         :param stateFactory: the factory with which to create the states for all chains
+        :return: the state with the least-cost representation found during the optimisation (among all parallel chains) applied
         """
         self.log.info(f"Running parallel tempering with {self.numChains} chains, {len(self.opsAndWeights)} operators for {'%d steps' % self.maxSteps if self.maxSteps is not None else '%d seconds' % self.duration} ...")
 
@@ -708,6 +710,7 @@ class ParallelTempering:
         # apply best solution
         bestChainIdx = int(np.argmin([chain.bestCost.value() for chain in chains]))
         chains[bestChainIdx].applyBestState()
+        return chains[bestChainIdx].state
 
     def plotCostProgression(self):
         if not self.logCostProgression or self._costProgressions is None:
