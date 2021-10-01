@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
-from .sklearn_transformer import SklearnTransformerProtocol
+from .sklearn_transformer import SkLearnTransformerProtocol
 from ..columngen import ColumnGenerator
 from ..util import flattenArguments
 from ..util.pandas import DataFrameColumnChangeTracker
@@ -426,12 +426,19 @@ class DFTNormalisation(DataFrameTransformer):
     """
 
     class RuleTemplate:
-        def __init__(self, skip=False, unsupported=False, transformer=None, independentColumns=False):
+        def __init__(self, skip=False, unsupported=False, transformer: SkLearnTransformerProtocol = None,
+                transformerFactory: Callable[[], SkLearnTransformerProtocol] = None, independentColumns=False):
             """
             :param skip: flag indicating whether no transformation shall be performed on all of the columns
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to all of the columns.
-                If None, the default transformer will be used (as specified in DFTNormalisation instance).
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+                for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either transformerFactory
+                or the containing instance's default factory will be used.
+                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
+                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+            :param transformerFactory: a factory for the generation of the transformer instance, which will only be applied if `transformer`
+                is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default factory will
+                be used. See `SkLearnTransformerFactoryFactory` for convenient construction options.
             :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
                 rule matches multiple columns.
             """
@@ -440,6 +447,7 @@ class DFTNormalisation(DataFrameTransformer):
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
+            self.transformerFactory = transformerFactory
             self.independentColumns = independentColumns
 
         def toRule(self, regex: Optional[str]):
@@ -450,14 +458,15 @@ class DFTNormalisation(DataFrameTransformer):
             :return: the resulting Rule
             """
             return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer,
-                independentColumns=self.independentColumns)
+                transformerFactory=self.transformerFactory, independentColumns=self.independentColumns)
 
         def toPlaceholderRule(self):
             return self.toRule(None)
 
     class Rule(ToStringMixin):
-        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer=None, arrayValued=False, fit=True,
-                independentColumns=False):
+        def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer: SkLearnTransformerProtocol = None,
+                transformerFactory: Callable[[], SkLearnTransformerProtocol] = None,
+                arrayValued=False, fit=True, independentColumns=False):
             """
             :param regex: a regular expression defining the column(s) the rule applies to.
                 If it applies to multiple columns, these columns will be normalised in the same way (using the same normalisation
@@ -465,8 +474,14 @@ class DFTNormalisation(DataFrameTransformer):
                 If None, the rule is a placeholder rule and the regex must be set later via setRegex or the rule will not be applicable.
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s).
-                If None the default transformer will be used.
+            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+                for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either transformerFactory
+                or the containing instance's default factory will be used.
+                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
+                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+            :param transformerFactory: a factory for the generation of the transformer instance, which will only be applied if `transformer`
+                is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default factory will
+                be used. See `SkLearnTransformerFactoryFactory` for convenient construction options.
             :param arrayValued: whether the column values are not scalars but arrays (of arbitrary lengths).
                 It is assumed that all entries in such arrays are to be normalised in the same way.
                 If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
@@ -474,24 +489,20 @@ class DFTNormalisation(DataFrameTransformer):
             :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
                 rule matches multiple columns.
             """
-            if skip and transformer is not None:
-                raise ValueError("skip==True while transformer is not None")
+            if skip and (transformer is not None or transformerFactory is not None):
+                raise ValueError("skip==True while transformer/transformerFactory is not None")
             self.regex = re.compile(regex) if regex is not None else None
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
+            self.transformerFactory = transformerFactory
             self.arrayValued = arrayValued
             self.fit = fit
             self.independentColumns = independentColumns
 
-        def __setstate__(self, d):
-            if "arrayValued" not in d:
-                d["arrayValued"] = False
-            if "fit" not in d:
-                d["fit"] = True
-            if "independentColumns" not in d:
-                d["independentColumns"] = False
-            self.__dict__ = d
+        def __setstate__(self, state):
+            setstate(DFTNormalisation.Rule, self, state, newDefaultProperties=dict(arrayValued=False, fit=True, independentColumns=False,
+                    transformerFactory=None))
 
         def _toStringExcludes(self) -> List[str]:
             return super()._toStringExcludes() + ["regex"]
@@ -553,9 +564,12 @@ class DFTNormalisation(DataFrameTransformer):
                     raise Exception(f"Normalisation of columns {matchingColumns} is unsupported according to {rule}. If you want to make use of these columns, transform them into a supported column before applying {self.__class__.__name__}.")
                 if not rule.skip:
                     if rule.transformer is None:
-                        if self._defaultTransformerFactory is None:
-                            raise Exception(f"No transformer to fit: {rule} defines no transformer and instance has no transformer factory")
-                        rule.transformer = self._defaultTransformerFactory()
+                        if rule.transformerFactory is not None:
+                            rule.transformer = rule.transformerFactory()
+                        else:
+                            if self._defaultTransformerFactory is None:
+                                raise Exception(f"No transformer to fit: {rule} defines no transformer and instance has no transformer factory")
+                            rule.transformer = self._defaultTransformerFactory()
                     if rule.fit:
                         # fit transformer
                         applicableDF = df[sorted(matchingColumns)]
@@ -691,7 +705,7 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
     """
     Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame
     """
-    def __init__(self, sklearnTransformer: SklearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False,
+    def __init__(self, sklearnTransformer: SkLearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False,
             arrayValued=False):
         """
         :param sklearnTransformer: the transformer instance (from sklearn.preprocessing) to use (which will be fitted & applied)
