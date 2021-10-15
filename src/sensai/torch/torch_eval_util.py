@@ -1,10 +1,10 @@
 from typing import Union
 
-from dcs.sensai.evaluation import RegressionEvaluationUtil
-from dcs.sensai.evaluation.crossval import VectorModelCrossValidationData
-from dcs.sensai.evaluation.eval_util import TEvalData, TCrossValData
-from dcs.sensai.evaluation.evaluator import VectorModelEvaluationData
-from dcs.sensai.torch import TorchVectorRegressionModel
+from ..evaluation import RegressionEvaluationUtil
+from ..evaluation.crossval import VectorModelCrossValidationData
+from ..evaluation.eval_util import TEvalData, TCrossValData
+from ..evaluation.evaluator import VectorModelEvaluationData
+from . import TorchVectorRegressionModel
 
 
 class TorchVectorRegressionModelEvaluationUtil(RegressionEvaluationUtil):
