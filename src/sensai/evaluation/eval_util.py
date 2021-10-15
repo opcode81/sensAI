@@ -198,7 +198,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         gatherResults(evalResultData, resultWriter)
         if additionalEvaluationOnTrainingData:
             evalResultDataTrain = evaluator.evalModel(model, onTrainingData=True)
-            additionalResultWriter = resultWriter.childWithAddedPrefix("-onTrain-") if resultWriter is not None else None
+            additionalResultWriter = resultWriter.childWithAddedPrefix("onTrain-") if resultWriter is not None else None
             gatherResults(evalResultDataTrain, additionalResultWriter, subtitlePrefix="[onTrain] ")
 
         return evalResultData

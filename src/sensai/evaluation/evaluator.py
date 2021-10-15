@@ -1,5 +1,4 @@
 import logging
-import time
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional
 
@@ -60,7 +59,11 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         self.inputData = inputData
         self.evalStatsByVarName = statsDict
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
-        self.modelName = model.getName()
+        self.model = model
+
+    @property
+    def modelName(self):
+        return self.model.getName()
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -103,7 +106,7 @@ TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
 
 class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
-    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter: DataSplitter = None,
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter: DataSplitter = None,
             testFraction: float = None, randomSeed=42, shuffle=True):
         """
         Constructs an evaluator with test and training data.
@@ -161,7 +164,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
-    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
             additionalMetrics: Sequence[RegressionMetric] = None):
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.additionalMetrics = additionalMetrics
@@ -204,7 +207,7 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
-    def __init__(self, data: InputOutputData, testData: InputOutputData = None, dataSplitter=None, testFraction=None,
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter=None, testFraction=None,
             randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
         super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
         self.computeProbabilities = computeProbabilities

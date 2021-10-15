@@ -265,10 +265,9 @@ class GridSearch(TrackingMixin):
                 return None
         cls.log.info(f"Evaluating {params}")
         model = modelFactory(**params)
-        # TODO or not TODO: for some evaluators additional kwargs can be passed, e.g. onTrainingData
         values = metricsEvaluator.computeMetrics(model)
         if modelSaveDirectory is not None:
-            filename = f"{gridSearchName}_{model.__class__.__name__}_{combinationIdx}_{uuid.uuid4()}.pickle"
+            filename = f"{gridSearchName}_{combinationIdx}.pickle"
             log.info(f"Saving trained model to {filename} ...")
             model.save(os.path.join(modelSaveDirectory, filename))
             values["filename"] = filename

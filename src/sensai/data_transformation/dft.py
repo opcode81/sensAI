@@ -703,7 +703,8 @@ class DFTRoundFloats(RuleBasedDataFrameTransformer):
 
 class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
     """
-    Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame
+    Applies a transformer from sklearn.preprocessing to (a subset of the columns of) a data frame.
+    If multiple columns are transformed, they are transformed independently (i.e. each column uses a separately trained transformation).
     """
     def __init__(self, sklearnTransformer: SkLearnTransformerProtocol, columns: Optional[List[str]] = None, inplace=False,
             arrayValued=False):
@@ -711,10 +712,9 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
         :param sklearnTransformer: the transformer instance (from sklearn.preprocessing) to use (which will be fitted & applied)
         :param columns: the set of column names to which the transformation shall apply; if None, apply it to all columns
         :param inplace: whether to apply the transformation in-place
-        :param arrayValued: whether to apply transformation not to scalar-valued columns but to a single array-valued column,
-            where the values of all arrays (which may vary in length) are to be transformed in the same way.
-            It is a requirement that either the data frames being transformed contain or a single column or that the name of a single
-            column be specified in parameter `columns`.
+        :param arrayValued: whether to apply transformation not to scalar-valued columns but to one or more array-valued columns,
+            where the values of all arrays within a column (which may vary in length) are to be transformed in the same way.
+            If multiple columns are transformed, then the arrays belonging to a single row must all have the same length.
         """
         super().__init__()
         self.setName(f"{self.__class__.__name__}_wrapped_{sklearnTransformer.__class__.__name__}")
@@ -734,10 +734,15 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
         if not self.arrayValued:
             values = df[cols].values
         else:
-            if len(cols) > 1:
-                raise Exception("Array-valued case is only supported for a single column")
-            values = np.concatenate(df[cols[0]].values.flatten())
-            values = values.reshape((len(values), 1))
+            if len(cols) == 1:
+                values = np.concatenate(df[cols[0]].values.flatten())
+                values = values.reshape((len(values), 1))
+            else:
+                flatColArrays = [np.concatenate(df[col].values.flatten()) for col in cols]
+                lengths = [len(a) for a in flatColArrays]
+                if len(set(lengths)) != 1:
+                    raise ValueError(f"Columns {cols} do not contain the same number of values: {lengths}")
+                values = np.stack(flatColArrays, axis=1)
         self.sklearnTransformer.fit(values)
 
     def _apply_transformer(self, df: pd.DataFrame, inverse: bool) -> pd.DataFrame:
@@ -750,10 +755,13 @@ class DFTSkLearnTransformer(InvertibleDataFrameTransformer):
         if not self.arrayValued:
             df[cols] = transform(df[cols].values)
         else:
-            if len(cols) > 1:
-                raise Exception("Array-valued case is only supported for a single column")
-            c = cols[0]
-            df[c] = [transform(np.array([x]).T)[:, 0] for x in df[c]]
+            if len(cols) == 1:
+                c = cols[0]
+                df[c] = [transform(np.array([x]).T)[:, 0] for x in df[c]]
+            else:
+                transformedValues = [transform(np.stack(row, axis=1)) for row in df.values]
+                for iCol, col in enumerate(cols):
+                    df[col] = [row[:, iCol] for row in transformedValues]
         return df
 
     def _apply(self, df):

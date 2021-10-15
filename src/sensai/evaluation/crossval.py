@@ -1,7 +1,7 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable
+from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable, Optional
 
 import numpy as np
 
@@ -24,7 +24,7 @@ TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
 
 class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats, TEvalStatsCollection]):
-    def __init__(self, trainedModels: List[TModel], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
+    def __init__(self, trainedModels: Optional[List[TModel]], evalDataList: List[TEvalData], predictedVarNames: List[str], testIndicesList=None):
         self.predictedVarNames = predictedVarNames
         self.trainedModels = trainedModels
         self.evalDataList = evalDataList

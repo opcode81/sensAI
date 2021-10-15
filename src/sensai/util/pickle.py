@@ -151,7 +151,7 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
         obj.__dict__ = state
 
 
-def getstate(cls, obj) -> Dict[str, Any]:
+def getstate(cls, obj, transientProperties: List[str] = None) -> Dict[str, Any]:
     """
     Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
     a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually
@@ -160,10 +160,16 @@ def getstate(cls, obj) -> Dict[str, Any]:
 
     :param cls: the class in which you are implementing __getstate__
     :param obj: the instance of cls
+    :param transientProperties: a list of transient properties which shall not be saved (will be set to None)
     :return: the state dictionary, which may be modified by the receiver
     """
     s = super(cls, obj)
     if hasattr(s, '__getstate__'):
-        return s.__getstate__()
+        d = s.__getstate__()
     else:
-        return obj.__dict__.copy()
+        d = obj.__dict__.copy()
+    if transientProperties is not None:
+        for p in transientProperties:
+            if p in d:
+                d[p] = None
+    return d

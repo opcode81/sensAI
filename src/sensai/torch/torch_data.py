@@ -231,14 +231,16 @@ class VectorDataUtil(DataUtil):
             # the splitter to achieve any desired split).
             splitter = DataFrameSplitterFractional(shuffle=False)
         indices_A, indices_B = splitter.computeSplitIndices(self.inputs, fractionalSizeOfFirstSet)
-        A = self._inputOutputPairs(indices_A)
-        B = self._inputOutputPairs(indices_B)
+        A = self._inputOutputPairsForIndices(indices_A)
+        B = self._inputOutputPairsForIndices(indices_B)
         return A, B
 
-    def _inputOutputPairs(self, indices):
+    def _inputOutputPairsForIndices(self, indices):
         inputDF = self.inputs.iloc[indices]
         outputDF = self.outputs.iloc[indices]
+        return self._inputOutputPairsForDataFrames(inputDF, outputDF)
 
+    def _inputOutputPairsForDataFrames(self, inputDF, outputDF):
         # apply normalisation (if any)
         if self.inputVectorDataScaler.normalisationMode != normalisation.NormalisationMode.NONE:
             inputDF = pd.DataFrame(self.inputVectorDataScaler.getNormalisedArray(inputDF), columns=inputDF.columns, index=inputDF.index)
@@ -378,6 +380,12 @@ class TensorTuple:
             return self.tensors[0]
         else:
             return self.tuple()
+
+    def concat(self, other: "TensorTuple") -> "TensorTuple":
+        if len(self.tensors) != len(other.tensors):
+            raise ValueError("Tensor tuples are incompatible")
+        tensors = [torch.cat([a, b], dim=0) for a, b in zip(self.tensors, other.tensors)]
+        return TensorTuple(tensors)
 
 
 class TorchDataSetFromTensors(TorchDataSet):

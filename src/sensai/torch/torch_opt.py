@@ -6,15 +6,15 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional
+from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional, Dict
 
 import matplotlib.figure
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from matplotlib import pyplot as plt
 from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
@@ -132,7 +132,7 @@ class NNLossEvaluator(ABC):
             pass
 
         @abstractmethod
-        def getEpochTrainLoss(self) -> torch.Tensor:
+        def getEpochTrainLoss(self) -> float:
             """
             :return: the epoch's overall training loss (as obtained by collecting data from individual training
                 batch data passed to computeTrainBatchLoss)
@@ -154,7 +154,7 @@ class NNLossEvaluator(ABC):
             pass
 
         @abstractmethod
-        def getValidationMetrics(self) -> OrderedDict:
+        def getValidationMetrics(self) -> Dict[str, float]:
             pass
 
     @abstractmethod
@@ -206,7 +206,7 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
             self.totalLoss += loss.item()
             return loss
 
-        def getEpochTrainLoss(self):
+        def getEpochTrainLoss(self) -> float:
             return self.totalLoss / self.numSamples
 
         def processValidationBatch(self, modelOutput, groundTruth, X, Y):
@@ -215,7 +215,7 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
                 self.validationLossEvaluator.startValidationCollection(self.validationGroundTruthShape)
             self.validationLossEvaluator.processValidationResultBatch(modelOutput, groundTruth)
 
-        def getValidationMetrics(self) -> OrderedDict:
+        def getValidationMetrics(self) -> Dict[str, float]:
             return self.validationLossEvaluator.endValidationCollection()
 
     def startEvaluation(self, cuda: bool) -> Evaluation:
@@ -789,8 +789,8 @@ class NNOptimiser:
 
 
 class TrainingInfo:
-    def __init__(self, bestEpoch: int = None, log: List[str] = None, trainingLossSequence: Sequence[float] = None, validationMetricSequence:
-    Sequence[float] = None, totalEpochs=None):
+    def __init__(self, bestEpoch: int = None, log: List[str] = None, trainingLossSequence: Sequence[float] = None,
+            validationMetricSequence: Sequence[float] = None, totalEpochs=None):
         self.validationMetricSequence = validationMetricSequence
         self.trainingLossSequence = trainingLossSequence
         self.log = log
@@ -803,15 +803,35 @@ class TrainingInfo:
         self.__dict__ = state
 
     def getTrainingLossSeries(self) -> pd.Series:
-        return pd.Series(self.trainingLossSequence, name="training loss")
+        return self._createSeriesWithOneBasedIndex(self.trainingLossSequence, name="training loss")
 
     def getValidationMetricSeries(self) -> pd.Series:
-        return pd.Series(self.validationMetricSequence, name="validation metric")
+        return self._createSeriesWithOneBasedIndex(self.validationMetricSequence, name="validation metric")
+
+    def _createSeriesWithOneBasedIndex(self, sequence: Sequence, name: str):
+        series = pd.Series(sequence, name=name)
+        series.index += 1
+        return series
 
     def plotAll(self) -> matplotlib.figure.Figure:
         """
         Plots both the sequence of training loss values and the sequence of validation metric values
         """
-        fig = plt.figure()
-        pd.concat([self.getTrainingLossSeries(), self.getValidationMetricSeries()], axis=1).plot()
+        ts = self.getTrainingLossSeries()
+        vs = self.getValidationMetricSeries()
+
+        fig, primaryAx = plt.subplots(1, 1)
+        secondaryAx = primaryAx.twinx()
+
+        trainingLine = primaryAx.plot(ts, color='blue')
+        validationLine = secondaryAx.plot(vs, color='orange')
+        bestEpocLine = primaryAx.axvline(self.bestEpoch, color='black', linestyle='dashed')
+
+        primaryAx.set_xlabel("epoch")
+        primaryAx.set_ylabel(ts.name)
+        secondaryAx.set_ylabel(vs.name)
+
+        primaryAx.legend(trainingLine + validationLine + [bestEpocLine], [ts.name, vs.name, "best epoch"])
+        plt.tight_layout()
+
         return fig
