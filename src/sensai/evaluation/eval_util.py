@@ -223,7 +223,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         resultWriter = self._resultWriterForModel(resultWriter, model)
         crossValidator = createVectorModelCrossValidator(self.inputOutputData, model=model, **self.crossValidatorParams)
         crossValidationData = crossValidator.evalModel(model)
-        strEvalResults = str(crossValidationData.getEvalStatsCollection().aggStats())
+        strEvalResults = "\n".join([str(crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()) for varName in crossValidationData.predictedVarNames])
         if logResults:
             log.info(f"Cross-validation results: {strEvalResults}")
         if resultWriter is not None:

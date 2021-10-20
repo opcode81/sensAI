@@ -35,22 +35,25 @@ def configureLogging(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     pd.set_option('display.max_colwidth', 255)
 
 
-_registeredFileLoggers: List[Tuple[lg.Handler, str]] = []
+_fileLoggerPaths: List[str] = []
+_isAtExitReportFileLoggerRegistered = False
 
 
 def _atExitReportFileLogger():
-    for handler, path in _registeredFileLoggers:
-        if isLogHandlerActive(handler):
-            log.info(f"Log was saved to {path}")
+    for path in _fileLoggerPaths:
+        print(f"A log file was saved to {path}")
 
 
 def addFileLogger(path):
+    global _isAtExitReportFileLoggerRegistered
     log.info(f"Logging to {path} ...")
     handler = FileHandler(path)
     handler.setFormatter(Formatter(LOG_DEFAULT_FORMAT))
     Logger.root.addHandler(handler)
-    _registeredFileLoggers.append((handler, path))
-    atexit.register(_atExitReportFileLogger)
+    _fileLoggerPaths.append(path)
+    if not _isAtExitReportFileLoggerRegistered:
+        atexit.register(_atExitReportFileLogger)
+        _isAtExitReportFileLoggerRegistered = True
 
 
 class StopWatch:

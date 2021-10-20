@@ -10,7 +10,7 @@ from .eval_stats.eval_stats_classification import ClassificationEvalStats, Class
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
 from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
     VectorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
-    MetricsDictProvider
+    MetricsDictProvider, VectorModelEvaluator
 from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
@@ -123,7 +123,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
         return cons(data, folds=folds, **kwargs)
 
     @abstractmethod
-    def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
+    def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData) -> VectorModelEvaluator:
         pass
 
     @abstractmethod
@@ -144,7 +144,8 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             if self.returnTrainedModels:
                 trainedModels.append(modelToFit)
             evalData = evaluator.evalModel(modelToFit)
-            log.info(f"Evaluation result for fold {i}/{len(self.modelEvaluators)}: {evalData.getEvalStats()}")
+            for predictedVarName in predictedVarNames:
+                log.info(f"Evaluation result for {predictedVarName}, fold {i}/{len(self.modelEvaluators)}: {evalData.getEvalStats(predictedVarName=predictedVarName)}")
             evalDataList.append(evalData)
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)

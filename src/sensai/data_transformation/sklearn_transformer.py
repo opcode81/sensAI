@@ -68,7 +68,8 @@ class SkLearnTransformerFactoryFactory:
         """
         :param quantile_range: a tuple (a, b) where a and b > a (both in range 0..100) are the percentiles which determine the scaling.
             Specifically, each value (after centering) is scaled with 1.0/(vb-va) where va and vb are the values corresponding to the
-            percentiles a and b respectively, such that va will be transformed into -0.5 and vb into 0.5.
+            percentiles a and b respectively, such that, in the symmetric case where va and vb are equally far from the centre,
+            va will be transformed into -0.5 and vb into 0.5.
             In a uniformly distributed data set ranging from `min` to `max`, the default values of a=25 and b=75 will thus result in
             `min` being mapped to -1 and `max` being mapped to 1.
         :param with_scaling: whether to apply scaling based on quantile_range.
