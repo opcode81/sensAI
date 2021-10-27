@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, Sequence, Generator, Optional, Union, List, Iterator
 
+import sklearn.preprocessing
 from torch.autograd import Variable
 import pandas as pd
 import numpy as np
@@ -8,7 +9,9 @@ import torch
 
 from .. import normalisation
 from ..data import DataFrameSplitter, DataFrameSplitterFractional
+from ..data_transformation import DFTSkLearnTransformer
 from ..util.dtype import toFloatArray
+from ..util.pickle import setstate
 
 
 def toTensor(d: Union[torch.Tensor, np.ndarray, list], cuda=False):
@@ -51,36 +54,51 @@ class TensorScaler(ABC):
         pass
 
 
-class TensorScalerFromVectorDataScaler(TensorScaler):
-    def __init__(self, vectorDataScaler: normalisation.VectorDataScaler, cuda: bool):
-        self.scale = vectorDataScaler.scale
-        if self.scale is not None:
-            self.scale = torch.from_numpy(vectorDataScaler.scale).float()
-        self.translate = vectorDataScaler.translate
-        if self.translate is not None:
-            self.translate = torch.from_numpy(vectorDataScaler.translate).float()
-        if cuda:
-            self.cuda()
+class TensorScalerCentreAndScale(TensorScaler):
+    def __init__(self, centre: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None):
+        self.centre = centre
+        self.scale = scale
 
     def cuda(self):
         if self.scale is not None:
             self.scale = self.scale.cuda()
-        if self.translate is not None:
-            self.translate = self.translate.cuda()
+        if self.centre is not None:
+            self.centre = self.centre.cuda()
 
     def normalise(self, tensor: torch.Tensor) -> torch.Tensor:
-        if self.translate is not None:
-            tensor -= self.translate
+        if self.centre is not None:
+            tensor -= self.centre
         if self.scale is not None:
-            tensor /= self.scale
+            tensor *= self.scale
         return tensor
 
     def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
         if self.scale is not None:
-            tensor *= self.scale
-        if self.translate is not None:
-            tensor += self.translate
+            tensor /= self.scale
+        if self.centre is not None:
+            tensor += self.centre
         return tensor
+
+
+class TensorScalerFromVectorDataScaler(TensorScalerCentreAndScale):
+    def __init__(self, vectorDataScaler: normalisation.VectorDataScaler, cuda: bool):
+        if vectorDataScaler.scale is not None:
+            invScale = torch.from_numpy(vectorDataScaler.scale).float()
+            scale = 1.0 / invScale
+        else:
+            scale = None
+        centre = vectorDataScaler.translate
+        if centre is not None:
+            centre = torch.from_numpy(vectorDataScaler.translate).float()
+        super().__init__(centre=centre, scale=scale)
+        if cuda:
+            self.cuda()
+
+    def __setstate__(self, state):
+        if "translate" in state:
+            if state["scale"] is not None:  # old representation where scale is actually inverse scale
+                state["scale"] = 1.0 / state["scale"]
+        setstate(TensorScalerFromVectorDataScaler, self, state, renamedProperties={"translate": "centre"})
 
 
 class TensorScalerIdentity(TensorScaler):
@@ -92,6 +110,24 @@ class TensorScalerIdentity(TensorScaler):
 
     def denormalise(self, tensor: torch.Tensor) -> torch.Tensor:
         return tensor
+
+
+class TensorScalerFromDFTSkLearnTransformer(TensorScalerCentreAndScale):
+    def __init__(self, dft: DFTSkLearnTransformer):
+        trans = dft.sklearnTransformer
+        if isinstance(trans, sklearn.preprocessing.RobustScaler):
+            centre = trans.center_
+            scale = trans.scale_
+            isReciprocalScale = True
+        else:
+            raise ValueError(f"sklearn transformer of type '{trans.__class__}' is unhandled")
+        if centre is not None:
+            centre = torch.from_numpy(centre).float()
+        if scale is not None:
+            scale = torch.from_numpy(scale).float()
+            if isReciprocalScale:
+                scale = 1.0 / scale
+        super().__init__(centre=centre, scale=scale)
 
 
 class Tensoriser(ABC):
@@ -467,3 +503,9 @@ class TorchDataSetProviderFromDataUtil(TorchDataSetProvider):
     def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
         (x1, y1), (x2, y2) = self.dataUtil.splitInputOutputPairs(fractionalSizeOfFirstSet)
         return TorchDataSetFromTensors(x1, y1, self.cuda), TorchDataSetFromTensors(x2, y2, self.cuda)
+
+
+class TensorTransformer(ABC):
+    @abstractmethod
+    def transform(self, t: torch.Tensor) -> torch.Tensor:
+        pass

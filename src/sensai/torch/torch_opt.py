@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
-    TensorScalerIdentity
+    TensorScalerIdentity, TensorTransformer
 from .torch_enums import ClassificationOutputMode
 from ..util.string import ToStringMixin
 
@@ -183,12 +183,15 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
     (averaging appropriately internally).
     """
     class Evaluation(NNLossEvaluator.Evaluation):
-        def __init__(self, criterion, validationLossEvaluator: "NNLossEvaluatorFixedDim.ValidationLossEvaluator"):
+        def __init__(self, criterion, validationLossEvaluator: "NNLossEvaluatorFixedDim.ValidationLossEvaluator",
+                outputDimWeights: torch.Tensor = None):
+            self.outputDimWeights = outputDimWeights
+            self.outputDimWeightSum = torch.sum(outputDimWeights) if outputDimWeights is not None else None
             self.validationLossEvaluator = validationLossEvaluator
             self.criterion = criterion
             self.totalLoss = None
             self.numSamples = None
-            self.numOutputsPerDataPoint = None
+            self.numOutputsPerDataPoint: Optional[int] = None
             self.validationGroundTruthShape = None
 
         def startEpoch(self):
@@ -197,14 +200,27 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
             self.validationGroundTruthShape = None
 
         def computeTrainBatchLoss(self, modelOutput, groundTruth, X, Y) -> torch.Tensor:
+            # size of modelOutput and groundTruth: (batchSize, outputDim=numOutputsPerDataPoint)
             if self.numOutputsPerDataPoint is None:
                 outputShape = Y.shape[1:]
                 self.numOutputsPerDataPoint = functools.reduce(lambda x, y: x * y, outputShape, 1)
-            loss = self.criterion(modelOutput, groundTruth)
-            numDataPointsInBatch = Y.size(0)
-            self.numSamples += numDataPointsInBatch * self.numOutputsPerDataPoint
-            self.totalLoss += loss.item()
-            return loss
+                assert self.outputDimWeights is None or len(self.outputDimWeights) == self.numOutputsPerDataPoint
+            numDataPointsInBatch = Y.shape[0]
+            if self.outputDimWeights is None:
+                # treat all dimensions as equal, applying criterion to entire tensors
+                loss = self.criterion(modelOutput, groundTruth)
+                self.numSamples += numDataPointsInBatch * self.numOutputsPerDataPoint
+                self.totalLoss += loss.item()
+                return loss
+            else:
+                # compute loss per dimension and return weighted loss
+                lossPerDim = torch.zeros(self.numOutputsPerDataPoint, device=modelOutput.device, dtype=torch.float)
+                for o in range(self.numOutputsPerDataPoint):
+                    lossPerDim[o] = self.criterion(modelOutput[:, o], groundTruth[:, o])
+                weightedLoss = (lossPerDim * self.outputDimWeights).sum() / self.outputDimWeightSum
+                self.numSamples += numDataPointsInBatch
+                self.totalLoss += weightedLoss.item()
+                return weightedLoss
 
         def getEpochTrainLoss(self) -> float:
             return self.totalLoss / self.numSamples
@@ -220,9 +236,13 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
 
     def startEvaluation(self, cuda: bool) -> Evaluation:
         criterion = self.getTrainingCriterion()
+        outputDimWeightsArray = self.getOutputDimWeights()
+        outputDimWeightsTensor = torch.from_numpy(outputDimWeightsArray).float() if outputDimWeightsArray is not None else None
         if cuda:
             criterion = criterion.cuda()
-        return self.Evaluation(criterion, self.createValidationLossEvaluator(cuda))
+            if outputDimWeightsTensor is not None:
+                outputDimWeightsTensor = outputDimWeightsTensor.cuda()
+        return self.Evaluation(criterion, self.createValidationLossEvaluator(cuda), outputDimWeights=outputDimWeightsTensor)
 
     @abstractmethod
     def getTrainingCriterion(self) -> nn.Module:
@@ -230,6 +250,10 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
         Gets the optimisation criterion (loss function) for training.
         Standard implementations are available in torch.nn (torch.nn.MSELoss, torch.nn.CrossEntropyLoss, etc.).
         """
+        pass
+
+    @abstractmethod
+    def getOutputDimWeights(self) -> Optional[np.ndarray]:
         pass
 
     @abstractmethod
@@ -282,7 +306,7 @@ class NNLossEvaluatorFixedDim(NNLossEvaluator, ABC):
             pass
 
 
-class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
+class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim, ToStringMixin):
     """A loss evaluator for (multi-variate) regression."""
 
     class LossFunction(Enum):
@@ -291,7 +315,22 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
         MSELOSS = "MSELoss"
         SMOOTHL1LOSS = "SmoothL1Loss"
 
-    def __init__(self, lossFn: LossFunction = LossFunction.L2LOSS):
+    def __init__(self, lossFn: LossFunction = LossFunction.L2LOSS, validationTensorTransformer: Optional[TensorTransformer] = None,
+            outputDimWeights: Sequence[float] = None, applyOutputDimWeightsInValidation=True):
+        """
+        :param lossFn: the loss function to use
+        :param validationTensorTransformer: a transformer which is to be applied to validation tensors (both model outputs and ground truth)
+            prior to computing the validation metrics
+        :param outputDimWeights: vector of weights to apply to then mean loss per output dimension, i.e. for the case where for each data point,
+            the model produces n output dimensions, the mean loss for the i-th dimension is to be computed separately and be scaled with
+            the weight, and the overall loss returned is the weighted average. The weights need not sum to 1 (normalisation is applied).
+        :param applyOutputDimWeightsInValidation: whether output dimension weights are also to be applied to to the metrics computed
+            for validation. Note that this may not be possible if a validationTensorTransformer which changes the output dimensions is
+            used.
+        """
+        self.validationTensorTransformer = validationTensorTransformer
+        self.outputDimWeights = np.array(outputDimWeights) if outputDimWeights is not None else None
+        self.applyOutputDimWeightsInValidation = applyOutputDimWeightsInValidation
         if lossFn is None:
             lossFn = self.LossFunction.L2LOSS
         try:
@@ -299,11 +338,9 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
         except ValueError:
             raise Exception(f"The loss function '{lossFn}' is not supported. Available options are: {[e.value for e in self.LossFunction]}")
 
-    def __str__(self):
-        return f"{self.__class__.__name__}[{self.lossFn}]"
-
     def createValidationLossEvaluator(self, cuda):
-        return self.ValidationLossEvaluator(cuda)
+        return self.ValidationLossEvaluator(cuda, self.validationTensorTransformer, self.outputDimWeights,
+            self.applyOutputDimWeightsInValidation)
 
     def getTrainingCriterion(self):
         if self.lossFn is self.LossFunction.L1LOSS:
@@ -316,8 +353,15 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
             raise AssertionError(f"Loss function {self.lossFn} defined but instantiation not implemented.")
         return criterion
 
+    def getOutputDimWeights(self) -> Optional[np.ndarray]:
+        return self.outputDimWeights
+
     class ValidationLossEvaluator(NNLossEvaluatorFixedDim.ValidationLossEvaluator):
-        def __init__(self, cuda: bool):
+        def __init__(self, cuda: bool, validationTensorTransformer: Optional[TensorTransformer], outputDimWeights: np.ndarray,
+                applyOutputDimWeights: bool):
+            self.validationTensorTransformer = validationTensorTransformer
+            self.outputDimWeights = outputDimWeights
+            self.applyOutputDimWeights = applyOutputDimWeights
             self.total_loss_l1 = None
             self.total_loss_l2 = None
             self.outputDims = None
@@ -327,16 +371,29 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
             if cuda:
                 self.evaluateL1 = self.evaluateL1.cuda()
                 self.evaluateL2 = self.evaluateL2.cuda()
+            self.beginNewValidationCollection: Optional[bool] = None
 
         def startValidationCollection(self, groundTruthShape):
             if len(groundTruthShape) != 1:
                 raise ValueError("Outputs that are not vectors are currently unsupported")
-            self.outputDims = groundTruthShape[-1]
-            self.total_loss_l1 = np.zeros(self.outputDims)
-            self.total_loss_l2 = np.zeros(self.outputDims)
-            self.allTrueOutputs = None
+            self.beginNewValidationCollection = True
 
         def processValidationResultBatch(self, output, groundTruth):
+            # apply tensor transformer (if any)
+            if self.validationTensorTransformer is not None:
+                output = self.validationTensorTransformer.transform(output)
+                groundTruth = self.validationTensorTransformer.transform(groundTruth)
+
+            # check if new collection
+            if self.beginNewValidationCollection:
+                self.outputDims = groundTruth.shape[-1]
+                self.total_loss_l1 = np.zeros(self.outputDims)
+                self.total_loss_l2 = np.zeros(self.outputDims)
+                self.allTrueOutputs = None
+                self.beginNewValidationCollection = False
+
+            assert len(output.shape) == 2 and len(groundTruth.shape) == 2
+
             # obtain series of outputs per output dimension: (batch_size, output_size) -> (output_size, batch_size)
             predictedOutput = output.permute(1, 0)
             trueOutput = groundTruth.permute(1, 0)
@@ -370,7 +427,13 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim):
                 rrse[i] = np.sqrt(mse[i]) / np.sqrt(
                     refModelSumSquaredErrors / numSamples) if refModelSumSquaredErrors != 0 else np.inf
 
-            metrics = OrderedDict([("RRSE", np.mean(rrse)), ("RAE", np.mean(rae)), ("MSE", np.mean(mse)), ("MAE", np.mean(mae))])
+            def mean(x):
+                if self.applyOutputDimWeights:
+                    return np.average(x, weights=self.outputDimWeights)
+                else:
+                    return np.mean(x)
+
+            metrics = OrderedDict([("RRSE", mean(rrse)), ("RAE", mean(rae)), ("MSE", mean(mse)), ("MAE", mean(mae))])
             return metrics
 
     def getValidationMetricName(self):
@@ -423,6 +486,9 @@ class NNLossEvaluatorClassification(NNLossEvaluatorFixedDim):
 
     def getTrainingCriterion(self):
         return self.lossFn.createCriterion()
+
+    def getOutputDimWeights(self) -> Optional[np.ndarray]:
+        return None
 
     class ValidationLossEvaluator(NNLossEvaluatorFixedDim.ValidationLossEvaluator):
         def __init__(self, cuda: bool, lossFn: "NNLossEvaluatorClassification.LossFunction"):

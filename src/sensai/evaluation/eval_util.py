@@ -178,9 +178,9 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         if fitModel:
             evaluator.fitModel(model)
 
-        def gatherResults(evalResultData, resultWriter, subtitlePrefix=""):
+        def gatherResults(evalResultData: VectorModelEvaluationData, resultWriter, subtitlePrefix=""):
             strEvalResults = ""
-            for predictedVarName in model.getPredictedVariableNames():
+            for predictedVarName in evalResultData.predictedVarNames:
                 evalStats = evalResultData.getEvalStats(predictedVarName)
                 strEvalResult = str(evalStats)
                 if logResults:

@@ -235,6 +235,9 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
             X = self._inputTransformerChain.apply(X)
         return X
 
+    def _computeModelOutputs(self, Y: pd.DataFrame) -> pd.DataFrame:
+        return Y
+
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         Performs a prediction for the given input data frame
@@ -310,6 +313,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
             else:
                 if Y is None:
                     raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
+                Y = self._computeModelOutputs(Y)
                 X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
                 self._modelInputVariableNames = list(X.columns)
                 inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
@@ -447,21 +451,11 @@ class VectorRegressionModel(VectorModel, ABC):
             )
         return y
 
-    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True):
-        """
-        Fits the model using the given data
-
-        :param X: a data frame containing input data
-        :param Y: a data frame containing output data. None may be passed if the underlying model does not require
-            fitting, e.g. with rule-based models
-        :param fitPreprocessors: if False, the model's feature generator and input transformers will not be fitted.
-            If a preprocessor requires fitting, was not separately fit before and this option is set to False,
-            an exception will be raised.
-        """
+    def _computeModelOutputs(self, Y: pd.DataFrame) -> pd.DataFrame:
         if self._targetTransformer is not None:
             Y = self._targetTransformer.fitApply(Y)
         self._modelOutputVariableNames = list(Y.columns)
-        super().fit(X, Y, fitPreprocessors=fitPreprocessors)
+        return Y
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         y = super().predict(x)

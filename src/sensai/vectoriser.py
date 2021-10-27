@@ -1,4 +1,5 @@
 from enum import Enum
+import logging
 from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional
 
 import numpy as np
@@ -7,6 +8,8 @@ from .util.pickle import setstate
 from .util.string import listString, ToStringMixin
 
 T = TypeVar("T")
+
+log = logging.getLogger(__name__)
 
 
 class Vectoriser(Generic[T], ToStringMixin):
@@ -139,6 +142,7 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         setstate(SequenceVectoriser, self, state)
 
     def fit(self, data: Iterable[Sequence[T]]):
+        log.debug(f"Fitting {self}")
         if self.fittingMode == self.FittingMode.NONE:
             return
         if self.fittingMode == self.FittingMode.UNIQUE:
@@ -150,6 +154,7 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         else:
             raise ValueError(self.fittingMode)
         for v in self.vectorisers:
+            log.debug(f"Fitting {v}")
             v.fit(items)
 
     def apply(self, seq: Sequence[T], transform=True) -> List[np.array]:

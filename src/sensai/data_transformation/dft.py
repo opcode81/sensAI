@@ -92,6 +92,12 @@ class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
     def applyInverse(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
+    def getInverse(self) -> "InverseDataFrameTransformer":
+        """
+        :return: a transformer whose (forward) transformation is the inverse transformation of this DFT
+        """
+        return InverseDataFrameTransformer(self)
+
 
 class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
     """Base class for transformers whose logic is entirely based on rules and does not need to be fitted to data"""
@@ -104,6 +110,15 @@ class RuleBasedDataFrameTransformer(DataFrameTransformer, ABC):
 
     def isFitted(self):
         return True
+
+
+class InverseDataFrameTransformer(RuleBasedDataFrameTransformer):
+    def __init__(self, invertibleDFT: InvertibleDataFrameTransformer):
+        super().__init__()
+        self.invertibleDFT = invertibleDFT
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.invertibleDFT.applyInverse(df)
 
 
 class DataFrameTransformerChain(DataFrameTransformer):

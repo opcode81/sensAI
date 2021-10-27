@@ -1,12 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List
 
 import pandas as pd
 
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
+from ..data_transformation import DataFrameTransformer
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..tracking import TrackingMixin
 from ..util.typing import PandasNamedTuple
@@ -165,16 +166,33 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
     def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
-            additionalMetrics: Sequence[RegressionMetric] = None):
+            additionalMetrics: Sequence[RegressionMetric] = None, outputDataFrameTransformer: DataFrameTransformer = None):
+        """
+        Constructs an evaluator with test and training data.
+        Exactly one of the parameters {testData, dataSplitter, testFraction} must be given
+
+        :param data: the full data set, or, if testData is given, the training data
+        :param testData: the data to use for testing/evaluation; if None, must specify either dataSplitter testFraction or dataSplitter
+        :param dataSplitter: [if testData is None] a splitter to use in order to obtain; if None, must specify either testData or testFraction
+        :param testFraction: [if testData is None, dataSplitter is None] the fraction of the data to use for testing/evaluation;
+            if None, must specify either testData or dataSplitter
+        :param randomSeed: [if data is None, dataSplitter is None] the random seed to use for the fractional split of the data
+        :param shuffle: [if data is None, dataSplitter is None] whether to randomly (based on randomSeed) shuffle the dataset before
+            splitting it
+        :param additionalMetrics: additional regression metrics to apply
+        :param outputDataFrameTransformer: a data frame transformer to apply to all output data frames (both model outputs and ground truth),
+            such that evaluation metrics are computed on the transformed data frame
+        """
         super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
         self.additionalMetrics = additionalMetrics
+        self.outputDataFrameTransformer = outputDataFrameTransformer
 
     def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
         predictions, groundTruth = self._computeOutputs(model, data)
-        for predictedVarName in model.getPredictedVariableNames():
+        for predictedVarName in predictions.columns:
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
                 additionalMetrics=self.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
@@ -199,6 +217,9 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         """
         predictions = model.predict(inputOutputData.inputs)
         groundTruth = inputOutputData.outputs
+        if self.outputDataFrameTransformer:
+            predictions = self.outputDataFrameTransformer.apply(predictions)
+            groundTruth = self.outputDataFrameTransformer.apply(groundTruth)
         return predictions, groundTruth
 
 
