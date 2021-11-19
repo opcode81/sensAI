@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union
 
 import pandas as pd
 
@@ -10,6 +10,7 @@ from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEva
 from ..data_transformation import DataFrameTransformer
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..tracking import TrackingMixin
+from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase
 
@@ -106,30 +107,57 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
 TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
 
-class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
-    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter: DataSplitter = None,
-            testFraction: float = None, randomSeed=42, shuffle=True):
+class VectorModelEvaluatorParams(ToStringMixin, ABC):
+    def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
+            fractionalSplitShuffle=True):
         """
-        Constructs an evaluator with test and training data.
-        Exactly one of the parameters {testData, dataSplitter, testFraction} must be given
-
-        :param data: the full data set, or, if testData is given, the training data
-        :param testData: the data to use for testing/evaluation; if None, must specify either dataSplitter testFraction or dataSplitter
-        :param dataSplitter: [if testData is None] a splitter to use in order to obtain; if None, must specify either testData or testFraction
-        :param testFraction: [if testData is None, dataSplitter is None] the fraction of the data to use for testing/evaluation;
-            if None, must specify either testData or dataSplitter
-        :param randomSeed: [if data is None, dataSplitter is None] the random seed to use for the fractional split of the data
-        :param shuffle: [if data is None, dataSplitter is None] whether to randomly (based on randomSeed) shuffle the dataset before
+        :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
+            fractionalSplitTestFraction for fractional split (default)
+        :param fractionalSplitTestFraction: [if test data must be obtained via split, dataSplitter is None] the fraction of the data to use for testing/evaluation;
+        :param fractionalSplitRandomSeed: [if test data must be obtained via split, dataSplitter is none] the random seed to use for the fractional split of the data
+        :param fractionalSplitShuffle: [if test data must be obtained via split, dataSplitter is None] whether to randomly (based on randomSeed) shuffle the dataset before
             splitting it
         """
-        if (testData, dataSplitter, testFraction).count(None) != 2:
-            raise ValueError("Exactly one of {testData, dataSplitter, testFraction} must be given")
-        if testFraction is not None:
-            if not 0 <= testFraction <= 1:
-                raise Exception(f"testFraction has to be None or within the interval [0, 1]. Instead got: {testFraction}")
+        self._dataSplitter = dataSplitter
+        self._fractionalSplitTestFraction = fractionalSplitTestFraction
+        self._fractionalSplitRandomSeed = fractionalSplitRandomSeed
+        self._fractionalSplitShuffle = fractionalSplitShuffle
+
+    def _toStringExcludePrivate(self) -> bool:
+        return True
+
+    def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        d = {}
+        if self._dataSplitter is not None:
+            d["dataSplitter"] = self._dataSplitter
+        else:
+            d["fractionalSplitTestFraction"] = self._fractionalSplitTestFraction
+            d["fractionalSplitRandomSeed"] = self._fractionalSplitRandomSeed
+            d["fractionalSplitShuffle"] = self._fractionalSplitShuffle
+        return d
+
+    def getDataSplitter(self) -> DataSplitter:
+        if self._dataSplitter is None:
+            if self._fractionalSplitTestFraction is None:
+                raise ValueError("Cannot create default data splitter, as no split fraction was provided")
+            self._dataSplitter = DataSplitterFractional(1 - self._fractionalSplitTestFraction, shuffle=self._fractionalSplitShuffle,
+                randomSeed=self._fractionalSplitRandomSeed)
+        return self._dataSplitter
+
+
+class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, params: VectorModelEvaluatorParams = None):
+        """
+        Constructs an evaluator with test and training data.
+
+        :param data: the full data set, or, if testData is given, the training data
+        :param testData: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
+        :param params: the parameters
+        """
         if testData is None:
-            if dataSplitter is None:
-                dataSplitter = DataSplitterFractional(1 - testFraction, shuffle=shuffle, randomSeed=randomSeed)
+            if params is None:
+                raise ValueError("Parameters required for data split must be provided")
+            dataSplitter = params.getDataSplitter()
             self.trainingData, self.testData = dataSplitter.split(data)
             log.debug(f"{dataSplitter} created split with {len(self.trainingData)} ({100*len(self.trainingData)/len(data):.2f}%) and "
                 f"{len(self.testData)} ({100*len(self.testData)/len(data):.2f}%) training and test data points respectively")
@@ -164,28 +192,67 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         model.fit(self.trainingData.inputs, self.trainingData.outputs)
 
 
-class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
-    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True,
-            additionalMetrics: Sequence[RegressionMetric] = None, outputDataFrameTransformer: DataFrameTransformer = None):
+class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
+    def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
+            fractionalSplitShuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
+            outputDataFrameTransformer: DataFrameTransformer = None):
         """
-        Constructs an evaluator with test and training data.
-        Exactly one of the parameters {testData, dataSplitter, testFraction} must be given
-
-        :param data: the full data set, or, if testData is given, the training data
-        :param testData: the data to use for testing/evaluation; if None, must specify either dataSplitter testFraction or dataSplitter
-        :param dataSplitter: [if testData is None] a splitter to use in order to obtain; if None, must specify either testData or testFraction
-        :param testFraction: [if testData is None, dataSplitter is None] the fraction of the data to use for testing/evaluation;
-            if None, must specify either testData or dataSplitter
-        :param randomSeed: [if data is None, dataSplitter is None] the random seed to use for the fractional split of the data
-        :param shuffle: [if data is None, dataSplitter is None] whether to randomly (based on randomSeed) shuffle the dataset before
+        :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
+            fractionalSplitTestFraction for fractional split (default)
+        :param fractionalSplitTestFraction: [if dataSplitter is None, test data must be obtained via split] the fraction of the data to use for testing/evaluation;
+        :param fractionalSplitRandomSeed: [if dataSplitter is none, test data must be obtained via split] the random seed to use for the fractional split of the data
+        :param fractionalSplitShuffle: [if dataSplitter is None, test data must be obtained via split] whether to randomly (based on randomSeed) shuffle the dataset before
             splitting it
         :param additionalMetrics: additional regression metrics to apply
         :param outputDataFrameTransformer: a data frame transformer to apply to all output data frames (both model outputs and ground truth),
             such that evaluation metrics are computed on the transformed data frame
         """
-        super().__init__(data=data, dataSplitter=dataSplitter, testFraction=testFraction, testData=testData, randomSeed=randomSeed, shuffle=shuffle)
+        super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
+            fractionalSplitShuffle=fractionalSplitShuffle)
         self.additionalMetrics = additionalMetrics
         self.outputDataFrameTransformer = outputDataFrameTransformer
+
+    @classmethod
+    def fromDictOrInstance(cls, params: Optional[Union[Dict[str, Any], "VectorRegressionModelEvaluatorParams"]]) -> "VectorRegressionModelEvaluatorParams":
+        if params is None:
+            return VectorRegressionModelEvaluatorParams()
+        elif type(params) == dict:
+            return cls.fromOldKwArgs(**params)
+        elif isinstance(params, VectorRegressionModelEvaluatorParams):
+            return params
+        else:
+            raise ValueError(f"Must provide dictionary or instance, got {params}")
+
+    @classmethod
+    def fromOldKwArgs(cls, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
+            outputDataFrameTransformer: DataFrameTransformer = None) -> "VectorRegressionModelEvaluatorParams":
+        return cls(dataSplitter=dataSplitter, fractionalSplitTestFraction=testFraction, fractionalSplitRandomSeed=randomSeed,
+            fractionalSplitShuffle=shuffle, additionalMetrics=additionalMetrics, outputDataFrameTransformer=outputDataFrameTransformer)
+
+
+class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, params: VectorRegressionModelEvaluatorParams = None,
+            **kwArgsOldParams):
+        """
+        Constructs an evaluator with test and training data.
+
+        :param data: the full data set, or, if testData is given, the training data
+        :param testData: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
+        :param params: the parameters
+        :param kwArgsOldParams: old-style keyword parameters (for backward compatibility only)
+        """
+        params = self._createParams(params, kwArgsOldParams)
+        super().__init__(data=data, testData=testData, params=params)
+        self.params = params
+
+    @staticmethod
+    def _createParams(params: VectorRegressionModelEvaluatorParams, kwArgsOldParams: dict) -> VectorRegressionModelEvaluatorParams:
+        if params is not None:
+            return params
+        elif len(kwArgsOldParams) > 0:
+            return VectorRegressionModelEvaluatorParams.fromOldKwArgs(**kwArgsOldParams)
+        else:
+            return VectorRegressionModelEvaluatorParams()
 
     def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
@@ -194,7 +261,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         predictions, groundTruth = self._computeOutputs(model, data)
         for predictedVarName in predictions.columns:
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
-                additionalMetrics=self.additionalMetrics)
+                additionalMetrics=self.params.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
         return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
 
@@ -217,9 +284,9 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         """
         predictions = model.predict(inputOutputData.inputs)
         groundTruth = inputOutputData.outputs
-        if self.outputDataFrameTransformer:
-            predictions = self.outputDataFrameTransformer.apply(predictions)
-            groundTruth = self.outputDataFrameTransformer.apply(groundTruth)
+        if self.params.outputDataFrameTransformer:
+            predictions = self.params.outputDataFrameTransformer.apply(predictions)
+            groundTruth = self.params.outputDataFrameTransformer.apply(groundTruth)
         return predictions, groundTruth
 
 
@@ -227,19 +294,73 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
     pass
 
 
-class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
-    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, dataSplitter=None, testFraction=None,
-            randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
-        super().__init__(data=data, testData=testData, dataSplitter=dataSplitter, testFraction=testFraction, randomSeed=randomSeed, shuffle=shuffle)
-        self.computeProbabilities = computeProbabilities
+class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
+    def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
+            fractionalSplitShuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None,
+            computeProbabilities: bool = False):
+        """
+        :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
+            fractionalSplitTestFraction for fractional split (default)
+        :param fractionalSplitTestFraction: [if dataSplitter is None, test data must be obtained via split] the fraction of the data to use for testing/evaluation;
+        :param fractionalSplitRandomSeed: [if dataSplitter is none, test data must be obtained via split] the random seed to use for the fractional split of the data
+        :param fractionalSplitShuffle: [if dataSplitter is None, test data must be obtained via split] whether to randomly (based on randomSeed) shuffle the dataset before
+            splitting it
+        :param additionalMetrics: additional metrics to apply
+        :param computeProbabilities: whether to compute class probabilities
+        """
+        super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
+            fractionalSplitShuffle=fractionalSplitShuffle)
         self.additionalMetrics = additionalMetrics
+        self.computeProbabilities = computeProbabilities
+
+    @classmethod
+    def fromOldKwArgs(cls, dataSplitter=None, testFraction=None,
+            randomSeed=42, computeProbabilities=False, shuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None):
+        return cls(dataSplitter=dataSplitter, fractionalSplitTestFraction=testFraction, fractionalSplitRandomSeed=randomSeed,
+            fractionalSplitShuffle=shuffle, additionalMetrics=additionalMetrics, computeProbabilities=computeProbabilities)
+
+    @classmethod
+    def fromDictOrInstance(cls, params: Optional[Union[Dict[str, Any], "VectorClassificationModelEvaluatorParams"]]) -> "VectorClassificationModelEvaluatorParams":
+        if params is None:
+            return VectorClassificationModelEvaluatorParams()
+        elif type(params) == dict:
+            return cls.fromOldKwArgs(**params)
+        elif isinstance(params, VectorClassificationModelEvaluatorParams):
+            return params
+        else:
+            raise ValueError(f"Must provide dictionary or instance, got {params}")
+
+
+class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
+    def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, params: VectorClassificationModelEvaluatorParams = None,
+            **kwArgsOldParams):
+        """
+        Constructs an evaluator with test and training data.
+
+        :param data: the full data set, or, if testData is given, the training data
+        :param testData: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
+        :param params: the parameters
+        :param kwArgsOldParams: old-style keyword parameters (for backward compatibility only)
+        """
+        params = self._createParams(params, kwArgsOldParams)
+        super().__init__(data=data, testData=testData, params=params)
+        self.params = params
+
+    @staticmethod
+    def _createParams(params: VectorClassificationModelEvaluatorParams, kwArgs: dict) -> VectorClassificationModelEvaluatorParams:
+        if params is not None:
+            return params
+        elif len(kwArgs) > 0:
+            return VectorClassificationModelEvaluatorParams.fromOldKwArgs(kwArgs)
+        else:
+            return VectorClassificationModelEvaluatorParams()
 
     def _evalModel(self, model: VectorClassificationModel, data: InputOutputData) -> VectorClassificationModelEvaluationData:
         if model.isRegressionModel():
             raise ValueError(f"Expected a classification model, got {model}")
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, data)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
-            labels=model.getClassLabels(), additionalMetrics=self.additionalMetrics)
+            labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics)
         predictedVarName = model.getPredictedVariableNames()[0]
         return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
 
@@ -260,7 +381,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
         :param inputOutputData: the data set
         :return: a triple (predictions, predicted class probability vectors, groundTruth) of DataFrames
         """
-        if self.computeProbabilities:
+        if self.params.computeProbabilities:
             classProbabilities = model.predictClassProbabilities(inputOutputData.inputs)
             predictions = model.convertClassProbabilitiesToPredictions(classProbabilities)
         else:

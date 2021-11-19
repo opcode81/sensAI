@@ -1,7 +1,7 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable, Optional
+from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable, Optional, Dict
 
 import numpy as np
 
@@ -10,7 +10,8 @@ from .eval_stats.eval_stats_classification import ClassificationEvalStats, Class
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection
 from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
     VectorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
-    MetricsDictProvider, VectorModelEvaluator
+    MetricsDictProvider, VectorModelEvaluator, VectorModelEvaluatorParams, VectorClassificationModelEvaluatorParams, \
+    VectorRegressionModelEvaluatorParams
 from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
@@ -41,7 +42,7 @@ class VectorModelCrossValidationData(ABC, Generic[TModel, TEvalData, TEvalStats,
     def getEvalStatsCollection(self, predictedVarName=None) -> TEvalStatsCollection:
         if predictedVarName is None:
             if len(self.predictedVarNames) != 1:
-                raise Exception("Must provide name of predicted variable")
+                raise Exception(f"Must provide name of predicted variable name, as multiple variables were predicted: {self.predictedVarNames}")
             else:
                 predictedVarName = self.predictedVarNames[0]
         evalStatsList = [evalData.getEvalStats(predictedVarName) for evalData in self.evalDataList]
@@ -94,26 +95,62 @@ class CrossValidationSplitterDefault(CrossValidationSplitter):
         return result
 
 
-class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC):
-    def __init__(self, data: InputOutputData, folds: int = 5, randomSeed=42, returnTrainedModels=False, evaluatorParams: dict = None,
-            shuffle=True, splitter: CrossValidationSplitter = None):
+class VectorModelCrossValidatorParams:
+    def __init__(self, folds: int = 5, splitter: CrossValidationSplitter = None, returnTrainedModels=False,
+            evaluatorParams: Union[VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, dict] = None,
+            defaultSplitterRandomSeed=42, defaultSplitterShuffle=True):
         """
-        :param data: the data set
         :param folds: the number of folds
-        :param randomSeed: [if splitter is None] the random seed to use for splits
+        :param splitter: the splitter to use in order to generate the folds; if None, use default split (using parameters randomSeed
+            and shuffle above)
         :param returnTrainedModels: whether to create a copy of the model for each fold and return each of the models
             (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
         :param evaluatorParams: keyword parameters with which to instantiate model evaluators
-        :param shuffle: [if splitter is None] whether to shuffle the data (using randomSeed) before creating the folds
-        :param splitter: the splitter to use in order to generate the folds; if None, use default split (using parameters randomSeed
-            and shuffle above)
+        :param defaultSplitterRandomSeed: [if splitter is None] the random seed to use for splits
+        :param defaultSplitterShuffle: [if splitter is None] whether to shuffle the data (using randomSeed) before creating the folds
         """
+        self.folds = folds
+        self.evaluatorParams = evaluatorParams
         self.returnTrainedModels = returnTrainedModels
-        self.evaluatorParams = evaluatorParams if evaluatorParams is not None else {}
-        self.modelEvaluators = []
         if splitter is None:
-            splitter = CrossValidationSplitterDefault(shuffle=shuffle, randomSeed=randomSeed)
-        for trainIndices, testIndices in splitter.createFolds(data, folds):
+            splitter = CrossValidationSplitterDefault(shuffle=defaultSplitterShuffle, randomSeed=defaultSplitterRandomSeed)
+        self.splitter = splitter
+
+    @classmethod
+    def fromKwArgsOldParams(cls, folds: int = 5, randomSeed=42, returnTrainedModels=False,
+            evaluatorParams: Union[VectorModelEvaluatorParams, Dict[str, Any]] = None,
+            shuffle=True, splitter: CrossValidationSplitter = None):
+        return cls(folds=folds, splitter=splitter, returnTrainedModels=returnTrainedModels, evaluatorParams=evaluatorParams,
+            defaultSplitterRandomSeed=randomSeed, defaultSplitterShuffle=shuffle)
+
+    @classmethod
+    def fromDictOrInstance(cls, params: Union[dict, "VectorModelCrossValidatorParams"]) -> "VectorModelCrossValidatorParams":
+        if type(params) == dict:
+            return cls.fromKwArgsOldParams(**params)
+        elif isinstance(params, VectorModelCrossValidatorParams):
+            return params
+        else:
+            raise ValueError(params)
+
+    @classmethod
+    def fromEitherDictOrInstance(cls, dictParams: dict, params: "VectorModelCrossValidatorParams"):
+        if params is not None and len(dictParams) > 0:
+            raise ValueError("Cannot provide both params instance and dictionary of keyword arguments")
+        if params is None:
+            params = cls.fromKwArgsOldParams(**dictParams)
+        return params
+
+
+class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC):
+    def __init__(self, data: InputOutputData, params: Union[VectorModelCrossValidatorParams, dict] = None, **kwArgsOldParams):
+        """
+        :param data: the data set
+        :param params: parameters
+        :param kwArgsOldParams: keyword arguments for old-style specification of parameters (for backward compatibility)
+        """
+        self.params = VectorModelCrossValidatorParams.fromEitherDictOrInstance(kwArgsOldParams, params)
+        self.modelEvaluators = []
+        for trainIndices, testIndices in self.params.splitter.createFolds(data, self.params.folds):
             self.modelEvaluators.append(self._createModelEvaluator(data.filterIndices(trainIndices), data.filterIndices(testIndices)))
 
     @staticmethod
@@ -131,19 +168,19 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
         pass
 
     def evalModel(self, model: VectorModel):
-        trainedModels = [] if self.returnTrainedModels else None
+        trainedModels = [] if self.params.returnTrainedModels else None
         evalDataList = []
         testIndicesList = []
         predictedVarNames = None
         for i, evaluator in enumerate(self.modelEvaluators, start=1):
             log.info(f"Training and evaluating model with fold {i}/{len(self.modelEvaluators)} ...")
-            modelToFit: VectorModel = copy.deepcopy(model) if self.returnTrainedModels else model
+            modelToFit: VectorModel = copy.deepcopy(model) if self.params.returnTrainedModels else model
             evaluator.fitModel(modelToFit)
-            if predictedVarNames is None:
-                predictedVarNames = modelToFit.getPredictedVariableNames()
-            if self.returnTrainedModels:
-                trainedModels.append(modelToFit)
             evalData = evaluator.evalModel(modelToFit)
+            if predictedVarNames is None:
+                predictedVarNames = evalData.predictedVarNames
+            if self.params.returnTrainedModels:
+                trainedModels.append(modelToFit)
             for predictedVarName in predictedVarNames:
                 log.info(f"Evaluation result for {predictedVarName}, fold {i}/{len(self.modelEvaluators)}: {evalData.getEvalStats(predictedVarName=predictedVarName)}")
             evalDataList.append(evalData)
@@ -161,9 +198,9 @@ class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[Ve
 
 
 class VectorRegressionModelCrossValidator(VectorModelCrossValidator[VectorRegressionModelCrossValidationData]):
-    # TODO: after switching to python3.8 we can move both methods to the base class by accessing the generic type at runtime
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData) -> VectorRegressionModelEvaluator:
-        return VectorRegressionModelEvaluator(trainingData, testData=testData, **self.evaluatorParams)
+        evaluatorParams = VectorRegressionModelEvaluatorParams.fromDictOrInstance(self.params.evaluatorParams)
+        return VectorRegressionModelEvaluator(trainingData, testData=testData, params=evaluatorParams)
 
     def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorRegressionModelCrossValidationData:
         return VectorRegressionModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)
@@ -176,7 +213,8 @@ class VectorClassificationModelCrossValidationData(VectorModelCrossValidationDat
 
 class VectorClassificationModelCrossValidator(VectorModelCrossValidator[VectorClassificationModelCrossValidationData]):
     def _createModelEvaluator(self, trainingData: InputOutputData, testData: InputOutputData):
-        return VectorClassificationModelEvaluator(trainingData, testData=testData, **self.evaluatorParams)
+        evaluatorParams = VectorClassificationModelEvaluatorParams.fromDictOrInstance(self.params.evaluatorParams)
+        return VectorClassificationModelEvaluator(trainingData, testData=testData, params=evaluatorParams)
 
     def _createResultData(self, trainedModels, evalDataList, testIndicesList, predictedVarNames) -> VectorClassificationModelCrossValidationData:
         return VectorClassificationModelCrossValidationData(trainedModels, evalDataList, predictedVarNames, testIndicesList)

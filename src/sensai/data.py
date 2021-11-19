@@ -6,8 +6,11 @@ import pandas as pd
 import scipy.stats
 
 
-class BaseInputOutputData(ABC):
-    def __init__(self, inputs, outputs):
+T = TypeVar("T")
+
+
+class BaseInputOutputData(Generic[T], ABC):
+    def __init__(self, inputs: T, outputs: T):
         """
         :param inputs: expected to have shape and __len__
         :param outputs: expected to have shape and __len__
@@ -25,7 +28,7 @@ class BaseInputOutputData(ABC):
         pass
 
 
-class InputOutputArrays(BaseInputOutputData):
+class InputOutputArrays(BaseInputOutputData[np.ndarray]):
     def __init__(self, inputs: np.ndarray, outputs: np.ndarray):
         super().__init__(inputs, outputs)
 
@@ -45,7 +48,7 @@ class InputOutputArrays(BaseInputOutputData):
 
 
 # TODO: Rename to InputOutputDataFrames when the time for breaking changes has come
-class InputOutputData(BaseInputOutputData):
+class InputOutputData(BaseInputOutputData[pd.DataFrame]):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         super().__init__(inputs, outputs)
 

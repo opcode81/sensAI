@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any
 
+import pandas as pd
+
 from . import sequences as array_util
 from .string import ToStringMixin, dictString
 
@@ -148,6 +150,16 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         self.keys = keys
         self.values = values
 
+    @classmethod
+    def fromSeries(cls, s: pd.Series):
+        """
+        Creates an instance from a pandas Series, using the series' index as the keys and its values as the values
+
+        :param s: the series
+        :return: an instance
+        """
+        return cls(s.index, s.values)
+
     def floorIndex(self, key) -> Optional[int]:
         """
         Finds the rightmost index where the key value is less than or equal to the given value
@@ -204,6 +216,18 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         """
         return array_util.closestValue(self.keys, key, values=self.values)
 
+    def floorKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
+        idx = self.floorIndex(key)
+        return None if idx is None else (self.keys[idx], self.values[idx])
+
+    def ceilKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
+        idx = self.ceilIndex(key)
+        return None if idx is None else (self.keys[idx], self.values[idx])
+
+    def closestKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
+        idx = self.closestIndex(key)
+        return None if idx is None else (self.keys[idx], self.values[idx])
+
     def valueSliceInner(self, lowerBoundKey, upperBoundKey):
         return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
 
@@ -232,6 +256,10 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
     def floorValue(self, key) -> Optional[TValue]:
         return self._value(self.floorIndex(key))
 
+    def floorKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
+        idx = self.floorIndex(key)
+        return None if idx is None else self.entries[idx]
+
     def ceilIndex(self, key) -> Optional[int]:
         """Find leftmost index where the key is greater than or equal to the given key"""
         return self._sortedKeys.ceilIndex(key)
@@ -239,11 +267,19 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
     def ceilValue(self, key) -> Optional[TValue]:
         return self._value(self.ceilIndex(key))
 
+    def ceilKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
+        idx = self.ceilIndex(key)
+        return None if idx is None else self.entries[idx]
+
     def closestIndex(self, key) -> Optional[int]:
         return self._sortedKeys.closestIndex(key)
 
     def closestValue(self, key) -> Optional[TValue]:
         return self._value(self.closestIndex(key))
+
+    def closestKeyAndValue(self, key):
+        idx = self.closestIndex(key)
+        return None if idx is None else self.entries[idx]
 
     def _valueSlice(self, firstIndex, lastIndex):
         if firstIndex is None or lastIndex is None:

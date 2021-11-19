@@ -17,12 +17,13 @@ import seaborn as sns
 
 from .crossval import VectorModelCrossValidationData, VectorRegressionModelCrossValidationData, \
     VectorClassificationModelCrossValidationData, \
-    VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator, VectorModelCrossValidator
+    VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator, VectorModelCrossValidator, VectorModelCrossValidatorParams
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats
 from .eval_stats.eval_stats_regression import RegressionEvalStats
 from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRegressionModelEvaluator, \
-    VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData
+    VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, \
+    VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, VectorModelEvaluatorParams
 from ..data import InputOutputData
 from ..util.io import ResultWriter
 from ..util.string import prettyStringRepr
@@ -50,17 +51,30 @@ def _isRegression(model: Optional[VectorModel], isRegression: Optional[bool]) ->
 
 
 def createVectorModelEvaluator(data: InputOutputData, model: VectorModel = None,
-        isRegression: bool = None, **kwargs) \
+        isRegression: bool = None, params: Union[VectorModelEvaluatorParams, Dict[str, Any]] = None, **kwargs) \
             -> Union[VectorRegressionModelEvaluator, VectorClassificationModelEvaluator]:
-    cons = VectorRegressionModelEvaluator if _isRegression(model, isRegression) else VectorClassificationModelEvaluator
-    return cons(data, **kwargs)
+    if params is not None and len(kwargs) > 0:
+        raise ValueError("Provide either params or keyword arguments")
+    if params is None:
+        params = kwargs
+    regression = _isRegression(model, isRegression)
+    if regression:
+        params = VectorRegressionModelEvaluatorParams.fromDictOrInstance(params)
+    else:
+        params = VectorClassificationModelEvaluatorParams.fromDictOrInstance(params)
+    cons = VectorRegressionModelEvaluator if regression else VectorClassificationModelEvaluator
+    return cons(data, params=params)
 
 
 def createVectorModelCrossValidator(data: InputOutputData, model: VectorModel = None,
-        isRegression: bool = None, folds=5, **kwargs) \
-            -> Union[VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator]:
+        isRegression: bool = None,
+        params: Union[VectorModelCrossValidatorParams, Dict[str, Any]] = None,
+        **kwArgsOldParams) -> Union[VectorClassificationModelCrossValidator, VectorRegressionModelCrossValidator]:
+    if params is not None:
+        params = VectorModelCrossValidatorParams.fromDictOrInstance(params)
+    params = VectorModelCrossValidatorParams.fromEitherDictOrInstance(kwArgsOldParams, params)
     cons = VectorRegressionModelCrossValidator if _isRegression(model, isRegression) else VectorClassificationModelCrossValidator
-    return cons(data, folds=folds, **kwargs)
+    return cons(data, params=params)
 
 
 def createEvaluationUtil(data: InputOutputData, model: VectorModel = None, isRegression: bool = None,
@@ -86,7 +100,6 @@ def evalModelViaEvaluator(model: TModel, inputOutputData: InputOutputData, testF
 
     :return: the evaluation data
     """
-
     if plotTargetDistribution:
         title = "Distribution of target values in entire dataset"
         fig = plt.figure(title)
@@ -116,8 +129,9 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
     """
     Utility class for the evaluation of models based on a dataset
     """
-    def __init__(self, inputOutputData: InputOutputData, evaluatorParams: Optional[Dict[str, Any]] = None,
-            crossValidatorParams: Optional[Dict[str, Any]] = None):
+    def __init__(self, inputOutputData: InputOutputData,
+            evaluatorParams: Optional[Union[VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, Dict[str, Any]]] = None,
+            crossValidatorParams: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None):
         """
         :param inputOutputData: the data set to use for evaluation
         :param evaluatorParams: parameters with which to instantiate evaluators
@@ -126,7 +140,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         if evaluatorParams is None:
             evaluatorParams = dict(testFraction=0.2)
         if crossValidatorParams is None:
-            crossValidatorParams = dict(folds=5)
+            crossValidatorParams = VectorModelCrossValidatorParams(folds=5)
         self.evaluatorParams = evaluatorParams
         self.crossValidatorParams = crossValidatorParams
         self.inputOutputData = inputOutputData
@@ -155,7 +169,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param isRegression: whether to create a regression model evaluator. Either this or model have to be specified
         :return: an evaluator
         """
-        return createVectorModelEvaluator(self.inputOutputData, model=model, isRegression=isRegression, **self.evaluatorParams)
+        return createVectorModelEvaluator(self.inputOutputData, model=model, isRegression=isRegression, params=self.evaluatorParams)
 
     def createCrossValidator(self, model: TModel = None, isRegression: bool = None) -> TCrossValidator:
         """
@@ -166,7 +180,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param isRegression: whether to create a regression model cross-validator. Either this or model have to be specified
         :return: an evaluator
         """
-        return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, **self.crossValidatorParams)
+        return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, params=self.crossValidatorParams)
 
     def performSimpleEvaluation(self, model: TModel, createPlots=True, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False, fitModel=True, writeEvalStats=False) -> TEvalData:
@@ -221,11 +235,13 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :return: cross-validation result data
         """
         resultWriter = self._resultWriterForModel(resultWriter, model)
-        crossValidator = createVectorModelCrossValidator(self.inputOutputData, model=model, **self.crossValidatorParams)
+        crossValidator = self.createCrossValidator(model)
         crossValidationData = crossValidator.evalModel(model)
-        strEvalResults = "\n".join([str(crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()) for varName in crossValidationData.predictedVarNames])
+        aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()
+                for varName in crossValidationData.predictedVarNames}
+        strEvalResults = str(pd.DataFrame.from_dict(aggStatsByVar, orient="index"))
         if logResults:
-            log.info(f"Cross-validation results: {strEvalResults}")
+            log.info(f"Cross-validation results:\n{strEvalResults}")
         if resultWriter is not None:
             resultWriter.writeTextFile("crossval-results", strEvalResults)
         self.createPlots(crossValidationData, showPlots=showPlots, resultWriter=resultWriter)

@@ -1,7 +1,7 @@
 import logging
 import os
 import pickle
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Iterable
 
 import joblib
 
@@ -151,7 +151,7 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
         obj.__dict__ = state
 
 
-def getstate(cls, obj, transientProperties: List[str] = None) -> Dict[str, Any]:
+def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProperties: Iterable[str] = None) -> Dict[str, Any]:
     """
     Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
     a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually
@@ -160,7 +160,8 @@ def getstate(cls, obj, transientProperties: List[str] = None) -> Dict[str, Any]:
 
     :param cls: the class in which you are implementing __getstate__
     :param obj: the instance of cls
-    :param transientProperties: a list of transient properties which shall not be saved (will be set to None)
+    :param transientProperties: transient properties which be set to None in serialisations
+    :param excludedProperties: properties which shall be completely removed from serialisations
     :return: the state dictionary, which may be modified by the receiver
     """
     s = super(cls, obj)
@@ -172,4 +173,8 @@ def getstate(cls, obj, transientProperties: List[str] = None) -> Dict[str, Any]:
         for p in transientProperties:
             if p in d:
                 d[p] = None
+    if excludedProperties is not None:
+        for p in excludedProperties:
+            if p in d:
+                del d[p]
     return d
