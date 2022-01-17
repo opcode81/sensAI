@@ -373,7 +373,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
         if params is not None:
             return params
         elif len(kwArgs) > 0:
-            return VectorClassificationModelEvaluatorParams.fromOldKwArgs(kwArgs)
+            return VectorClassificationModelEvaluatorParams.fromOldKwArgs(**kwArgs)
         else:
             return VectorClassificationModelEvaluatorParams()
 
