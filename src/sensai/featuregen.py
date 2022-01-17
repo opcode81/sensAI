@@ -238,6 +238,21 @@ class FeatureGenerator(ToStringMixin, ABC):
         self.fit(X, Y, ctx)
         return self.generate(X, ctx)
 
+    def flattened(self, columnsToFlatten: List[str] = None,
+            normalisationRules=(),
+            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None) -> "ChainedFeatureGenerator":
+        """
+        Returns a new feature generator which returns flattened versions of one or more of the vector-valued columns generated
+        by this feature generator
+
+        :param columnsToFlatten: the list of columns to flatten; if None, flatten all columns
+        :param normalisationRules: a list of normalisation rules which apply to the flattened columns
+        :param normalisationRuleTemplate: a normalisation rule template which applies to all generated flattened columns
+        :return: a feature generator which generates the flattened columns
+        """
+        return flattenedFeatureGenerator(self, columnsToFlatten=columnsToFlatten, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate)
+
 
 class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     """

@@ -316,7 +316,7 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim, ToStringMixin):
         SMOOTHL1LOSS = "SmoothL1Loss"
 
     def __init__(self, lossFn: LossFunction = LossFunction.L2LOSS, validationTensorTransformer: Optional[TensorTransformer] = None,
-            outputDimWeights: Sequence[float] = None, applyOutputDimWeightsInValidation=True):
+            outputDimWeights: Sequence[float] = None, applyOutputDimWeightsInValidation=True, validationMetricName: Optional[str] = None):
         """
         :param lossFn: the loss function to use
         :param validationTensorTransformer: a transformer which is to be applied to validation tensors (both model outputs and ground truth)
@@ -327,10 +327,12 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim, ToStringMixin):
         :param applyOutputDimWeightsInValidation: whether output dimension weights are also to be applied to to the metrics computed
             for validation. Note that this may not be possible if a validationTensorTransformer which changes the output dimensions is
             used.
+        :param validationMetricName: the metric to use for model selection during validation; if None, use default depending on lossFn
         """
         self.validationTensorTransformer = validationTensorTransformer
         self.outputDimWeights = np.array(outputDimWeights) if outputDimWeights is not None else None
         self.applyOutputDimWeightsInValidation = applyOutputDimWeightsInValidation
+        self.validationMetricName = validationMetricName
         if lossFn is None:
             lossFn = self.LossFunction.L2LOSS
         try:
@@ -437,12 +439,15 @@ class NNLossEvaluatorRegression(NNLossEvaluatorFixedDim, ToStringMixin):
             return metrics
 
     def getValidationMetricName(self):
-        if self.lossFn is self.LossFunction.L1LOSS or self.lossFn is self.LossFunction.SMOOTHL1LOSS:
-            return "MAE"
-        elif self.lossFn is self.LossFunction.L2LOSS or self.lossFn is self.LossFunction.MSELOSS:
-            return "MSE"
+        if self.validationMetricName is not None:
+            return self.validationMetricName
         else:
-            raise AssertionError(f"No selection criterion defined for loss function {self.lossFn}")
+            if self.lossFn is self.LossFunction.L1LOSS or self.lossFn is self.LossFunction.SMOOTHL1LOSS:
+                return "MAE"
+            elif self.lossFn is self.LossFunction.L2LOSS or self.lossFn is self.LossFunction.MSELOSS:
+                return "MSE"
+            else:
+                raise AssertionError(f"No validation metric defined as selection criterion for loss function {self.lossFn}")
 
 
 class NNLossEvaluatorClassification(NNLossEvaluatorFixedDim):

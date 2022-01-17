@@ -1,4 +1,5 @@
 import copy
+import functools
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Any, Generator, Generic, TypeVar, List, Union, Sequence, Iterable, Optional, Dict
@@ -11,7 +12,7 @@ from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEva
 from .evaluator import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
     VectorModelEvaluationData, VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     MetricsDictProvider, VectorModelEvaluator, VectorModelEvaluatorParams, VectorClassificationModelEvaluatorParams, \
-    VectorRegressionModelEvaluatorParams
+    VectorRegressionModelEvaluatorParams, MetricsDictProviderFromFunction
 from ..data import InputOutputData
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
@@ -187,9 +188,22 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
             testIndicesList.append(evaluator.testData.outputs.index)
         return self._createResultData(trainedModels, evalDataList, testIndicesList, predictedVarNames)
 
-    def _computeMetrics(self, model: VectorModel):
+    def _computeMetrics(self, model: VectorModel, **kwargs):
+        return self._computeMetricsForVarName(model, None)
+
+    def _computeMetricsForVarName(self, model, predictedVarName: Optional[str]):
         data = self.evalModel(model)
-        return data.getEvalStatsCollection().aggStats()
+        return data.getEvalStatsCollection(predictedVarName=predictedVarName).aggStats()
+
+    def createMetricsDictProvider(self, predictedVarName: Optional[str]) -> MetricsDictProvider:
+        """
+        Creates a metrics dictionary provider, e.g. for use in hyperparameter optimisation
+
+        :param predictedVarName: the name of the predicted variable for which to obtain evaluation metrics; may be None only
+            if the model outputs but a single predicted variable
+        :return: a metrics dictionary provider instance for the given variable
+        """
+        return MetricsDictProviderFromFunction(functools.partial(self._computeMetricsForVarName, predictedVarName=predictedVarName))
 
 
 class VectorRegressionModelCrossValidationData(VectorModelCrossValidationData[VectorRegressionModel, VectorRegressionModelEvaluationData, RegressionEvalStats, RegressionEvalStatsCollection]):

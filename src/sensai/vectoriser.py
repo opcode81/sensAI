@@ -107,6 +107,15 @@ class Vectoriser(Generic[T], ToStringMixin):
                 raise ValueError(f"Received unhandled value of type {type(y)}")
 
 
+class EmptyVectoriser(Vectoriser):
+    def __init__(self):
+        super().__init__(self._createEmptyVector)
+
+    @staticmethod
+    def _createEmptyVector(x):
+        return np.zeros(0)
+
+
 class SequenceVectoriser(Generic[T], ToStringMixin):
     """
     Supports the application of Vectorisers to sequences of objects of some type T, where each object of type T is
@@ -127,7 +136,7 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
 
     def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]], fittingMode: FittingMode = FittingMode.UNIQUE):
         """
-        :param vectorisers: one or more vectorisers that are to be applied. If more than one vectoriser is supplied,
+        :param vectorisers: zero or more vectorisers that are to be applied. If more than one vectoriser is supplied,
             vectors are generated from input instances of type T by concatenating the results of the vectorisers in
             the order the vectorisers are given.
         """
@@ -136,6 +145,8 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
             self.vectorisers = [vectorisers]
         else:
             self.vectorisers = vectorisers
+        if len(self.vectorisers) == 0:
+            self.vectorisers = [EmptyVectoriser()]
 
     def __setstate__(self, state):
         state["fittingMode"] = state.get("fittingMode", self.FittingMode.UNIQUE)
@@ -293,7 +304,7 @@ class VectoriserRegistry:
         name = self._name(name)
         factory = self._factories.get(name)
         if factory is None:
-            raise ValueError(f"No factory registered for name '{name}': known names: {listString(self._factories.keys())}. Register the factory first.")
+            raise ValueError(f"No vectoriser factory registered for name '{name}': known names: {listString(self._factories.keys())}. Register the factory first.")
         instance = factory(defaultTransformerFactory)
         instance.setName(name)
         return instance

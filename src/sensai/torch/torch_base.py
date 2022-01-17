@@ -236,7 +236,7 @@ class TorchModel(ABC, ToStringMixin):
         if self.NORMALISATION_CHECK_THRESHOLD is not None:
             maxValue = 0.0
             for t in inputs:
-                if t.is_floating_point():  # ignore any integer tensors (which typically contain lengths)
+                if t.is_floating_point() and t.numel() > 0:  # skip any integer tensors (which typically contain lengths) and empty tensors
                     maxValue = max(t.abs().max().item(), maxValue)
             if maxValue > self.NORMALISATION_CHECK_THRESHOLD:
                 log.warning("Received input which is likely to not be correctly normalised: maximum abs. value in input tensor is %f" % maxValue)

@@ -137,7 +137,7 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
         def modelOutputDim(self) -> int:
             return self.numClasses
 
-        def splitInputOutputPairs(self, fractionalSizeOfFirstSet):
+        def splitIntoTensors(self, fractionalSizeOfFirstSet):
             splitIndex = round(fractionalSizeOfFirstSet * len(self.y_data))
             y1, x1 = self.getInputOutputPair(self.y_data[:splitIndex], self.x_data[:splitIndex])
             y2, x2 = self.getInputOutputPair(self.y_data[splitIndex:], self.x_data[splitIndex:])

@@ -1,6 +1,7 @@
+import functools
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable
 
 import pandas as pd
 
@@ -49,6 +50,14 @@ class MetricsDictProvider(TrackingMixin, ABC):
             trackedDict["str(model)"] = str(model)
             self.trackedExperiment.trackValues(trackedDict)
         return valuesDict
+
+
+class MetricsDictProviderFromFunction(MetricsDictProvider):
+    def __init__(self, computeMetricsFn: Callable[[VectorModel], Dict[str, float]]):
+        self._computeMetricsFn = computeMetricsFn
+
+    def _computeMetrics(self, model, **kwargs) -> Dict[str, float]:
+        return self._computeMetricsFn(model)
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
@@ -180,10 +189,23 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> TEvalData:
         pass
 
-    def _computeMetrics(self, model: VectorModelFittableBase, onTrainingData=False) -> Dict[str, float]:
+    def _computeMetrics(self, model: VectorModel, onTrainingData=False) -> Dict[str, float]:
+        return self._computeMetricsForVarName(model, None, onTrainingData=onTrainingData)
+
+    def _computeMetricsForVarName(self, model, predictedVarName: Optional[str], onTrainingData=False):
         self.fitModel(model)
         evalData = self.evalModel(model, onTrainingData=onTrainingData)
-        return evalData.getEvalStats().getAll()
+        return evalData.getEvalStats(predictedVarName=predictedVarName).getAll()
+
+    def createMetricsDictProvider(self, predictedVarName: Optional[str]) -> MetricsDictProvider:
+        """
+        Creates a metrics dictionary provider, e.g. for use in hyperparameter optimisation
+
+        :param predictedVarName: the name of the predicted variable for which to obtain evaluation metrics; may be None only
+            if the model outputs but a single predicted variable
+        :return: a metrics dictionary provider instance for the given variable
+        """
+        return MetricsDictProviderFromFunction(functools.partial(self._computeMetricsForVarName, predictedVarName=predictedVarName))
 
     def fitModel(self, model: VectorModelFittableBase):
         """Fits the given model's parameters using this evaluator's training data"""
