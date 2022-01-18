@@ -3,8 +3,8 @@ from typing import Union
 
 import pandas as pd
 
-from dcs.sensai import VectorRegressionModel
-from dcs.sensai.vector_model import RuleBasedVectorRegressionModel
+from . import VectorRegressionModel
+from .vector_model import RuleBasedVectorRegressionModel
 
 
 class MultiVectorRegressionModel(RuleBasedVectorRegressionModel):
