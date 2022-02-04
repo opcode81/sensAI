@@ -239,7 +239,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         crossValidationData = crossValidator.evalModel(model)
         aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()
                 for varName in crossValidationData.predictedVarNames}
-        strEvalResults = str(pd.DataFrame.from_dict(aggStatsByVar, orient="index"))
+        df = pd.DataFrame.from_dict(aggStatsByVar, orient="index")
+        strEvalResults = df.to_string()
         if logResults:
             log.info(f"Cross-validation results:\n{strEvalResults}")
         if resultWriter is not None:

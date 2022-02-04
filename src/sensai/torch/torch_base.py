@@ -10,7 +10,8 @@ from torch import nn
 from torch.nn import functional as F
 
 from .torch_data import TensorScaler, VectorDataUtil, ClassificationVectorDataUtil, TorchDataSet, \
-    TorchDataSetProviderFromDataUtil, TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames, RuleBasedTensoriser
+    TorchDataSetProvider, Tensoriser, TorchDataSetFromDataFrames, RuleBasedTensoriser, \
+    TorchDataSetProviderFromVectorDataUtil
 from .torch_enums import ClassificationOutputMode
 from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorClassification, NNOptimiserParams, TrainingInfo
 from ..data import DataFrameSplitter
@@ -185,7 +186,7 @@ class TorchModel(ABC, ToStringMixin):
             mcDropoutSamples: Optional[int] = None, mcDropoutProbability: Optional[float] = None, scaleOutput: bool = False,
             scaleInput: bool = False) -> Union[torch.Tensor, np.ndarray, Tuple]:
         """
-        Applies the model to the given input tensor and returns the result (normalized)
+        Applies the model to the given input tensor and returns the result
 
         :param X: the input tensor (either a batch or, if createBatch=True, a single data point), a data set or a tuple/list of tensors
             (if the model accepts more than one input).
@@ -194,8 +195,8 @@ class TorchModel(ABC, ToStringMixin):
         :param createBatch: whether to add an additional tensor dimension for a batch containing just one data point
         :param mcDropoutSamples: if not None, apply MC-Dropout-based inference with the respective number of samples; if None, apply regular inference
         :param mcDropoutProbability: the probability with which to apply dropouts in MC-Dropout-based inference; if None, use model's default
-        :param scaleOutput: whether to scale the output that is produced by the underlying model (using this instance's output scaler)
-        :param scaleInput: whether to scale the input (using this instance's input scaler) before applying the underlying model
+        :param scaleOutput: whether to scale the output that is produced by the underlying model (using this instance's output scaler, if any)
+        :param scaleInput: whether to scale the input (using this instance's input scaler, if any) before applying the underlying model
 
         :return: an output tensor or, if MC-Dropout is applied, a pair (y, sd) where y the mean output tensor and sd is a tensor of the same dimension
             containing standard deviations
@@ -234,13 +235,11 @@ class TorchModel(ABC, ToStringMixin):
 
         # check input normalisation
         if self.NORMALISATION_CHECK_THRESHOLD is not None:
-            maxValue = 0.0
-            for t in inputs:
+            for i, t in enumerate(inputs):
                 if t.is_floating_point() and t.numel() > 0:  # skip any integer tensors (which typically contain lengths) and empty tensors
-                    maxValue = max(t.abs().max().item(), maxValue)
-            if maxValue > self.NORMALISATION_CHECK_THRESHOLD:
-                log.warning("Received input which is likely to not be correctly normalised: maximum abs. value in input tensor is %f" % maxValue)
-
+                    maxValue = t.abs().max().item()
+                    if maxValue > self.NORMALISATION_CHECK_THRESHOLD:
+                        log.warning(f"Received value in input tensor {i} which is likely to not be correctly normalised: maximum abs. value in tensor is %f" % maxValue)
         if mcDropoutSamples is None:
             y = model(*inputs)
             return extract(y)
@@ -621,22 +620,28 @@ class TorchDataSetProviderFactory(ABC):
 
 
 class TorchDataSetProviderFactoryClassificationDefault(TorchDataSetProviderFactory):
+    def __init__(self, tensoriseDynamically=False):
+        self.tensoriseDynamically = tensoriseDynamically
+
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorClassificationModel,
             trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser], outputTensoriser: Optional[Tensoriser],
             dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = ClassificationVectorDataUtil(inputs, outputs, model.model.cuda, len(model._labels),
             normalisationMode=model.normalisationMode, inputTensoriser=inputTensoriser, outputTensoriser=outputTensoriser,
             dataFrameSplitter=dataFrameSplitter)
-        return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
+        return TorchDataSetProviderFromVectorDataUtil(dataUtil, model.model.cuda, tensoriseDynamically=self.tensoriseDynamically)
 
 
 class TorchDataSetProviderFactoryRegressionDefault(TorchDataSetProviderFactory):
+    def __init__(self, tensoriseDynamically=False):
+        self.tensoriseDynamically = tensoriseDynamically
+
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorRegressionModel,
             trainingContext: TrainingContext, inputTensoriser: Optional[Tensoriser], outputTensoriser: Optional[Tensoriser],
             dataFrameSplitter: Optional[DataFrameSplitter]) -> TorchDataSetProvider:
         dataUtil = VectorDataUtil(inputs, outputs, model.model.cuda, normalisationMode=model.normalisationMode,
             inputTensoriser=inputTensoriser, outputTensoriser=outputTensoriser, dataFrameSplitter=dataFrameSplitter)
-        return TorchDataSetProviderFromDataUtil(dataUtil, model.model.cuda)
+        return TorchDataSetProviderFromVectorDataUtil(dataUtil, model.model.cuda, tensoriseDynamically=self.tensoriseDynamically)
 
 
 class OutputTensorToArrayConverter(ABC):
