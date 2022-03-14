@@ -41,12 +41,19 @@ class Optimiser(enum.Enum):
     LBFGS = ("lbfgs", optim.LBFGS)
 
     @classmethod
-    def fromName(cls, name: str):
+    def fromName(cls, name: str) -> "Optimiser":
         lname = name.lower()
         for o in cls:
             if o.value[0] == lname:
                 return o
         raise ValueError(f"Unknown optimiser name '{name}'; known names: {[o.value[0] for o in cls]}")
+
+    @classmethod
+    def fromNameOrInstance(cls, nameOrInstance: Union[str, "Optimiser"]) -> "Optimiser":
+        if type(nameOrInstance) == str:
+            return cls.fromName(nameOrInstance)
+        else:
+            return nameOrInstance
 
 
 class _Optimiser(object):
@@ -61,10 +68,7 @@ class _Optimiser(object):
         :param max_grad_norm: gradient norm value beyond which to apply gradient shrinkage
         :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
-        if type(method) == str:
-            self.method = Optimiser.fromName(method)
-        else:
-            self.method = method
+        self.method = Optimiser.fromNameOrInstance(method)
         self.params = list(params)  # careful: params may be a generator
         self.last_ppl = None
         self.lr = lr
@@ -553,7 +557,7 @@ class NNOptimiserParams(ToStringMixin):
         :param shuffle: whether to shuffle the training data
         :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
         """
-        if optimiser == 'lbfgs':
+        if Optimiser.fromNameOrInstance(optimiser) == Optimiser.LBFGS:
             largeBatchSize = 1e12
             if batchSize is not None:
                 log.warning(f"LBFGS does not make use of batches, therefore using large batch size {largeBatchSize} to achieve use of a single batch")

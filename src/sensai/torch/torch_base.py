@@ -17,6 +17,7 @@ from .torch_opt import NNOptimiser, NNLossEvaluatorRegression, NNLossEvaluatorCl
 from ..data import DataFrameSplitter
 from ..normalisation import NormalisationMode
 from ..util.dtype import toFloatArray
+from ..util.pickle import setstate
 from ..util.string import ToStringMixin
 from ..vector_model import VectorRegressionModel, VectorClassificationModel, TrainingContext
 
@@ -389,7 +390,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
         self.outputTensoriser: Optional[Tensoriser] = None
-        self.outputTensorToArrayConverter = None
+        self.outputTensorToArrayConverter: Optional[OutputTensorToArrayConverter] = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
 
@@ -397,36 +398,40 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
             "outputTensorToArrayConverter"]
-        for m in newOptionalMembers:
-            if m not in state:
-                state[m] = None
-        s = super()
-        if hasattr(s, '__setstate__'):
-            s.__setstate__(state)
-        else:
-            self.__dict__ = state
+        setstate(TorchVectorRegressionModel, self, state, newOptionalProperties=newOptionalMembers)
 
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+        """
+        :param tensoriser: tensoriser to use in order to convert input data frames to (one or more) tensors.
+            The default tensoriser directly converts the data frame's values (which is assumed to contain only scalars that
+            can be coerced to floats) to a float tensor.
+            The use of a custom tensoriser is necessary if a non-trivial conversion is necessary or if the data frame
+            is to be converted to more than one input tensor.
+        :return: self
+        """
         self.inputTensoriser = tensoriser
         return self
 
     def withOutputTensoriser(self, tensoriser: RuleBasedTensoriser) -> __qualname__:
         """
         :param tensoriser: tensoriser to use in order to convert the output data frame to a tensor.
+            The default output tensoriser directly converts the data frame's values to a float tensor.
+
             NOTE: It is required to be a rule-based tensoriser, because mechanisms that require fitting on the data
             and thus perform a data-dependendent conversion are likely to cause problems because they would need
             to be reversed at inference time (since the model will be trained on the converted values). If you require
             a transformation, use a target transformer, which will be applied before the tensoriser.
+        :return: self
         """
         self.outputTensoriser = tensoriser
         return self
 
-    def withOutputTensorToArrayConverter(self, outputTensorToArrayConverter) -> __qualname__:
+    def withOutputTensorToArrayConverter(self, outputTensorToArrayConverter: "OutputTensorToArrayConverter") -> __qualname__:
         """
         Configures the use of a custom converter from tensors to numpy arrays, which is applied during inference.
         A custom converter can be required, for example, to handle variable-length outputs (where the output tensor
         will typically contain unwanted padding). Note that since the converter is for inference only, it may be
-        required to use a custom loss evaluator during training.
+        required to use a custom loss evaluator during training if the use of a custom converter is necessary.
 
         :param outputTensorToArrayConverter: the converter
         :return: self
@@ -434,10 +439,23 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.outputTensorToArrayConverter = outputTensorToArrayConverter
 
     def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
+        """
+        :param torchDataSetProviderFactory: the torch data set provider factory, which is used to instantiate the provider which
+            will provide the training and validation data sets from the input data frame that is passed in for learning.
+            By default, TorchDataSetProviderFactoryRegressionDefault is used.
+        :return: self
+        """
         self.torchDataSetProviderFactory = torchDataSetProviderFactory
         return self
 
     def withDataFrameSplitter(self, dataFrameSplitter: DataFrameSplitter) -> __qualname__:
+        """
+        :param dataFrameSplitter: the data frame splitter which is used to split the input/output data frames that are passed for
+            learning into a data frame that is used for training and a data frame that is used for validation.
+            The input data frame is the data frame that is passed as input to the splitter, and the returned indices
+            are used to split both the input and output data frames in the same way.
+        :return: self
+        """
         self.dataFrameSplitter = dataFrameSplitter
         return self
 
@@ -525,18 +543,19 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser"]
-        for m in newOptionalMembers:
-            if m not in state:
-                state[m] = None
-        if "outputMode" not in state:
-            state["outputMode"] = ClassificationOutputMode.PROBABILITIES
-        s = super()
-        if hasattr(s, '__setstate__'):
-            s.__setstate__(state)
-        else:
-            self.__dict__ = state
+        newDefaultProperties = {"outputMode": ClassificationOutputMode.PROBABILITIES}
+        setstate(TorchVectorClassificationModel, self, state, newOptionalProperties=newOptionalMembers,
+            newDefaultProperties=newDefaultProperties)
 
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+        """
+        :param tensoriser: tensoriser to use in order to convert input data frames to (one or more) tensors.
+            The default tensoriser directly converts the data frame's values (which is assumed to contain only scalars that
+            can be coerced to floats) to a float tensor.
+            The use of a custom tensoriser is necessary if a non-trivial conversion is necessary or if the data frame
+            is to be converted to more than one input tensor.
+        :return: self
+        """
         self.inputTensoriser = tensoriser
         return self
 
@@ -552,10 +571,23 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         return self
 
     def withTorchDataSetProviderFactory(self, torchDataSetProviderFactory: "TorchDataSetProviderFactory") -> __qualname__:
+        """
+        :param torchDataSetProviderFactory: the torch data set provider factory, which is used to instantiate the provider which
+            will provide the training and validation data sets from the input data frame that is passed in for learning.
+            By default, TorchDataSetProviderFactoryClassificationDefault is used.
+        :return: self
+        """
         self.torchDataSetProviderFactory = torchDataSetProviderFactory
         return self
 
     def withDataFrameSplitter(self, dataFrameSplitter: DataFrameSplitter) -> __qualname__:
+        """
+        :param dataFrameSplitter: the data frame splitter which is used to split the input/output data frames that are passed for
+            learning into a data frame that is used for training and a data frame that is used for validation.
+            The input data frame is the data frame that is passed as input to the splitter, and the returned indices
+            are used to split both the input and output data frames in the same way.
+        :return: self
+        """
         self.dataFrameSplitter = dataFrameSplitter
         return self
 
@@ -621,6 +653,10 @@ class TorchDataSetProviderFactory(ABC):
 
 class TorchDataSetProviderFactoryClassificationDefault(TorchDataSetProviderFactory):
     def __init__(self, tensoriseDynamically=False):
+        """
+        :param tensoriseDynamically: whether tensorisation shall take place on the fly whenever the provided data sets are iterated;
+              if False, tensorisation takes place once in a precomputation stage (tensors must jointly fit into memory)
+        """
         self.tensoriseDynamically = tensoriseDynamically
 
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorClassificationModel,
@@ -634,6 +670,10 @@ class TorchDataSetProviderFactoryClassificationDefault(TorchDataSetProviderFacto
 
 class TorchDataSetProviderFactoryRegressionDefault(TorchDataSetProviderFactory):
     def __init__(self, tensoriseDynamically=False):
+        """
+        :param tensoriseDynamically: whether tensorisation shall take place on the fly whenever the provided data sets are iterated;
+              if False, tensorisation takes place once in a precomputation stage (tensors must jointly fit into memory)
+        """
         self.tensoriseDynamically = tensoriseDynamically
 
     def createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame, model: TorchVectorRegressionModel,
