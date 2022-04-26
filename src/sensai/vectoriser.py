@@ -4,7 +4,7 @@ from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Ite
 
 import numpy as np
 
-from dcs.sensai.util import LogTime
+from .util import LogTime
 from .util.pickle import setstate
 from .util.string import listString, ToStringMixin
 
