@@ -1,5 +1,5 @@
 import collections
-from typing import Hashable, Dict
+from typing import Hashable, Dict, Optional
 
 from .string import ToStringMixin
 
@@ -39,7 +39,12 @@ class RelativeFrequencyCounter(ToStringMixin):
         self.numTotal += relativeFrequencyCounter.numTotal
         self.numRelevant += relativeFrequencyCounter.numRelevant
 
-    def getRelativeFrequency(self) -> float:
+    def getRelativeFrequency(self) -> Optional[float]:
+        """
+        :return: the relative frequency (between 0 and 1) or None if nothing was counted (0 events considered)
+        """
+        if self.numTotal == 0:
+            return None
         return self.numRelevant / self.numTotal
 
 

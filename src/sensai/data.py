@@ -1,10 +1,13 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Sequence, TypeVar, List, Generic
 
 import numpy as np
 import pandas as pd
 import scipy.stats
+from sklearn.model_selection import StratifiedShuffleSplit
 
+log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -47,8 +50,10 @@ class InputOutputArrays(BaseInputOutputData[np.ndarray]):
         return DataLoader(dataSet, batch_size=batchSize, shuffle=shuffle)
 
 
-# TODO: Rename to InputOutputDataFrames when the time for breaking changes has come
 class InputOutputData(BaseInputOutputData[pd.DataFrame]):
+    """
+    Holds input and output data for learning problems
+    """
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         super().__init__(inputs, outputs)
 
@@ -132,6 +137,26 @@ class DataSplitterFromDataFrameSplitter(DataSplitter[InputOutputData]):
         A = data.filterIndices(list(indicesA))
         B = data.filterIndices(list(indicesB))
         return A, B
+
+
+class DataSplitterFromSkLearnSplitter(DataSplitter):
+    def __init__(self, skLearnSplitter):
+        """
+        :param skLearnSplitter: an instance of one of the splitter classes from sklearn.model_selection,
+            see https://scikit-learn.org/stable/modules/classes.html#module-sklearn.model_selection
+        """
+        self.skLearnSplitter = skLearnSplitter
+
+    def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
+        splitterResult = self.skLearnSplitter.split(data.inputs, data.outputs)
+        split = next(iter(splitterResult))
+        firstIndices, secondIndices = split
+        return data.filterIndices(firstIndices), data.filterIndices(secondIndices)
+
+
+class DataSplitterStratifiedShuffleSplit(DataSplitterFromSkLearnSplitter):
+    def __init__(self, fractionalSizeOfFirstSet: float, randomSeed=42):
+        super().__init__(StratifiedShuffleSplit(n_splits=1, train_size=fractionalSizeOfFirstSet, random_state=randomSeed))
 
 
 class DataFrameSplitter(ABC):

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn import compose
 
+from ..util.pickle import setstate
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
 log = logging.getLogger(__name__)
@@ -177,21 +178,27 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor, **modelArgs):
+    def __init__(self, modelConstructor, useComputedClassWeights=False, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
         :param modelArgs: arguments to be passed to the sklearn model constructor
+        :param useComputedClassWeights: whether to compute class weights from the training data that is given and pass it on to the
+            classifier's fit method; weighted data points may not be supported for all types of models
         """
         super().__init__()
         self.modelConstructor = modelConstructor
         self.sklearnInputTransformer = None
         self.sklearnOutputTransformer = None
         self.modelArgs = modelArgs
+        self.useComputedClassWeights = useComputedClassWeights
         self.model = None
+
+    def __setstate__(self, state):
+        setstate(AbstractSkLearnVectorClassificationModel, self, state, newDefaultProperties={"useComputedClassWeights": False})
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["modelConstructor", "sklearnInputTransformer", "sklearnOutputTransformer",
-                                              "modelArgs", "model"]
+            "modelArgs", "model"]
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
@@ -231,7 +238,13 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         self._updateModelArgs(inputs, outputs)
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
-        self.model.fit(inputValues, np.ravel(outputs.values))
+        kwargs = {}
+        if self.useComputedClassWeights:
+            class2weight = self._computeClassWeights(outputs)
+            classes = outputs.iloc[:, 0]
+            weights = [class2weight[cls] for cls in classes]
+            kwargs["sample_weight"] = np.array(weights)
+        self.model.fit(inputValues, np.ravel(outputs.values), **kwargs)
 
     def _transformInput(self, inputs: pd.DataFrame, fit=False) -> np.ndarray:
         inputValues = inputs.values
@@ -258,3 +271,13 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
     def set_params(self, **params):
         self.model.set_params(**params)
 
+    def _computeClassWeights(self, outputs: pd.DataFrame):
+        """
+        :param outputs: the output data frame containing the class labels as the first column
+        :return: the dictionary of class weights mapping class to weight value
+        """
+        classes: pd.Series = outputs.iloc[:,0]
+        counts = classes.value_counts()
+        rfreqs = counts / counts.sum()
+        weights: pd.Series = 1.0 / rfreqs
+        return weights.to_dict()

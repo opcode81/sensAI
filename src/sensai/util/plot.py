@@ -48,7 +48,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
         rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
-    fmt = '.2f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
+    fmt = '.4f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
     thresh = matrix.max() / 2.
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):

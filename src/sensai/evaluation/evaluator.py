@@ -319,7 +319,7 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
     def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
             fractionalSplitShuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None,
-            computeProbabilities: bool = False):
+            computeProbabilities: bool = False, binaryPositiveLabel=None):
         """
         :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
             fractionalSplitTestFraction for fractional split (default)
@@ -334,6 +334,7 @@ class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
             fractionalSplitShuffle=fractionalSplitShuffle)
         self.additionalMetrics = additionalMetrics
         self.computeProbabilities = computeProbabilities
+        self.binaryPositiveLabel = binaryPositiveLabel
 
     @classmethod
     def fromOldKwArgs(cls, dataSplitter=None, testFraction=None,
@@ -382,7 +383,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
             raise ValueError(f"Expected a classification model, got {model}")
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, data)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
-            labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics)
+            labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics, binaryPositiveLabel=self.params.binaryPositiveLabel)
         predictedVarName = model.getPredictedVariableNames()[0]
         return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
 

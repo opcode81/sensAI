@@ -68,7 +68,7 @@ class CrossValidationSplitter(ABC):
         """
         :param data: the data from which to obtain the folds
         :param numFolds: the number of splits/folds
-        :return: a list containing numSplits tuples (t, e) where t and e are sequences of data point indices to use for training
+        :return: a list containing numFolds tuples (t, e) where t and e are sequences of data point indices to use for training
             and evaluation respectively
         """
         pass

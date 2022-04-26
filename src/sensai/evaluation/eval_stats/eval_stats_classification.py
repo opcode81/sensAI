@@ -1,12 +1,20 @@
+from abc import ABC, abstractmethod
+from typing import List, Sequence
+import logging
+
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import sklearn
-from abc import ABC, abstractmethod
-from sklearn.metrics import confusion_matrix, accuracy_score
-from typing import List, Sequence
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, precision_recall_curve, PrecisionRecallDisplay
 
 from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric
 from ...util.plot import plotMatrix
+
+
+log = logging.getLogger(__name__)
+
+BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES = [1, True, "1", "True"]
 
 
 class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
@@ -26,7 +34,7 @@ class ClassificationMetric(Metric["ClassificationEvalStats"], ABC):
 
 
 class ClassificationMetricAccuracy(ClassificationMetric):
-    name = "ACC"
+    name = "Accuracy"
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         return accuracy_score(y_true=y_true, y_pred=y_predicted)
@@ -66,13 +74,40 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
         return cnt / len(y_true)
 
 
+class BinaryClassificationMetric(ClassificationMetric, ABC):
+    def __init__(self, positiveClassLabel, name: str = None):
+        super().__init__(name)
+        self.positiveClassLabel = positiveClassLabel
+
+
+class BinaryClassificationMetricPrecision(BinaryClassificationMetric):
+    name = "Precision"
+
+    def __init__(self, positiveClassLabel):
+        super().__init__(positiveClassLabel)
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        return precision_score(y_true, y_predicted, pos_label=self.positiveClassLabel)
+
+
+class BinaryClassificationMetricRecall(BinaryClassificationMetric):
+    name = "Recall"
+
+    def __init__(self, positiveClassLabel):
+        super().__init__(positiveClassLabel)
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        return recall_score(y_true, y_predicted, pos_label=self.positiveClassLabel)
+
+
 class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def __init__(self, y_predicted: PredictionArray = None,
-                 y_true: PredictionArray = None,
-                 y_predictedClassProbabilities: pd.DataFrame = None,
-                 labels: PredictionArray = None,
-                 metrics: Sequence["ClassificationMetric"] = None,
-                 additionalMetrics: Sequence["ClassificationMetric"] = None):
+            y_true: PredictionArray = None,
+            y_predictedClassProbabilities: pd.DataFrame = None,
+            labels: PredictionArray = None,
+            metrics: Sequence["ClassificationMetric"] = None,
+            additionalMetrics: Sequence["ClassificationMetric"] = None,
+            binaryPositiveLabel=None):
         """
         :param y_predicted: the predicted class labels
         :param y_true: the true class labels
@@ -80,6 +115,10 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         :param labels: the list of class labels
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
         :param additionalMetrics: the metrics to additionally compute
+        :param binaryPositiveLabel: the label of the positive class for the case where it is a binary classification;
+            if None, check `labels` for occurrence of one of BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES in the respective
+            order, and if none of these appear in `labels`, the classification will not be treated as a binary classification and
+            a warning will be logged
         """
         self.labels = labels
         self.y_predictedClassProbabilities = y_predictedClassProbabilities
@@ -91,8 +130,29 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
             if len(y_predictedClassProbabilities) != len(y_true):
                 raise ValueError("Row count in class probabilities data frame does not match ground truth")
 
+        numLabels = len(labels)
+        if binaryPositiveLabel is not None:
+            if numLabels != 2:
+                raise ValueError(f"Passed binaryPositiveLabel for non-binary classification (labels={self.labels})")
+            if binaryPositiveLabel not in self.labels:
+                raise ValueError(f"The binary positive label {binaryPositiveLabel} does not appear in labels={labels}")
+        else:
+            if numLabels == 2:
+                for c in BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES:
+                    if c in labels:
+                        binaryPositiveLabel = c
+        if numLabels == 2 and binaryPositiveLabel is None:
+            log.warning(f"Binary classification (labels={labels}) without specification of positive class label; binary classification metrics will not be considered")
+        self.binaryPositiveLabel = binaryPositiveLabel
+        self.isBinary = binaryPositiveLabel is not None
+
         if metrics is None:
             metrics = [ClassificationMetricAccuracy(), ClassificationMetricGeometricMeanOfTrueClassProbability()]
+            if self.isBinary:
+                metrics.extend([
+                    BinaryClassificationMetricPrecision(self.binaryPositiveLabel),
+                    BinaryClassificationMetricRecall(self.binaryPositiveLabel)])
+
         metrics = list(metrics)
         if additionalMetrics is not None:
             for m in additionalMetrics:
@@ -120,14 +180,31 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         confusionMatrix = self.getConfusionMatrix()
         return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
 
+    def plotPrecisionRecallCurve(self, titleAdd: str = None):
+        if not self._probabilitiesAvailable:
+            raise Exception("Precision-recall curve requires probabilities")
+        if not self.isBinary:
+            raise Exception("Precision-recall curve is not applicable to non-binary classification")
+        probabilities = self.y_predictedClassProbabilities[self.binaryPositiveLabel]
+        precision, recall, thresholds = precision_recall_curve(y_true=self.y_true, probas_pred=probabilities,
+            pos_label=self.binaryPositiveLabel)
+        disp = PrecisionRecallDisplay(precision, recall)
+        disp.plot()
+        ax: plt.Axes = disp.ax_
+        ax.set_xlabel("precision")
+        ax.set_ylabel("recall")
+        title = "Precision-Recall Curve"
+        if titleAdd is not None:
+            title += "\n" + titleAdd
+        ax.set_title(title)
+        return disp.figure_
+
 
 class ClassificationEvalStatsCollection(EvalStatsCollection[ClassificationEvalStats]):
     def __init__(self, evalStatsList: List[ClassificationEvalStats]):
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    # TODO once we moved to python 3.8: move to base class and use the new get_args method to infer the generic type at runtime
-    #  https://docs.python.org/3/library/typing.html#typing.get_args
     def getGlobalStats(self) -> ClassificationEvalStats:
         """
         Gets an evaluation statistics object that combines the data from all contained eval stats objects
@@ -148,3 +225,4 @@ class ConfusionMatrix:
         title = 'Normalized Confusion Matrix' if normalize else 'Confusion Matrix (Counts)'
         return plotMatrix(self.confusionMatrix, title, self.labels, self.labels, 'true class', 'predicted class', normalize=normalize,
             titleAdd=titleAdd)
+

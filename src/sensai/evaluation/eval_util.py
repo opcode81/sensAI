@@ -353,30 +353,51 @@ class RegressionEvaluationUtil(EvaluationUtil[VectorRegressionModel, VectorRegre
 class ClassificationEvaluationUtil(EvaluationUtil[VectorClassificationModel, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, VectorClassificationModelCrossValidator, VectorClassificationModelCrossValidationData, ClassificationEvalStats]):
     def _createEvalStatsPlots(self, evalStats: ClassificationEvalStats, resultCollector: EvaluationUtil.ResultCollector, subtitle=None):
         resultCollector.addFigure("confusion-matrix", evalStats.plotConfusionMatrix(titleAdd=subtitle))
+        if evalStats.isBinary:
+            resultCollector.addFigure("precision-recall", evalStats.plotPrecisionRecallCurve(titleAdd=subtitle))
 
 
 class MultiDataEvaluationUtil:
-    def __init__(self, inputOutputDataDict: Dict[str, InputOutputData], keyName: str = "dataset"):
+    def __init__(self, inputOutputDataDict: Dict[str, InputOutputData], keyName: str = "dataset",
+            metaDataDict: Optional[Dict[str, Dict[str, Any]]] = None):
         """
         :param inputOutputDataDict: a dictionary mapping from names to the data sets with which to evaluate models
-        :param keyName: a name for the key value used in inputOutputDataDict
+        :param keyName: a name for the key value used in inputOutputDataDict, which will be used as a column name in result data frames
+        :param metaDataDict: a dictionary which maps from a name (same keys as in inputOutputDataDict) to a dictionary, which maps
+            from a column name to a value and which is to be used to extend the result data frames containing per-dataset results
         """
         self.inputOutputDataDict = inputOutputDataDict
         self.keyName = keyName
+        if metaDataDict is not None:
+            self.metaDF = pd.DataFrame(metaDataDict.values(), index=metaDataDict.keys())
+        else:
+            self.metaDF = None
 
     def compareModelsCrossValidation(self, modelFactories: Sequence[Callable[[], VectorModel]],
             resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
             crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        return self.compareModels(modelFactories, useCrossValidation=True, resultWriter=resultWriter, writePerDatasetResults=writePerDatasetResults,
+            crossValidatorParams=crossValidatorParams,
+            columnNameForModelRanking=columnNameForModelRanking, rankMax=rankMax)
+
+    def compareModels(self, modelFactories: Sequence[Callable[[], VectorModel]], useCrossValidation=False,
+            resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
+            evaluatorParams: Optional[Union[VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, Dict[str, Any]]] = None,
+            crossValidatorParams: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
+            columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        :param modelFactories: a sequence of factory functions for the creation of models to evaluate
+        :param modelFactories: a sequence of factory functions for the creation of models to evaluate; every factory must result
+            in a model with a fixed model name (otherwise results cannot be correctly aggregated)
+        :param useCrossValidation: whether to use cross-validation (rather than a single split) for model evaluation
         :param resultWriter: a writer with which to store results
         :param writePerDatasetResults: whether to use resultWriter (if not None) in order to generate detailed results for each
             dataset in a subdirectory named according to the name of the dataset
-        :param crossValidatorParams: parameters to use for the instantiation of cross-validators
+        :param evaluatorParams: parameters to use for the instantiation of evaluators (relevant if useCrossValidation==False)
+        :param crossValidatorParams: parameters to use for the instantiation of cross-validators (relevant if useCrossValidation==True)
         :param columnNameForModelRanking: column name to use for ranking models
         :param rankMax: if true, use max for ranking, else min
-        :return: a pair of data frames (allDF, meanDF) where allDF contains all the individual cross-validation results
-            for every dataset and meanDF contains one row for each model with results averaged across datasets
+        :return: a pair of data frames (allDF, meanDF) where allDF contains all the individual evaluation results (one row per data set)
+            and meanDF contains one row for each model with results averaged across datasets
         """
         allResults = pd.DataFrame()
         for key, inputOutputData in self.inputOutputDataDict.items():
@@ -389,9 +410,10 @@ class MultiDataEvaluationUtil:
                 isRegression = False
             else:
                 raise ValueError("The models have to be either all regression models or all classification, not a mixture")
-            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, crossValidatorParams=crossValidatorParams)
-            childResultWriter = resultWriter.childForSubdirectory(key) if writePerDatasetResults else None
-            df = ev.compareModelsCrossValidation(models, resultWriter=childResultWriter)
+            ev = createEvaluationUtil(inputOutputData, isRegression=isRegression, evaluatorParams=evaluatorParams,
+                crossValidatorParams=crossValidatorParams)
+            childResultWriter = resultWriter.childForSubdirectory(key) if (writePerDatasetResults and resultWriter is not None) else None
+            df = ev.compareModels(models, useCrossValidation=useCrossValidation, resultWriter=childResultWriter)
             df[self.keyName] = key
             df["modelName"] = df.index
             if columnNameForModelRanking is not None:
@@ -404,6 +426,8 @@ class MultiDataEvaluationUtil:
                     df["bestModel"].loc[df[columnNameForModelRanking].idxmin()] = 1
             df = df.reset_index(drop=True)
             allResults = pd.concat((allResults, df))
+        if self.metaDF is not None:
+            allResults = allResults.join(self.metaDF, on=self.keyName, how="left")
         strAllResults = f"All results:\n{allResults.to_string()}"
         log.info(strAllResults)
         meanResults = allResults.groupby("modelName").mean()
