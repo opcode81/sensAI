@@ -1,8 +1,16 @@
+import random
+
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing
+from sensai.evaluation import VectorClassificationModelEvaluator
 
-from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer, DataFrameTransformerChain, DFTNormalisation
+from sensai import InputOutputData
+
+from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer, DataFrameTransformerChain, DFTNormalisation, \
+    DFTFillNA
+from sensai.featuregen import MultiFeatureGenerator, FeatureGeneratorTakeColumns, FeatureGeneratorNAMarker
+from sensai.sklearn.sklearn_classification import SkLearnMLPVectorClassificationModel
 
 
 class TestDFTTransformerBasics:
@@ -74,3 +82,28 @@ class TestDFTNormalisation:
         dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", transformer=sklearn.preprocessing.MaxAbsScaler(), arrayValued=True)])
         df2 = dft.fitApply(df)
         assert np.all(df2.foo.iloc[0] == arr/100) and np.all(df2.foo.iloc[-1] == arr/10)
+
+
+
+def test_NA_transformation(irisClassificationTestCase):
+    iodata = irisClassificationTestCase.data
+
+    # create some random N/A values in the data set
+    inputs = iodata.inputs.copy()
+    rand = random.Random(42)
+    fullIndices = list(range(len(inputs)))
+    for col in inputs.columns:
+        indices = rand.sample(fullIndices, 20)
+        inputs[col].iloc[indices] = np.nan
+    iodata = InputOutputData(inputs, iodata.outputs)
+
+    fg = MultiFeatureGenerator(FeatureGeneratorTakeColumns(), FeatureGeneratorNAMarker(inputs.columns))
+    model = SkLearnMLPVectorClassificationModel() \
+        .withFeatureGenerator(fg) \
+        .withInputTransformers(DFTFillNA(0))
+
+    ev = VectorClassificationModelEvaluator(iodata, testFraction=0.2)
+    ev.fitModel(model)
+    result = ev.evalModel(model)
+    accuracy = result.getEvalStats().getAccuracy()
+    assert accuracy > 0.85
