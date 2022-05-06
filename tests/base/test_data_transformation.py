@@ -1,8 +1,11 @@
+import logging
 import random
 
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing
+
+from sensai.data_transformation.sklearn_transformer import SkLearnTransformerFactoryFactory
 from sensai.evaluation import VectorClassificationModelEvaluator
 
 from sensai import InputOutputData
@@ -11,6 +14,9 @@ from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameT
     DFTFillNA
 from sensai.featuregen import MultiFeatureGenerator, FeatureGeneratorTakeColumns, FeatureGeneratorNAMarker
 from sensai.sklearn.sklearn_classification import SkLearnMLPVectorClassificationModel
+
+
+log = logging.getLogger(__name__)
 
 
 class TestDFTTransformerBasics:
@@ -97,13 +103,19 @@ def test_NA_transformation(irisClassificationTestCase):
         inputs[col].iloc[indices] = np.nan
     iodata = InputOutputData(inputs, iodata.outputs)
 
-    fg = MultiFeatureGenerator(FeatureGeneratorTakeColumns(), FeatureGeneratorNAMarker(inputs.columns))
+    fg = MultiFeatureGenerator(FeatureGeneratorTakeColumns(normalisationRuleTemplate=DFTNormalisation.RuleTemplate(independentColumns=True)),
+        FeatureGeneratorNAMarker(inputs.columns))
     model = SkLearnMLPVectorClassificationModel() \
         .withFeatureGenerator(fg) \
-        .withInputTransformers(DFTFillNA(0))
+        .withInputTransformers(
+            DFTNormalisation(fg.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.StandardScaler()),
+            DFTFillNA(-3))
+    # NOTE: using -3 instead of 0 to fill N/A values in order to force the model to learn the purpose of the N/A markers,
+    # because 0 values are actually a reasonable fallback (which happens to work) when using StandardScaler
 
     ev = VectorClassificationModelEvaluator(iodata, testFraction=0.2)
     ev.fitModel(model)
     result = ev.evalModel(model)
     accuracy = result.getEvalStats().getAccuracy()
+    log.info(f"Accuracy = {accuracy}")
     assert accuracy > 0.85
