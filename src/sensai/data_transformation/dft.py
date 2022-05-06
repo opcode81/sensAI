@@ -804,3 +804,41 @@ class DFTSortColumns(RuleBasedDataFrameTransformer):
     """
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[sorted(df.columns)]
+
+
+class DFTFillNA(RuleBasedDataFrameTransformer):
+    """
+    Fills NA/NaN values with the given value
+    """
+    def __init__(self, fillValue, inplace: bool = False):
+        super().__init__()
+        self.fillValue = fillValue
+        self.inplace = inplace
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.inplace:
+            df.fillna(value=self.fillValue, inplace=True)
+            return df
+        else:
+            return df.fillna(value=self.fillValue)
+
+
+class DFTDropNA(RuleBasedDataFrameTransformer):
+    """
+    Drops rows or columns containin NA/NaN values
+    """
+    def __init__(self, axis=0, inplace=False):
+        """
+        :param axis: 0 to drop rows, 1 to drop columns containing an N/A value
+        :param inplace: whether to perform the operation in-place on the input data frame
+        """
+        super().__init__()
+        self.axis = axis
+        self.inplace = inplace
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.inplace:
+            df.dropna(axis=self.axis, inplace=True)
+            return df
+        else:
+            return df.dropna(axis=self.axis)
