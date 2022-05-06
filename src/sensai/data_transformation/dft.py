@@ -653,6 +653,9 @@ class DFTNormalisation(DataFrameTransformer):
 
 
 class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
+    """
+    Extends a data frame with columns generated from ColumnGenerator instances
+    """
     def __init__(self, columnGenerators: Sequence[ColumnGenerator], inplace=False):
         super().__init__()
         self.columnGenerators = columnGenerators
@@ -674,7 +677,9 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
 
 class DFTCountEntries(RuleBasedDataFrameTransformer):
     """
-    Adds a new column with counts of the values on a selected column
+    Transforms a data frame, based on one of its columns, into a new data frame containing two columns that indicate the counts
+    of unique values in the input column. It is the "DataFrame output version" of pd.Series.value_counts.
+    Each row of the output column holds a unique value of the input column and the number of times it appears in the input column.
     """
     def __init__(self, columnForEntryCount: str, columnNameForResultingCounts: str = "counts"):
         super().__init__()
