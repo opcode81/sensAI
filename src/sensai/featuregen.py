@@ -9,8 +9,9 @@ import pandas as pd
 
 from . import util, data_transformation
 from .columngen import ColumnGenerator
+from .data_transformation import DFTNormalisation
 from .util import flattenArguments
-from .util.string import orRegexGroup, ToStringMixin, dictString, listString
+from .util.string import orRegexGroup, ToStringMixin, listString
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -873,11 +874,15 @@ class FeatureGeneratorNAMarker(RuleBasedFeatureGenerator):
     """
     def __init__(self, columns: List[str], valueA=0, valueNA=1):
         """
+        Note: When changing the default values used, use only values that are considered to be normalised when using this
+        feature generation in a context where DFTNormalisation is used (no normalisation is applied to features generated
+        by this feature generator).
+
         :param columns: the columns for which to generate
         :param valueA: the feature value if the input feature is available
         :param valueNA: the feature value if the input feature is not available
         """
-        super().__init__()
+        super().__init__(normalisationRuleTemplate=DFTNormalisation.RuleTemplate(skip=True))
         self.columns = columns
         self.valueA = valueA
         self.valueNA = valueNA
