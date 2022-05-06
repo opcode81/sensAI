@@ -437,7 +437,8 @@ class DFTNormalisation(DataFrameTransformer):
     """
     Applies normalisation/scaling to a data frame by applying a set of transformation rules, where each
     rule defines a set of columns to which it applies (learning a single transformer based on the values
-    of all applicable columns)
+    of all applicable columns).
+    DFTNormalisation ignores N/A values during fitting and application.
     """
 
     class RuleTemplate:
