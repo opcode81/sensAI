@@ -866,6 +866,30 @@ class FeatureGeneratorMapColumnDict(RuleBasedFeatureGenerator, ABC):
         pass
 
 
+class FeatureGeneratorNAMarker(RuleBasedFeatureGenerator):
+    """
+    Creates features indicating whether another feature is N/A (not available).
+    It can be practical to use this feature generator in conjunction with DFTFillNA for models that cannot handle missing values.
+    """
+    def __init__(self, columns: List[str], valueA=0, valueNA=1):
+        """
+        :param columns: the columns for which to generate
+        :param valueA: the feature value if the input feature is available
+        :param valueNA: the feature value if the input feature is not available
+        """
+        super().__init__()
+        self.columns = columns
+        self.valueA = valueA
+        self.valueNA = valueNA
+
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        newCols = {}
+        valueMap = {True: self.valueNA, False: self.valueA}
+        for col in self.columns:
+            newCols[f"{col}_na"] = [valueMap[isNA] for isNA in df[col].isna()]
+        return pd.DataFrame(newCols, index=df.index)
+
+
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
                             normalisationRules=(), normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
     """
