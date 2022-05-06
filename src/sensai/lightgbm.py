@@ -59,7 +59,9 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
 class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     log = log.getChild(__qualname__)
 
-    def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31, **modelArgs):
+    def __init__(self, categoricalFeatureNames: Sequence[str] = None, random_state=42, num_leaves=31,
+            max_depth=-1, n_estimators=100, min_child_samples=20, importance_type="gain", useComputedClassWeights=False,
+            **modelArgs):
         """
         :param categoricalFeatureNames: sequence of feature names in the input data that are categorical
             Columns that have dtype 'category' (as will be the case for categorical columns created via FeatureGenerators)
@@ -68,9 +70,19 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             In general, passing categorical features may be preferable to using one-hot encoding, for example.
         :param random_state: the random seed to use
         :param num_leaves: the maximum number of leaves in one tree (original lightgbm default is 31)
-        :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/Parameters.html
+        :param max_depth: maximum tree depth for base learners, <=0 means no limit
+        :param n_estimators: number of boosted trees to fit
+        :param min_child_samples: minimum number of data needed in a child (leaf)
+        :param importance_type: the type of feature importance to be set in the respective property of the wrapped model.
+            If ‘split’, result contains numbers of times the feature is used in a model.
+            If ‘gain’, result contains total gains of splits which use the feature.
+        :param useComputedClassWeights: whether to compute class weights from the training data that is given and pass it on to the
+            classifier's fit method; weighted data points may not be supported for all types of models
+        :param modelArgs: see https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMClassifier.html?highlight=LGBMClassifier
         """
-        super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves, **modelArgs)
+        super().__init__(lightgbm.sklearn.LGBMClassifier, random_state=random_state, num_leaves=num_leaves,
+            max_depth=max_depth, n_estimators=n_estimators, min_child_samples=min_child_samples, importance_type=importance_type,
+            useComputedClassWeights=useComputedClassWeights, **modelArgs)
 
         if type(categoricalFeatureNames) == str:
             categoricalFeatureNameRegex = categoricalFeatureNames

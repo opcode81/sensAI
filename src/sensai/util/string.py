@@ -13,8 +13,15 @@ def dictString(d: Dict, brackets: Optional[str] = None):
         return s
 
 
-def listString(l: Iterable[Any], brackets="[]"):
-    return brackets[:1] + ", ".join((toString(x) for x in l)) + brackets[-1:]
+def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None):
+    def item(x):
+        x = toString(x)
+        if quote is not None:
+            return quote + x + quote
+        else:
+            return x
+
+    return brackets[:1] + ", ".join((item(x) for x in l)) + brackets[-1:]
 
 
 def toString(x):
@@ -53,6 +60,7 @@ class ToStringMixin:
     Provides default implementations for __str__ and __repr__ which contain all attribute names and their values. The
     latter also contains the object id.
     """
+    _TOSTRING_INCLUDE_ALL = "__all__"
 
     def _toStringClassName(self):
         return type(self).__qualname__
@@ -93,10 +101,10 @@ class ToStringMixin:
                 return False
 
         # determine relevant attribute dictionary
-        if len(include) == 0:  # exclude semantics (include everything by default)
+        if len(include) == 1 and include[0] == self._TOSTRING_INCLUDE_ALL:  # exclude semantics (include everything by default)
             attributeDict = self.__dict__
         else:  # include semantics (include only inclusions)
-            attributeDict = {k: getattr(self, k) for k in set(include + includeForced) if hasattr(self, k)}
+            attributeDict = {k: getattr(self, k) for k in set(include + includeForced) if hasattr(self, k) and k != self._TOSTRING_INCLUDE_ALL}
 
         # apply exclusions and remove underscores from attribute names
         d = {k.strip("_"): v for k, v in attributeDict.items() if not isExcluded(k)}
@@ -132,16 +140,21 @@ class ToStringMixin:
 
     def _toStringIncludes(self) -> List[str]:
         """
-        Makes the string representation include only the returned attributes (i.e. introduces inclusion semantics) - except
-        if the list is empty, in which case all attributes are included by default.
-        To add an included attribute in a sub-class, regardless of any super-classes using exclusion or inclusion semantics,
+        Makes the string representation include only the returned attributes (i.e. introduces inclusion semantics);
+        By default, the list contains only a marker element, which is interpreted as "all attributes included".
+
+        This method can be overridden by sub-classes, which can call super in order to extend the list.
+        If a list containing the aforementioned marker element (which stands for all attributes) is extended, the marker element will be ignored,
+        and only the user-added elements will be considered as included.
+
+        Note: To add an included attribute in a sub-class, regardless of any super-classes using exclusion or inclusion semantics,
         use _toStringIncludesForced instead.
-        This method can be overwritten by sub-classes which can call super and extend the list.
+
         This method will only have no effect if _toStringObjectInfo is overridden to not use its result.
 
-        :return: a list of attribute names; if empty, include all attributes (except the ones being excluded according to other methods)
+        :return: a list of attribute names to be included in the string representation
         """
-        return []
+        return [self._TOSTRING_INCLUDE_ALL]
 
     def _toStringIncludesForced(self) -> List[str]:
         """

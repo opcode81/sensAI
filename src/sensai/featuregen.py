@@ -297,7 +297,10 @@ class MultiFeatureGenerator(FeatureGenerator):
         if len(dfs) == 0:
             return pd.DataFrame(index=index)
         else:
-            return pd.concat(dfs, axis=1)
+            combinedDF = pd.concat(dfs, axis=1)
+            if len(combinedDF.columns) != len(set(combinedDF.columns)):
+                raise Exception(f"At least one column was generated more than once: {list(combinedDF.columns)}; check feature generators for correctness!")
+            return combinedDF
 
     def _generate(self, inputDF: pd.DataFrame, ctx=None):
         def generateFeatures(fg: FeatureGenerator):
@@ -736,8 +739,10 @@ class FeatureCollector(object):
 
     def getNormalizationRules(self, includeGeneratedCategoricalRules=True):
         return self.getMultiFeatureGenerator().getNormalisationRules(
-            includeGeneratedCategoricalRules=includeGeneratedCategoricalRules
-        )
+            includeGeneratedCategoricalRules=includeGeneratedCategoricalRules)
+
+    def getCategoricalFeatureNameRegex(self) -> str:
+        return self.getMultiFeatureGenerator().getCategoricalFeatureNameRegex()
 
     def _createMultiFeatureGenerator(self):
         featureGenerators = []
@@ -800,6 +805,65 @@ class FeatureGeneratorFromVectorModel(FeatureGenerator):
         info = super().info()
         info["wrappedModel"] = str(self.vectorModel)
         return info
+
+
+class FeatureGeneratorMapColumn(RuleBasedFeatureGenerator, ABC):
+    """
+    Creates a single feature from a single input column by applying a function to each element of the input column
+    """
+    def __init__(self, inputColName: str, featureColName: str, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None, addCategoricalDefaultRules=True):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate, addCategoricalDefaultRules=addCategoricalDefaultRules)
+        self._inputColName = inputColName
+        self._featureColName = featureColName
+
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        if self._inputColName not in df.columns:
+            raise ValueError(f"Column '{self._inputColName}' required by feature generator not found in list of columns: {list(df.columns)}")
+        inputSeries = df[self._inputColName]
+        values = inputSeries.apply(self._createValue)
+        return pd.DataFrame({self._featureColName: values}, index=df.index)
+
+    @abstractmethod
+    def _createValue(self, value):
+        """
+        Maps a value from the input column to a feature value
+
+        :param value: a value from the input column
+        :return: the feature value
+        """
+        pass
+
+
+class FeatureGeneratorMapColumnDict(RuleBasedFeatureGenerator, ABC):
+    """
+    Creates an arbitrary number of features from a single input column by applying a function to each element of the input column
+    """
+    def __init__(self, inputColName: str, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None, addCategoricalDefaultRules=True):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate, addCategoricalDefaultRules=addCategoricalDefaultRules)
+        self._inputColName = inputColName
+
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        if self._inputColName not in df.columns:
+            raise ValueError(f"Column '{self._inputColName}' required by feature generator not found in list of columns: {list(df.columns)}")
+        inputSeries = df[self._inputColName]
+        values = [self._createFeaturesDict(v) for v in inputSeries]
+        return pd.DataFrame(values, index=df.index)
+
+    @abstractmethod
+    def _createFeaturesDict(self, value) -> Dict[str, Any]:
+        """
+        Maps a value from the input column to a dictionary containing one or more features.
+
+        :param value: a value from the input column
+        :return: a dictionary mapping feature names to values
+        """
+        pass
 
 
 def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,

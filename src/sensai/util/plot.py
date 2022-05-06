@@ -78,6 +78,15 @@ class Plot:
         plt.ylabel(label)
         return self
 
+    def title(self, title: str):
+        plt.title(title)
+
+    def xlim(self, minValue, maxValue):
+        plt.xlim(minValue, maxValue)
+
+    def ylim(self, minValue, maxValue):
+        plt.ylim(minValue, maxValue)
+
     def save(self, path):
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)

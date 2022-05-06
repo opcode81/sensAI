@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from typing import List, Sequence, Optional
 
-from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
+from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot
 
 log = logging.getLogger(__name__)
 
@@ -274,3 +274,22 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
             self.globalStats = RegressionEvalStats(y_predicted, y_true)
         return self.globalStats
+
+
+class RegressionEvalStatsPlot(EvalStatsPlot[RegressionEvalStats], ABC):
+    pass
+
+
+class RegressionEvalStatsPlotErrorDistribution(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotErrorDistribution(titleAdd=subtitle)
+
+
+class RegressionEvalStatsPlotHeatmapGroundTruthPredictions(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotHeatmapGroundTruthPredictions(titleAdd=subtitle)
+
+
+class RegressionEvalStatsPlotScatterGroundTruthPredictions(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotScatterGroundTruthPredictions(titleAdd=subtitle)
