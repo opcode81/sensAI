@@ -72,7 +72,17 @@ class Metric(Generic[TEvalStats], ABC):
 class EvalStatsCollection(Generic[TEvalStats], ABC):
     def __init__(self, evalStatsList: List[TEvalStats]):
         self.statsList = evalStatsList
-        metricsList = [es.getAll() for es in evalStatsList]
+        metricNamesSet = None
+        metricsList = []
+        for es in evalStatsList:
+            metrics = es.getAll()
+            currentMetricNamesSet = set(metrics.keys())
+            if metricNamesSet is None:
+                metricNamesSet = currentMetricNamesSet
+            else:
+                if metricNamesSet != currentMetricNamesSet:
+                    raise Exception(f"Inconsistent set of metrics in evaluation stats collection: Got {metricNamesSet} for one instance, {currentMetricNamesSet} for another")
+            metricsList.append(metrics)
         metricNames = sorted(metricsList[0].keys())
         self.metrics = {metric: [d[metric] for d in metricsList] for metric in metricNames}
 
@@ -206,3 +216,14 @@ def meanStats(evalStatsList: Sequence[EvalStats]) -> Dict[str, float]:
     dicts = [s.getAll() for s in evalStatsList]
     metrics = dicts[0].keys()
     return {m: np.mean([d[m] for d in dicts]) for m in metrics}
+
+
+class EvalStatsPlot(Generic[TEvalStats], ABC):
+    @abstractmethod
+    def createFigure(self, evalStats: TEvalStats, subtitle: str) -> Optional[plt.Figure]:
+        """
+        :param evalStats: the evaluation stats from which to generate the plot
+        :param subtitle: the plot's subtitle
+        :return: the figure or None if this plot is not applicable/cannot be created
+        """
+        pass

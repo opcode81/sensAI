@@ -2,7 +2,7 @@ import functools
 import logging
 from typing import Optional, Sequence, Union, Any, Callable
 
-from sklearn.preprocessing import MaxAbsScaler, StandardScaler, RobustScaler
+from sklearn.preprocessing import MaxAbsScaler, StandardScaler, RobustScaler, MinMaxScaler
 import numpy as np
 from typing_extensions import Protocol
 
@@ -60,6 +60,10 @@ class SkLearnTransformerFactoryFactory:
         return MaxAbsScaler
 
     @staticmethod
+    def MinMaxScaler() -> Callable[[], MinMaxScaler]:
+        return MinMaxScaler
+
+    @staticmethod
     def StandardScaler(with_mean=True, with_std=True) -> Callable[[], StandardScaler]:
         return functools.partial(StandardScaler, with_mean=with_mean, with_std=with_std)
 
@@ -74,10 +78,15 @@ class SkLearnTransformerFactoryFactory:
             `min` being mapped to -1 and `max` being mapped to 1.
         :param with_scaling: whether to apply scaling based on quantile_range.
         :param with_centering: whether to apply centering by subtracting the median.
-        :return: a function, which when called without any arguments, produces the respective RobustScaler instace.
+        :return: a function, which when called without any arguments, produces the respective RobustScaler instance.
         """
         return functools.partial(RobustScaler, quantile_range=quantile_range, with_scaling=with_scaling, with_centering=with_centering)
 
     @staticmethod
-    def ManualScaler(centre: Optional[float] = None, scale: Optional[float] = None):
+    def ManualScaler(centre: Optional[float] = None, scale: Optional[float] = None) -> Callable[[], ManualScaler]:
+        """
+        :param centre: the value to subtract from all values (if any)
+        :param scale: the value with which to scale all values (after removing the centre)
+        :return: a function, which when called without any arguments, produces the respective scaler instance.
+        """
         return functools.partial(ManualScaler, centre=centre, scale=scale)

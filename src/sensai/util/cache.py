@@ -565,7 +565,7 @@ class CachedValueProviderMixin(ABC):
 
 
 def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None,
-        backend="pickle", protocol=pickle.HIGHEST_PROTOCOL) -> T:
+        backend="pickle", protocol=pickle.HIGHEST_PROTOCOL, load=True) -> T:
     """
     :param fn: the function whose result is to be cached
     :param picklePath: the path in which to store the cached result
@@ -576,7 +576,8 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
         the function fn is called to compute the result and the cached result is updated.
     :param backend: pickle or joblib
     :param protocol: the pickle protocol version
-    :return: the res (either obtained from the cache or the function)
+    :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
+    :return: the result (either obtained from the cache or the function)
     """
     if functionName is None:
         functionName = fn.__name__
@@ -588,13 +589,17 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
         return res
 
     if os.path.exists(picklePath):
-        log.info(f"Loading cached result of function '{functionName}' from {picklePath}")
-        result = loadPickle(picklePath, backend=backend)
-        if validityCheckFn is not None:
-            if not validityCheckFn(result):
-                log.info(f"Cached result is no longer valid, recomputing ...")
-                result = callFnAndCacheResult()
-        return result
+        if load:
+            log.info(f"Loading cached result of function '{functionName}' from {picklePath}")
+            result = loadPickle(picklePath, backend=backend)
+            if validityCheckFn is not None:
+                if not validityCheckFn(result):
+                    log.info(f"Cached result is no longer valid, recomputing ...")
+                    result = callFnAndCacheResult()
+            return result
+        else:
+            log.info(f"Ignoring previously stored result in {picklePath}, calling function '{functionName}' ...")
+            return callFnAndCacheResult()
     else:
         log.info(f"No cached result found in {picklePath}, calling function '{functionName}' ...")
         return callFnAndCacheResult()
@@ -605,7 +610,7 @@ class PickleCached(object):
     Function decorator for caching function results via pickle
     """
     def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle",
-            protocol=pickle.HIGHEST_PROTOCOL):
+            protocol=pickle.HIGHEST_PROTOCOL, load=True):
         """
         :param cacheBasePath: the directory where the pickle cache file will be stored
         :param filenamePrefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
@@ -614,12 +619,14 @@ class PickleCached(object):
         :param filename: the full file name of the cache file to be created; this is admissible only if the function has no arguments
         :param backend: the serialisation backend to use (see dumpPickle)
         :param protocol: the pickle protocol version to use
+        :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
         """
         self.filename = filename
         self.cacheBasePath = cacheBasePath
         self.filenamePrefix = filenamePrefix
         self.backend = backend
         self.protocol = protocol
+        self.load = load
 
         if self.filenamePrefix is None:
             self.filenamePrefix = ""
@@ -640,7 +647,7 @@ class PickleCached(object):
                     raise Exception("Function called with arguments but full cache filename specified: specify a cache filename prefix only to account for argument values")
                 filename = self.filename
             picklePath = os.path.join(self.cacheBasePath, filename)
-            return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend)
+            return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend, load=self.load)
 
         return wrapped
 
