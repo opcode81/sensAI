@@ -313,8 +313,16 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
             else:
                 if Y is None:
                     raise Exception(f"The underlying model requires a data frame for fitting but Y=None was passed")
+                if len(X) != len(Y):
+                    raise ValueError(f"Length of input ({len(X)}) does not match length of output ({len(Y)})")
                 Y = self._computeModelOutputs(Y)
                 X = self._computeModelInputs(X, Y=Y, fit=fitPreprocessors)
+                if len(X) != len(Y):
+                    log.debug(f"Input computation changed number of data points ({len(self._trainingContext.originalInput)} -> {len(X)})")
+                    Y = Y.loc[X.index]
+                    if len(X) != len(Y):
+                        raise ValueError("Could not recover matching outputs for changed inputs. Only input filtering is admissible, "
+                            "indices of input & ouput data frames must match.")
                 self._modelInputVariableNames = list(X.columns)
                 inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
                 log.info(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
