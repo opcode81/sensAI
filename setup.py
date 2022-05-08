@@ -6,17 +6,22 @@ from setuptools import setup, find_namespace_packages
 tf_requirements = ['tensorflow==1.15.0']
 torch_requirements = ['torch==1.4.0', 'torchtext==0.5.0']
 lightgbm_requirements = ['lightgbm==2.3.0']
-geoanalytics_requirements = ['networkx==2.4', 'Shapely~=1.7.0', 'geopandas==0.7.0']
+geoanalytics_requirements = ['networkx==2.4', 'Shapely~=1.7.0', 'geopandas==0.7.0', 'utm==0.7.0']
 
 
 # list of dependencies where ==/~= dependencies (used by us, particularly in requirements.txt) are relaxed:
 # any later version is OK (as long as we are not aware of a concrete limitation - and once we are, we shall define
 # the respective upper bound below)
+# TODO: check if we can relax all of the optional requirements as well (above)
 DEPS_VERSION_LOWER_BOUND = ["pandas", "scipy", "numpy", "scikit-learn", "seaborn", "typing-extensions"]
 DEPS_VERSION_UPPER_BOUND_EXCLUSIVE: Dict[str, str] = {}
 
 
 def required_packages(deps: Iterable[str]):
+    """
+    :param deps: the set of requirements
+    :return: the set of updated requirements with the relaxations defined above applied
+    """
     updated_deps = []
     for dep in deps:
         dep = dep.strip()
