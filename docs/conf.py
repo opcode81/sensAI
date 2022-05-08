@@ -121,7 +121,8 @@ autodoc_mock_imports = [
     "azure",
     "geopandas",
     "shapely",
-    "networkx"
+    "networkx",
+    "utm"
 ]
 
 # Render docu of __init__ methods
