@@ -7,9 +7,32 @@ The tests and docs build are executed via **tox** in several environments:
 
 ## Docs Build
 
-Docs are automatically created, all .rst files are auto-generated; only `index.rst` is manually defined.
+Docs are automatically created during the GitHub build via tox.
 
-Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`.
+All .rst files are auto-generated, with the exception of the root index file  `index.rst`.
+
+### Dependency Handling
+
+**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`.
+
+### Manually Running the Docs Build
+
+The docs build is designed to be run by tox. As soon as a single iPython notebook is included, `sensai` must be available as an installed dependency in the environment in which the docs build is run, as the notebook executions takes place in a Jupyter environment. 
+
+Under Linux, running tox should work fine. Under Windows, we are yet to succeed.
+
+To run the docs build without tox, first create an environment that has the additional requirements installed and, most importantly, sensai installed.
+
+    conda env create -n sensai-docs -f environment.yml
+    conda activate sensai-docs
+    pip install sphinx sphinx_rtd_theme nbsphinx
+    pip install .
+    
+The last command obviously needs to be repeated every time the library changes.
+In the new environment `sensai-docs`, we can then run the sphinx build
+
+    rm -rf docs-build; mkdir docs-build
+    sphinx -b html docs docs-build
 
 # Creating a New Release
 
