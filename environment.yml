@@ -5,7 +5,10 @@ channels:
   - anaconda
   - defaults
 dependencies:
+  # basics
   - python=3.7
+  - pip
+  # optional sensai dependencies for development
   - pytorch=1.4.0
   - tensorflow=1.14.0
   - pyqt=5.12
@@ -13,15 +16,17 @@ dependencies:
   - pytorch=1.4.0
   - catboost=0.23
   - xgboost=1.4.0
-  - pytest=5.4.1
-  - tox=3.14.6
-  - bump2version
-  - jupyter
-  - pyyaml=5.3
   - lightgbm=3.1.1
-  - sphinx_rtd_theme
-  - utm
-  - pip
+  - utm=0.7.0
+  # for notebook support
+  - jupyter
+  # for tests
+  - pytest=5.4.1
+  # for release process
+  - bump2version
   - pip:
-      - -r file:requirements.txt
-      - nbsphinx
+      # non-optional sensai dependencies
+      - -r requirements.txt
+      # required for locally running the tox build
+      - tox
+      - virtualenv
