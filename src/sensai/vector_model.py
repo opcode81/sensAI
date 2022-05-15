@@ -290,6 +290,9 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
                 X = self._featureGenerator.fitGenerate(X, Y, self)
         self._inputTransformerChain.fit(X)
 
+    def fitInputOutputData(self, ioData: InputOutputData, fitPreprocessors=True):
+        self.fit(ioData.inputs, ioData.outputs, fitPreprocessors=fitPreprocessors)
+
     def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True):
         """
         Fits the model using the given data
