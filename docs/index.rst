@@ -5,7 +5,7 @@ sensAI - the Python library for sensible AI
    :caption: Guides and Tutorials
    :glob:
 
-   *
+   intro.ipynb
 
 
 .. toctree::
