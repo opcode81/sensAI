@@ -9,7 +9,7 @@ import functools
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Tuple, Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set
+from typing import Tuple, Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set, List
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
@@ -154,6 +154,9 @@ class EvalStatsPlotCollector(Generic[TEvalStats, TEvalStatsPlot]):
 
     def addPlot(self, name: str, plot: EvalStatsPlot):
         self.plots[name] = plot
+
+    def getEnabledPlots(self) -> List[str]:
+        return [p for p in self.plots if p not in self.disabledPlots]
 
     def disablePlots(self, *names: str):
         self.disabledPlots.update(names)
