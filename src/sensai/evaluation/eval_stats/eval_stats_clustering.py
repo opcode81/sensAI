@@ -47,8 +47,8 @@ class ClusterLabelsEvalStats(EvalStats[TMetric], ABC):
             result[self.NOISE_SIZE] = int(self.noiseClusterSize)
         return result
 
-    def getAll(self) -> Dict[str, float]:
-        metricsDict = super().getAll()
+    def metricsDict(self) -> Dict[str, float]:
+        metricsDict = super().metricsDict()
         metricsDict.update(self.getDistributionSummary())
         return metricsDict
 

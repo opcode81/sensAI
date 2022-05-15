@@ -96,7 +96,7 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         statsDicts = []
         varNames = []
         for predictedVarName, evalStats in self.evalStatsByVarName.items():
-            statsDicts.append(evalStats.getAll())
+            statsDicts.append(evalStats.metricsDict())
             varNames.append(predictedVarName)
         df = pd.DataFrame(statsDicts, index=varNames)
         df.index.name = "predictedVar"
@@ -194,8 +194,8 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
     def _computeMetricsForVarName(self, model, predictedVarName: Optional[str], onTrainingData=False):
         self.fitModel(model)
-        evalData = self.evalModel(model, onTrainingData=onTrainingData)
-        return evalData.getEvalStats(predictedVarName=predictedVarName).getAll()
+        evalData: VectorModelEvaluationData = self.evalModel(model, onTrainingData=onTrainingData)
+        return evalData.getEvalStats(predictedVarName=predictedVarName).metricsDict()
 
     def createMetricsDictProvider(self, predictedVarName: Optional[str]) -> MetricsDictProvider:
         """

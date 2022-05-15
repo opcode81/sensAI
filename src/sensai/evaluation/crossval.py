@@ -193,7 +193,7 @@ class VectorModelCrossValidator(MetricsDictProvider, Generic[TCrossValData], ABC
 
     def _computeMetricsForVarName(self, model, predictedVarName: Optional[str]):
         data = self.evalModel(model)
-        return data.getEvalStatsCollection(predictedVarName=predictedVarName).aggStats()
+        return data.getEvalStatsCollection(predictedVarName=predictedVarName).aggMetricsDict()
 
     def createMetricsDictProvider(self, predictedVarName: Optional[str]) -> MetricsDictProvider:
         """

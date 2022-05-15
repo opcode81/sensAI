@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Sequence, Optional
+from typing import List, Sequence, Optional, Dict
 import logging
 
 from matplotlib import pyplot as plt
@@ -200,8 +200,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def getAccuracy(self):
         return self.computeMetricValue(ClassificationMetricAccuracy())
 
-    def getAll(self):
-        """Gets a dictionary with all metrics"""
+    def metricsDict(self) -> Dict[str, float]:
         d = {}
         for metric in self.metrics:
             if not metric.requiresProbabilities or self._probabilitiesAvailable:

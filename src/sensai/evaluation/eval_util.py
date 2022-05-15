@@ -289,7 +289,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         resultWriter = self._resultWriterForModel(resultWriter, model)
         crossValidator = self.createCrossValidator(model)
         crossValidationData = crossValidator.evalModel(model)
-        aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()
+        aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggMetricsDict()
                 for varName in crossValidationData.predictedVarNames}
         df = pd.DataFrame.from_dict(aggStatsByVar, orient="index")
         strEvalResults = df.to_string()
@@ -326,13 +326,13 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                     raise ValueError("Cross-validation necessitates that models be retrained; got fitModels=False")
                 crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
                 evalStatsCollection = crossValidationResult.getEvalStatsCollection()
-                statsDict = evalStatsCollection.aggStats()
+                statsDict = evalStatsCollection.aggMetricsDict()
                 if includeEvalStatsObjects:
                     statsDict["evalStats"] = evalStatsCollection.getGlobalStats()
             else:
                 evalStats: EvalStats = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
                     fitModel=fitModels).getEvalStats()
-                statsDict = evalStats.getAll()
+                statsDict = evalStats.metricsDict()
                 if includeEvalStatsObjects:
                     statsDict["evalStats"] = evalStats
             statsDict["modelName"] = model.getName()
