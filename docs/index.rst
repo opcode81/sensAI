@@ -5,11 +5,10 @@ sensAI - the Python library for sensible AI
    :caption: Guides and Tutorials
    :glob:
 
-..
-  Comment: include all notebooks (copied to docs/ by test_notebooks)
-  
    *
 
+..
+  Above, we include notebooks, copied here by test_notebooks
 
 .. toctree::
    :caption: Modules
