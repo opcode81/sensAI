@@ -18,3 +18,4 @@ dist
 /.pytest_cache
 data
 .coverage
+/*.env
