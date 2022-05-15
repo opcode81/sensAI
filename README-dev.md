@@ -15,24 +15,29 @@ All .rst files are auto-generated, with the exception of the root index file  `i
 
 **Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`.
 
+### Notebooks
+
+Notebooks in the `notebooks/` folder are executed and saved with outputs to the `docs/` folder by a test in `notebooks/test_notebooks.py`.
+
+Notebooks are included in the documentation in `docs/index.rst`.
+
 ### Manually Running the Docs Build
 
-The docs build is designed to be run by tox. As soon as a single iPython notebook is included, `sensai` must be available as an installed dependency in the environment in which the docs build is run, as the notebook executions takes place in a Jupyter environment. 
+The docs build is designed to be run by tox. As soon as a single iPython notebook is included in index.rst, `sensai` must be available as an installed dependency in the environment in which the docs build is run, as the notebook executions take place in a Jupyter environment where we can't simply extend sys.path. 
 
 Under Linux, running tox should work fine. Under Windows, we are yet to succeed.
 
-To run the docs build without tox, first create an environment that has the additional requirements installed and, most importantly, sensai installed.
+To run the docs build without tox (under Windows), first create an environment that has the additional requirements installed.
 
     conda env create -n sensai-docs -f environment.yml
     conda activate sensai-docs
     pip install sphinx sphinx_rtd_theme nbsphinx
-    pip install .
-    
-The last command obviously needs to be repeated every time the library changes.
-In the new environment `sensai-docs`, we can then run the sphinx build
 
+Then, to build the docs, we need to perform the following steps with the new environment `sensai-docs` activated. The first command installs the current source version of  `sensai` itself.
+
+    pip install .
     rm -rf docs-build; mkdir docs-build
-    sphinx -b html docs docs-build
+    sphinx-build -b html docs docs-build
 
 # Creating a New Release
 
@@ -65,3 +70,53 @@ In the new environment `sensai-docs`, we can then run the sphinx build
      `bumpversion build --commit`
    * Continue with step 3.
 
+# Source-Level Directory Sync
+
+#### Details on the Synchonisation of a Source Directory within Your Project with the sensAI Repository
+
+We support the synchronisation of a branch in the sensAI repository with a directory within the git repository of your project which is to contain the sensAI source code (i.e. alternative #2 from above) via a convenient scripting solution.
+
+We consider two local repositories: the sensAI repository in directory `sensAI/` and your project in, for instance, directory `sensAI/../myprj/`. Let us assume that we want to synchronise branch `myprj-branch` in the sensAI repository with directory `myprj/src/sensai`.
+
+##### Synchronisation Script
+
+To perform the synchronisation, please create a script as follows, which you should save to `sensAI/sync.py`:
+
+```python
+import os
+from repo_dir_sync import LibRepo, OtherRepo
+
+r = LibRepo()
+r.add(OtherRepo("myprj", "myprj-branch", os.path.join("..", "myprj", "src", "sensai")))
+r.runMain()
+```
+
+You can add multiple other repositories if you so desire in the future.
+
+From directory `sensAI/` you can use the script in order to 
+
+* ***Push***: Update your project (i.e. `myprj/src/sensai`) with changes that were made in other projects by running `python sync.py myprj push`
+* ***Pull***: Update `myprj-branch` in the sensAI repository with changes made in your project by running `python sync.py myprj pull`
+
+##### Initialisation
+
+To initialise the synchronisation, proceed as follows:
+
+1. Create the branch `myprj-branch` in the sensAI repository, i.e. in `sensAI/` run this command:
+   `git branch myprj-branch master`
+2. Create the directory `myprj/src/sensai`.
+3. Make sure you have a `.gitignore` file in `myprj/` with at least the following entries:
+
+       *.pyc
+       __pycache__
+       *.bak
+       *.orig
+
+   Otherwise you may end up with unwanted tracked files after a synchronisation.
+4. Perform the initial *push*, i.e. in `sensAI/` run this command:
+   `python sync.py myprj push`
+
+##### Things to Keep in Mind
+
+* Both *push* and *pull* operations are always performed based on the branch that is currently checked out in `myprj/`. The best practice is to only use one branch for synchronisation, e.g. master.
+* *Push* and *pull* operations will make git commits in both repositories. Should an operation ever go wrong/not do what you intended, use `git reset --hard` to go back to the commits before the operation in both repositories.
