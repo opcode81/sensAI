@@ -19,3 +19,4 @@ dist
 data
 .coverage
 /*.env
+/docs-build
