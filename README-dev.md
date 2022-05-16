@@ -1,15 +1,37 @@
+# Development Environment
+
+This section explains the steps required to set up an environment in order to develop sensAI further.
+
+## Clone Large Files
+
+Clone the full repo, including large files using [git large file storage](https://git-lfs.github.com):
+
+    git lfs pull
+
+This adds, in particular, data that is used in notebooks.
+
+## Create the Python Virtual Environment
+
+Use conda to set up the Python environment:
+
+    conda env create -f environment.py
+
+Solving the environment may take several minutes (but should ultimately work).
+
+NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see blow).
+
 # Build and Test Pipeline
 
 The tests and docs build are executed via **tox** in several environments:
 * `py`: the "regular" test environment, where we test against the pinned dependencies which we also use for development (by explicitly including `requirements.txt` with the pinned versions; this is also the environment in which we test the execution of notebooks
 * `py_latest_dependencies`: the environment where we use the latest versions of all dependencies (except where we have identified an incompatibility; see `setup.py` definitions `DEPS_VERSION_LOWER_BOUND` and `DEPS_VERSION_UPPER_BOUND_EXCLUSIVE`); by not including `requirements.txt`, we depend on the latest admissible versions according to `setup.py`
-* `docs`: the environment in which docs are built via sphinx (by executing `build_scripts/update_docs.py`)
+* `docs`: the environment in which docs are built via sphinx 
 
 ## Docs Build
 
 Docs are automatically created during the GitHub build via tox.
 
-All .rst files are auto-generated, with the exception of the root index file  `index.rst`.
+All .rst files are auto-generated (by `build_scripts/update_docs.py`), with the exception of the root index file  `index.rst`.
 
 ### Dependency Handling
 
