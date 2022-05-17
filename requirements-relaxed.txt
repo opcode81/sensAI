@@ -1,4 +1,5 @@
-# this is a relaxed version of requirements.txt where newer versions are allowed
+# sensAI main requirements
+# This is a relaxed version with lower bounds, which exists only for inclusion in environment.yml (developer environment)
 pandas>=1.0.0
 scipy>=1.4
 numpy>=1.18.0

@@ -1,0 +1,4 @@
+# Requirements for extra 'torch'
+# These are the pinned lowest versions we test; setup.py relaxes them, changing them to lower bounds
+torch==1.4.0
+torchtext==0.5.0
