@@ -40,15 +40,23 @@ class EvalStats(Generic[TMetric], ToStringMixin):
     def computeMetricValue(self, metric: TMetric) -> float:
         return metric.computeValueForEvalStats(self)
 
-    def getAll(self) -> Dict[str, float]:
-        """Gets a dictionary with all metrics"""
+    def metricsDict(self) -> Dict[str, float]:
+        """
+        Computes all metrics
+
+        :return: a dictionary mapping metric names to values
+        """
         d = {}
         for metric in self.metrics:
             d[metric.name] = self.computeMetricValue(metric)
         return d
 
+    def getAll(self) -> Dict[str, float]:
+        """Alias for metricsDict; may be deprecated in the future"""
+        return self.metricsDict()
+
     def _toStringObjectInfo(self) -> str:
-        return dictString(self.getAll())
+        return dictString(self.metricsDict())
 
 
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
@@ -75,7 +83,7 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
         metricNamesSet = None
         metricsList = []
         for es in evalStatsList:
-            metrics = es.getAll()
+            metrics = es.metricsDict()
             currentMetricNamesSet = set(metrics.keys())
             if metricNamesSet is None:
                 metricNamesSet = currentMetricNamesSet
@@ -92,16 +100,15 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
     def getMetricNames(self) -> List[str]:
         return list(self.metrics.keys())
 
-    def aggStats(self):
+    def aggMetricsDict(self, aggFns=(np.mean, np.std)) -> Dict[str, float]:
         agg = {}
         for metric, values in self.metrics.items():
-            agg[f"mean[{metric}]"] = float(np.mean(values))
-            agg[f"std[{metric}]"] = float(np.std(values))
+            for aggFn in aggFns:
+                agg[f"{aggFn.__name__}[{metric}]"] = float(aggFn(values))
         return agg
 
-    def meanStats(self):
+    def meanMetricsDict(self) -> Dict[str, float]:
         metrics = {metric: np.mean(values) for (metric, values) in self.metrics.items()}
-        metrics.update({f"StdDev[{metric}]": np.std(values) for (metric, values) in self.metrics.items()})
         return metrics
 
     def plotDistribution(self, metricName: str, subtitle: Optional[str] = None, bins=None, kde=True, stat="percent",
@@ -146,7 +153,7 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
 
     def __str__(self):
         return f"{self.__class__.__name__}[" + \
-               ", ".join([f"{key}={self.aggStats()[key]:.4f}" for key in self.metrics]) + "]"
+               ", ".join([f"{key}={self.aggMetricsDict()[key]:.4f}" for key in self.metrics]) + "]"
 
 
 class PredictionEvalStats(EvalStats[TMetric], ABC):
@@ -235,7 +242,7 @@ def meanStats(evalStatsList: Sequence[EvalStats]) -> Dict[str, float]:
     For a list of EvalStats objects compute the mean values of all metrics in a dictionary.
     Assumes that all provided EvalStats have the same metrics
     """
-    dicts = [s.getAll() for s in evalStatsList]
+    dicts = [s.metricsDict() for s in evalStatsList]
     metrics = dicts[0].keys()
     return {m: np.mean([d[m] for d in dicts]) for m in metrics}
 

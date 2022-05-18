@@ -63,7 +63,7 @@ class DataFrameColumnChangeTracker:
                             f"Did you forget to call trackChange on the resulting data frame?")
 
 
-def extractArray(df: pd.DataFrame):
+def extractArray(df: pd.DataFrame, dtype=None):
     """
     Extracts array from data frame. It is expected that each row corresponds to a data point and
     each column corresponds to a "channel". Moreover, all entries are expected to be arrays of the same shape
@@ -101,11 +101,26 @@ def extractArray(df: pd.DataFrame):
     In both cases the returned array will have shape `(N_images, 3, width, height)`
 
     :param df: data frame where each entry is an array of shape tensorShape
+    :param dtype: if not None, convert the array's data type to this type (string or numpy dtype)
     :return: array of shape `(N_rows, N_columns, *tensorShape)` with stripped empty dimensions
     """
     log.debug(f"Stacking tensors of shape {np.array(df.iloc[0, 0]).shape}")
     try:
-        return np.stack(df.apply(np.stack, axis=1)).squeeze()
+        # This compact way of extracting the array causes dtypes to be modified,
+        #    arr = np.stack(df.apply(np.stack, axis=1)).squeeze()
+        # so we use this numpy-only alternative:
+        arr = df.values
+        if arr.shape[1] > 1:
+            arr = np.stack([np.stack(arr[i]) for i in range(arr.shape[0])])
+        else:
+            arr = np.stack(arr[:, 0])
+        # For the case where there is only one row, the old implementation above removed the first dimension,
+        # so we do the same, even though it seems odd to do so (potential problem for batch size 1)
+        if arr.shape[0] == 1:
+            arr = arr[0]
     except ValueError:
         raise ValueError(f"No array can be extracted from frame of length {len(df)} with columns {list(df.columns)}. "
                          f"Make sure that all entries have the same shape")
+    if dtype is not None:
+        arr = arr.astype(dtype, copy=False)
+    return arr

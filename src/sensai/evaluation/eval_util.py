@@ -157,6 +157,9 @@ class EvalStatsPlotCollector(Generic[TEvalStats, TEvalStatsPlot]):
     def addPlot(self, name: str, plot: EvalStatsPlot):
         self.plots[name] = plot
 
+    def getEnabledPlots(self) -> List[str]:
+        return [p for p in self.plots if p not in self.disabledPlots]
+
     def disablePlots(self, *names: str):
         self.disabledPlots.update(names)
 
@@ -291,7 +294,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         resultWriter = self._resultWriterForModel(resultWriter, model)
         crossValidator = self.createCrossValidator(model)
         crossValidationData = crossValidator.evalModel(model)
-        aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggStats()
+        aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggMetricsDict()
                 for varName in crossValidationData.predictedVarNames}
         df = pd.DataFrame.from_dict(aggStatsByVar, orient="index")
         strEvalResults = df.to_string()
@@ -338,7 +341,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                 modelResult = ModelComparisonData.Result(evalData=evalData)
                 resultByModelName[modelName] = modelResult
                 evalStats = evalData.getEvalStats()
-                statsDict = evalStats.getAll()
+                statsDict = evalStats.metricsDict()
             statsDict["modelName"] = modelName
             statsList.append(statsDict)
             if visitors is not None:

@@ -1,0 +1,8 @@
+# sensAI main requirements
+# This is a relaxed version with lower bounds, which exists only for inclusion in environment.yml (developer environment)
+pandas>=1.0.0
+scipy>=1.4
+numpy>=1.18.0
+scikit-learn>=0.22.0
+seaborn>=0.10.0
+typing-extensions>=3.7

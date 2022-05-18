@@ -7,6 +7,8 @@ sensAI - the Python library for sensible AI
 
    *
 
+..
+  Above, we include notebooks, copied here by test_notebooks
 
 .. toctree::
    :caption: Modules
