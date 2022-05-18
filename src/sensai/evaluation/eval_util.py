@@ -334,7 +334,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                 modelResult = ModelComparisonData.Result(crossValData=crossValData)
                 resultByModelName[modelName] = modelResult
                 evalStatsCollection = crossValData.getEvalStatsCollection()
-                statsDict = evalStatsCollection.aggStats()
+                statsDict = evalStatsCollection.aggMetricsDict()
             else:
                 evalData = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
                     fitModel=fitModels)
