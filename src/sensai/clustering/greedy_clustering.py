@@ -8,7 +8,6 @@ from typing import List, Sequence
 log = logging.getLogger(__name__)
 
 
-# TODO: implement an adapter or wrapper such that we get a GreedyAgglomerativeClusteringModel class
 class GreedyAgglomerativeClustering(object):
     """
     An implementation of greedy agglomerative clustering which avoids unnecessary 
@@ -69,7 +68,7 @@ class GreedyAgglomerativeClustering(object):
             clusters merged into them)
         """
         # compute all possible merges, adding them to the priority queue
-        self.log.info("Computing initial merges")
+        self.log.debug("Computing initial merges")
         for idx, wc in enumerate(self.wrappedClusters):
             self.log.debug("Computing potential merges for cluster index %d" % idx)
             wc.computeMerges(False)

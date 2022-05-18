@@ -266,9 +266,6 @@ class RegressionEvalStatsCollection(EvalStatsCollection):
         self.globalStats = None
 
     def getGlobalStats(self) -> RegressionEvalStats:
-        """
-        Gets an evaluation statistics object that combines the data from all contained eval stats objects
-        """
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])

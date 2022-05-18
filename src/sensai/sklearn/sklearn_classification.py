@@ -1,5 +1,5 @@
 import logging
-from typing import Union, Optional
+from typing import Union, Optional, Dict
 
 import sklearn.ensemble
 import sklearn.naive_bayes
@@ -24,6 +24,9 @@ class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassifi
             random_state=random_state, min_samples_leaf=min_samples_leaf,
             useComputedClassWeights=useComputedClassWeights,
             **modelArgs)
+
+    def getFeatureImportances(self) -> Dict[str, float]:
+        return  dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
 class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationModel):

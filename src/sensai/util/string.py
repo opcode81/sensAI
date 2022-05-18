@@ -1,11 +1,11 @@
-from typing import Union, List, Dict, Any, Sequence, Iterable, Optional
+from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping
 import re
 
 
 reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
 
 
-def dictString(d: Dict, brackets: Optional[str] = None):
+def dictString(d: Mapping, brackets: Optional[str] = None):
     s = ', '.join([f'{k}={toString(v)}' for k, v in d.items()])
     if brackets is not None:
         return brackets[:1] + s + brackets[-1:]

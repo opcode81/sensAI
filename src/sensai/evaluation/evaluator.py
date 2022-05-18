@@ -5,6 +5,7 @@ from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Opti
 
 import pandas as pd
 
+from .eval_stats import GUESS
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
@@ -319,7 +320,7 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
     def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
             fractionalSplitShuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None,
-            computeProbabilities: bool = False, binaryPositiveLabel=None):
+            computeProbabilities: bool = False, binaryPositiveLabel=GUESS):
         """
         :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
             fractionalSplitTestFraction for fractional split (default)
@@ -329,6 +330,8 @@ class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
             splitting it
         :param additionalMetrics: additional metrics to apply
         :param computeProbabilities: whether to compute class probabilities
+        :param binaryPositiveLabel: the positive class label for binary classification; if GUESS, true to detect from labels;
+            if None, no detection (non-binary classification)
         """
         super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
             fractionalSplitShuffle=fractionalSplitShuffle)

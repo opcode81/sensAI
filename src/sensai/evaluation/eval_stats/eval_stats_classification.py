@@ -17,6 +17,8 @@ from ...util.plot import plotMatrix
 
 log = logging.getLogger(__name__)
 
+
+GUESS = ("__guess",)
 BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES = [1, True, "1", "True"]
 
 
@@ -86,6 +88,9 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
 
 class BinaryClassificationMetric(ClassificationMetric, ABC):
     def __init__(self, positiveClassLabel, name: str = None):
+        name = name if name is not None else self.__class__.name
+        if positiveClassLabel not in BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES:
+            name = f"{name}[{positiveClassLabel}]"
         super().__init__(name)
         self.positiveClassLabel = positiveClassLabel
 
@@ -120,6 +125,30 @@ class BinaryClassificationMetricF1Score(BinaryClassificationMetric):
         return f1_score(y_true, y_predicted, pos_label=self.positiveClassLabel)
 
 
+class BinaryClassificationMetricRecallForPrecision(BinaryClassificationMetric):
+    """
+    Computes the maximum recall that can be achieved in cases where at least the given precision is reached.
+    The given precision may not be achievable at all, in which case the metric value is NaN.
+    """
+    def __init__(self, precision: float, positiveClassLabel):
+        self.minPrecision = precision
+        super().__init__(positiveClassLabel, name=f"recallForPrecision[{precision}]")
+
+    def computeValueForEvalStats(self, evalStats: "ClassificationEvalStats"):
+        varData = evalStats.getBinaryClassificationProbabilityThresholdVariationData()
+        result = np.nan
+        for c in varData.counts:
+            precision = c.getPrecision()
+            if precision >= self.minPrecision:
+                recall = c.getRecall()
+                if np.isnan(result) or result < recall:
+                    result = recall
+        return result
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        raise NotImplementedError(f"{self.__class__.__qualname__} only supports computeValueForEvalStats")
+
+
 class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def __init__(self, y_predicted: PredictionArray = None,
             y_true: PredictionArray = None,
@@ -127,7 +156,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
             labels: PredictionArray = None,
             metrics: Sequence["ClassificationMetric"] = None,
             additionalMetrics: Sequence["ClassificationMetric"] = None,
-            binaryPositiveLabel=None):
+            binaryPositiveLabel=GUESS):
         """
         :param y_predicted: the predicted class labels
         :param y_true: the true class labels
@@ -135,10 +164,11 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         :param labels: the list of class labels
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
         :param additionalMetrics: the metrics to additionally compute
-        :param binaryPositiveLabel: the label of the positive class for the case where it is a binary classification;
-            if None, check `labels` for occurrence of one of BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES in the respective
-            order, and if none of these appear in `labels`, the classification will not be treated as a binary classification and
-            a warning will be logged
+        :param binaryPositiveLabel: the label of the positive class for the case where it is a binary classification, adding further
+            binary metrics by default;
+            if GUESS (default), check `labels` (if length 2) for occurrence of one of BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES in
+            the respective order and use the first one found (if any);
+            if None, treat the problem as non-binary, regardless of the labels being used.
         """
         self.labels = labels
         self.y_predictedClassProbabilities = y_predictedClassProbabilities
@@ -151,16 +181,21 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
                 raise ValueError("Row count in class probabilities data frame does not match ground truth")
 
         numLabels = len(labels)
-        if binaryPositiveLabel is not None:
-            if numLabels != 2:
-                raise ValueError(f"Passed binaryPositiveLabel for non-binary classification (labels={self.labels})")
-            if binaryPositiveLabel not in self.labels:
-                raise ValueError(f"The binary positive label {binaryPositiveLabel} does not appear in labels={labels}")
-        else:
+        if binaryPositiveLabel == GUESS:
+            foundCandidateLabel = False
             if numLabels == 2:
                 for c in BINARY_CLASSIFICATION_POSITIVE_LABEL_CANDIDATES:
                     if c in labels:
                         binaryPositiveLabel = c
+                        foundCandidateLabel = True
+                        break
+            if not foundCandidateLabel:
+                binaryPositiveLabel = None
+        elif binaryPositiveLabel is not None:
+            if numLabels != 2:
+                log.warning(f"Passed binaryPositiveLabel for non-binary classification (labels={self.labels})")
+            if binaryPositiveLabel not in self.labels:
+                log.warning(f"The binary positive label {binaryPositiveLabel} does not appear in labels={labels}")
         if numLabels == 2 and binaryPositiveLabel is None:
             log.warning(f"Binary classification (labels={labels}) without specification of positive class label; binary classification metrics will not be considered")
         self.binaryPositiveLabel = binaryPositiveLabel
@@ -239,9 +274,6 @@ class ClassificationEvalStatsCollection(EvalStatsCollection[ClassificationEvalSt
         self.globalStats = None
 
     def getGlobalStats(self) -> ClassificationEvalStats:
-        """
-        Gets an evaluation statistics object that combines the data from all contained eval stats objects
-        """
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])

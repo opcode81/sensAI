@@ -89,6 +89,9 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
     def getValues(self, metric):
         return self.metrics[metric]
 
+    def getMetricNames(self) -> List[str]:
+        return list(self.metrics.keys())
+
     def aggStats(self):
         agg = {}
         for metric, values in self.metrics.items():
@@ -101,11 +104,27 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
         metrics.update({f"StdDev[{metric}]": np.std(values) for (metric, values) in self.metrics.items()})
         return metrics
 
-    def plotDistribution(self, metric):
-        values = self.metrics[metric]
-        plt.figure()
-        plt.title(metric)
-        sns.distplot(values)
+    def plotDistribution(self, metricName: str, subtitle: Optional[str] = None, bins=None, kde=True, stat="percent",
+            **kwargs) -> plt.Figure:
+        """
+        Plots the distribution of a metric as a histogram
+
+        :param metricName: the name of the metric for which to plot the distribution (histogram) across evaluations
+        :param subtitle: the subtitle to add, if any
+        :param bins: the histogram bins (number of bins or boundaries); if None, auto
+        :param kde: whether to add a kernel density estimator plot
+        :param stat: the statistic to compute for each bin ('percent', 'probability', 'count', 'frequency' or 'density'), y-axis value
+        :param kwargs: additional parameters to pass to seaborn.histplot (see https://seaborn.pydata.org/generated/seaborn.histplot.html)
+        :return:
+        """
+        values = self.metrics[metricName]
+        fig = plt.figure()
+        title = metricName
+        if subtitle is not None:
+            title += "\n" + subtitle
+        plt.title(title)
+        sns.histplot(values, kde=kde, bins=bins, stat=stat, **kwargs)
+        return fig
 
     def toDataFrame(self) -> pd.DataFrame:
         """
@@ -120,6 +139,9 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
 
     @abstractmethod
     def getGlobalStats(self) -> TEvalStats:
+        """
+        :return: an EvalStats object that combines the data from all contained EvalStats objects
+        """
         pass
 
     def __str__(self):

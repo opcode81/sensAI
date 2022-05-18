@@ -75,7 +75,7 @@ class DistributionCounter(ToStringMixin):
         return ", ".join([f"{str(k)}: {v} ({v/self.totalCount:.3f})" for k, v in self.counts.items()])
 
 
-class WeightedMean:
+class WeightedMean(ToStringMixin):
     """
     Computes a weighted mean of values
     """
@@ -83,12 +83,15 @@ class WeightedMean:
         self.weightedValueSum = 0
         self.weightSum = 0
 
-    def add(self, value, weight) -> None:
+    def _toStringObjectInfo(self) -> str:
+        return f"{self.weightedValueSum/self.weightSum}"
+
+    def add(self, value, weight=1) -> None:
         """
         Adds the given value with the the given weight to the calculation
 
         :param value: the value
-        :param weight: the weight with which to consider tha value
+        :param weight: the weight with which to consider the value
         """
         self.weightedValueSum += value * weight
         self.weightSum += weight

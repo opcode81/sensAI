@@ -9,7 +9,8 @@ import functools
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Tuple, Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set, Iterable, List
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRe
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, \
     VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, VectorModelEvaluatorParams
 from ..data import InputOutputData
+from ..sklearn.sklearn_util import AggregatedFeatureImportances
 from ..util.io import ResultWriter
 from ..util.string import prettyStringRepr
 from ..vector_model import VectorClassificationModel, VectorRegressionModel, VectorModel
@@ -302,7 +304,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
 
     def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False,
             fitModels=True, writeIndividualResults=True, sortColumn: Optional[str] = None, sortAscending: bool = True,
-            includeEvalStatsObjects=False) -> pd.DataFrame:
+            visitors: Optional[Iterable["ModelComparisonVisitor"]] = None) -> "ModelComparisonData":
         """
         Compares several models via simple evaluation or cross-validation
 
@@ -315,50 +317,54 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             summary)
         :param sortColumn: column/metric name by which to sort
         :param sortAscending: whether to sort in ascending order
-        :param includeEvalStatsObjects: whether to include, in addition to the metrics, a column "evalStats" (which holds
-            the classification or regression evaluation data object) in the result data frame
-        :return: a data frame containing evaluation metrics on all models
+        :param visitors: visitors which may process individual results
+        :return: the comparison results
         """
         statsList = []
+        resultByModelName = {}
         for model in models:
+            modelName = model.getName()
             if useCrossValidation:
                 if not fitModels:
                     raise ValueError("Cross-validation necessitates that models be retrained; got fitModels=False")
-                crossValidationResult = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
-                evalStatsCollection = crossValidationResult.getEvalStatsCollection()
+                crossValData = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
+                modelResult = ModelComparisonData.Result(crossValData=crossValData)
+                resultByModelName[modelName] = modelResult
+                evalStatsCollection = crossValData.getEvalStatsCollection()
                 statsDict = evalStatsCollection.aggStats()
-                if includeEvalStatsObjects:
-                    statsDict["evalStats"] = evalStatsCollection.getGlobalStats()
             else:
-                evalStats: EvalStats = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
-                    fitModel=fitModels).getEvalStats()
+                evalData = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
+                    fitModel=fitModels)
+                modelResult = ModelComparisonData.Result(evalData=evalData)
+                resultByModelName[modelName] = modelResult
+                evalStats = evalData.getEvalStats()
                 statsDict = evalStats.getAll()
-                if includeEvalStatsObjects:
-                    statsDict["evalStats"] = evalStats
-            statsDict["modelName"] = model.getName()
+            statsDict["modelName"] = modelName
             statsList.append(statsDict)
+            if visitors is not None:
+                for visitor in visitors:
+                    visitor.visit(modelName, modelResult)
         resultsDF = pd.DataFrame(statsList).set_index("modelName")
         if sortColumn is not None:
             if sortColumn not in resultsDF.columns:
                 log.warning(f"Requested sort column '{sortColumn}' not in list of columns {list(resultsDF.columns)}")
             else:
                 resultsDF.sort_values(sortColumn, ascending=sortAscending, inplace=True)
-        resultsDFForReporting = resultsDF if not includeEvalStatsObjects else resultsDF.drop(columns="evalStats")
-        strResults = f"Model comparison results:\n{resultsDFForReporting.to_string()}"
+        strResults = f"Model comparison results:\n{resultsDF.to_string()}"
         log.info(strResults)
         if resultWriter is not None:
             suffix = "crossval" if useCrossValidation else "simple-eval"
             strResults += "\n\n" + "\n\n".join([f"{model.getName()} = {str(model)}" for model in models])
             resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
-        return resultsDF
+        return ModelComparisonData(resultsDF, resultByModelName)
 
-    def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> pd.DataFrame:
+    def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> "ModelComparisonData":
         """
         Compares several models via cross-validation
 
         :param models: the models to compare
         :param resultWriter: a writer with which to store results of the comparison
-        :return: a data frame containing evaluation metrics on all models
+        :return: the comparison results
         """
         return self.compareModels(models, resultWriter=resultWriter, useCrossValidation=True)
 
@@ -445,20 +451,26 @@ class MultiDataEvaluationUtil:
         else:
             self.metaDF = None
 
-    def compareModelsCrossValidation(self, modelFactories: Sequence[Callable[[], VectorModel]],
+    def compareModelsCrossValidation(self, modelFactories: Sequence[Callable[[], Union[VectorRegressionModel, VectorClassificationModel]]],
             resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
-            crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+            crossValidatorParams: Optional[Dict[str, Any]] = None, columnNameForModelRanking: str = None, rankMax=True) -> "MultiDataModelComparisonData":
+        """
+        Deprecated. Use compareModels instead.
+        """
         return self.compareModels(modelFactories, useCrossValidation=True, resultWriter=resultWriter, writePerDatasetResults=writePerDatasetResults,
             crossValidatorParams=crossValidatorParams,
             columnNameForModelRanking=columnNameForModelRanking, rankMax=rankMax)
 
-    def compareModels(self, modelFactories: Sequence[Callable[[], VectorModel]], useCrossValidation=False,
-            resultWriter: Optional[ResultWriter] = None, writePerDatasetResults=True,
+    def compareModels(self, modelFactories: Sequence[Callable[[], Union[VectorRegressionModel, VectorClassificationModel]]],
+            useCrossValidation=False,
+            resultWriter: Optional[ResultWriter] = None,
+            writePerDatasetResults=True,
             evaluatorParams: Optional[Union[VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, Dict[str, Any]]] = None,
             crossValidatorParams: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
             columnNameForModelRanking: str = None,
             rankMax=True,
-            createCombinedEvalStatsPlots=False) -> Tuple[pd.DataFrame, pd.DataFrame]:
+            createCombinedEvalStatsPlots=False,
+            visitors: Optional[Iterable["ModelComparisonVisitor"]] = None) -> Union["RegressionMultiDataModelComparisonData", "ClassificationMultiDataModelComparisonData"]:
         """
         :param modelFactories: a sequence of factory functions for the creation of models to evaluate; every factory must result
             in a model with a fixed model name (otherwise results cannot be correctly aggregated)
@@ -473,17 +485,25 @@ class MultiDataEvaluationUtil:
         :param createCombinedEvalStatsPlots: whether to combine, for each type of model, the EvalStats objects from the individual experiments
             into a single objects that holds all results and use it to create plots reflecting the overall result.
             Note that for classification, this is only possible if all individual experiments use the same set of class labels.
+        :param visitors: visitors which may process individual results
         :return: a pair of data frames (allDF, meanDF) where allDF contains all the individual evaluation results (one row per data set)
             and meanDF contains one row for each model with results averaged across datasets
         """
-        allResults = pd.DataFrame()
+        allResultsDF = pd.DataFrame()
         evalStatsByModelName = defaultdict(list)
         isRegression = None
         plotCollector: Optional[EvalStatsPlotCollector] = None
+        modelNames = None
 
         for i, (key, inputOutputData) in enumerate(self.inputOutputDataDict.items(), start=1):
             log.info(f"Evaluating models for data set #{i}/{len(self.inputOutputDataDict)}: {self.keyName}={key}")
             models = [f() for f in modelFactories]
+
+            currentModelNames = [model.getName() for model in models]
+            if modelNames is None:
+                modelNames = currentModelNames
+            elif modelNames != currentModelNames:
+                log.warning(f"Model factories do not produce fixed names; use model.withName to name your models. Got {currentModelNames}, previously got {modelNames}")
 
             if isRegression is None:
                 modelsAreRegression = [model.isRegressionModel() for model in models]
@@ -502,7 +522,8 @@ class MultiDataEvaluationUtil:
 
             # compute data frame with results for current data set
             childResultWriter = resultWriter.childForSubdirectory(key) if (writePerDatasetResults and resultWriter is not None) else None
-            df = ev.compareModels(models, useCrossValidation=useCrossValidation, resultWriter=childResultWriter, includeEvalStatsObjects=True)
+            comparisonData = ev.compareModels(models, useCrossValidation=useCrossValidation, resultWriter=childResultWriter, visitors=visitors)
+            df = comparisonData.resultsDF
 
             # augment data frame
             df[self.keyName] = key
@@ -510,35 +531,38 @@ class MultiDataEvaluationUtil:
             df = df.reset_index(drop=True)
 
             # collect eval stats objects by model name and remove from data frame
-            for _, row in df.iterrows():
-                modelName = row.modelName
-                evalStats = row.evalStats
+            for modelName, result in comparisonData.resultByModelName.items():
+                if useCrossValidation:
+                    evalStats = result.crossValData.getEvalStatsCollection().getGlobalStats()
+                else:
+                    evalStats = result.evalData.getEvalStats()
                 evalStatsByModelName[modelName].append(evalStats)
-            df = df.drop(columns="evalStats")
 
-            allResults = pd.concat((allResults, df))
+            allResultsDF = pd.concat((allResultsDF, df))
 
         if self.metaDF is not None:
-            allResults = allResults.join(self.metaDF, on=self.keyName, how="left")
+            allResultsDF = allResultsDF.join(self.metaDF, on=self.keyName, how="left")
 
-        strAllResults = f"All results:\n{allResults.to_string()}"
+        strAllResults = f"All results:\n{allResultsDF.to_string()}"
         log.info(strAllResults)
 
-        allResultsGrouped = allResults.groupby("modelName")
-        meanResults: pd.DataFrame = allResultsGrouped.mean()
-        if columnNameForModelRanking in meanResults:
-            meanResults.sort_values(columnNameForModelRanking, inplace=True, ascending=not rankMax)
-        strMeanResults = f"Mean results (averaged across {len(self.inputOutputDataDict)} data sets):\n{meanResults.to_string()}"
+        # create mean result by model, removing any metrics/columns that produced NaN values
+        # (because the mean would be computed without them, skipna parameter unsupported)
+        allResultsGrouped = allResultsDF.dropna(axis=1).groupby("modelName")
+        meanResultsDF: pd.DataFrame = allResultsGrouped.mean()
+        if columnNameForModelRanking in meanResultsDF:
+            meanResultsDF.sort_values(columnNameForModelRanking, inplace=True, ascending=not rankMax)
+        strMeanResults = f"Mean results (averaged across {len(self.inputOutputDataDict)} data sets):\n{meanResultsDF.to_string()}"
         log.info(strMeanResults)
 
         # create further aggregations
         aggDFs = []
-        for opName, aggFn in [("std", lambda x: x.std()), ("min", lambda x: x.min()), ("max", lambda x: x.max())]:
+        for opName, aggFn in [("mean", lambda x: x.mean()), ("std", lambda x: x.std()), ("min", lambda x: x.min()), ("max", lambda x: x.max())]:
             aggDF = aggFn(allResultsGrouped)
             aggDF.columns = [f"{opName}[{c}]" for c in aggDF.columns]
             aggDFs.append(aggDF)
         furtherAggsDF = pd.concat(aggDFs, axis=1)
-        furtherAggsDF = furtherAggsDF.loc[meanResults.index]  # apply same sort order (index is modelName)
+        furtherAggsDF = furtherAggsDF.loc[meanResultsDF.index]  # apply same sort order (index is modelName)
         columnOrder = functools.reduce(lambda a, b: a + b, [list(t) for t in zip(*[df.columns for df in aggDFs])])
         furtherAggsDF = furtherAggsDF[columnOrder]
         strFurtherAggs = f"Further aggregations:\n{furtherAggsDF.to_string()}"
@@ -558,4 +582,82 @@ class MultiDataEvaluationUtil:
                     evalStats = ClassificationEvalStatsCollection(evalStatsList).getGlobalStats()
                 plotCollector.createPlots(evalStats, subtitle=modelName, resultCollector=resultCollector)
 
-        return allResults, meanResults
+        if isRegression:
+            return RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+        else:
+            return ClassificationMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+
+
+class ModelComparisonData:
+    @dataclass
+    class Result:
+        evalData: Union[VectorClassificationModelEvaluationData, VectorRegressionModelEvaluationData] = None
+        crossValData: Union[VectorClassificationModelCrossValidationData, VectorRegressionModelCrossValidationData] = None
+
+    def __init__(self, resultsDF: pd.DataFrame, resultsByModelName: Dict[str, Result]):
+        self.resultsDF = resultsDF
+        self.resultByModelName = resultsByModelName
+
+
+class ModelComparisonVisitor(ABC):
+    @abstractmethod
+    def visit(self, modelName: str, result: ModelComparisonData.Result):
+        pass
+
+
+class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor):
+    """
+    During a model comparison, computes aggregated feature importance values for the model with the given name
+    """
+    def __init__(self, modelName: str):
+        """
+        :param modelName: the name of the model for which to compute the aggregated feature importance values
+        """
+        self.modelName = modelName
+        self.aggFeatureImportance = AggregatedFeatureImportances()
+
+    def visit(self, modelName: str, result: ModelComparisonData.Result):
+        if modelName == self.modelName:
+            if result.crossValData is not None:
+                models = result.crossValData.trainedModels
+                if models is not None:
+                    for model in models:
+                        self._collect(model)
+                else:
+                    raise ValueError("Models were not returned in cross-validation results")
+            elif result.evalData is not None:
+                self._collect(result.evalData.model)
+
+    def _collect(self, model):
+        if not hasattr(model, "getFeatureImportances"):
+            raise ValueError(f"Got model which does not have method 'getFeatureImportances': {model}")
+        self.aggFeatureImportance.add(model.getFeatureImportances())
+
+
+class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], ABC):
+    def __init__(self, allResultsDF: pd.DataFrame, meanResultsDF: pd.DataFrame, aggResultsDF: pd.DataFrame,
+            evalStatsByModelName: Dict[str, List[TEvalStats]]):
+        self.allResultsDF = allResultsDF
+        self.meanResultsDF = meanResultsDF
+        self.aggResultsDF = aggResultsDF
+        self.evalStatsByModelName = evalStatsByModelName
+
+    def getModelNames(self) -> List[str]:
+        return list(self.evalStatsByModelName.keys())
+
+    def getEvalStatsList(self, modelName: str) -> List[TEvalStats]:
+        return self.evalStatsByModelName[modelName]
+
+    @abstractmethod
+    def getEvalStatsCollection(self, modelName: str) -> TEvalStatsCollection:
+        pass
+
+
+class ClassificationMultiDataModelComparisonData(MultiDataModelComparisonData[ClassificationEvalStats, ClassificationEvalStatsCollection]):
+    def getEvalStatsCollection(self, modelName: str):
+        return ClassificationEvalStatsCollection(self.getEvalStatsList(modelName))
+
+
+class RegressionMultiDataModelComparisonData(MultiDataModelComparisonData[RegressionEvalStats, RegressionEvalStatsCollection]):
+    def getEvalStatsCollection(self, modelName: str):
+        return RegressionEvalStatsCollection(self.getEvalStatsList(modelName))

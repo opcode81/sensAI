@@ -3,13 +3,12 @@ Utility functions and classes for geographic coordinates
 """
 
 import math
-from typing import Tuple
+from typing import Tuple, Iterable
 
+import numpy as np
 import pandas as pd
 
-from .local_coords import LocalCoordinateSystem
 from ..util.string import ToStringMixin
-
 
 EARTH_RADIUS = 6371000
 EARTH_CIRCUMFERENCE = 2 * math.pi * EARTH_RADIUS
@@ -158,6 +157,13 @@ class GeoCoord(ToStringMixin):
     def localCoords(self, lcs):
         return lcs.getLocalCoords(self.lat, self.lon)
 
+    @classmethod
+    def meanCoord(cls, geoCoords: Iterable["GeoCoord"]):
+        meanLat = np.mean([c.lat for c in geoCoords])
+        meanLon = np.mean([c.lon for c in geoCoords])
+        # noinspection PyTypeChecker
+        return GeoCoord(meanLat, meanLon)
+
 
 class GpsTracePoint(GeoCoord):
     def __init__(self, lat, lon, time: pd.Timestamp):
@@ -177,6 +183,7 @@ class GeoRect:
     @staticmethod
     def fromCircle(centreLat, centreLon, radiusM):
         """Creates the bounding rectangle for the given circular area"""
+        from .local_coords import LocalCoordinateSystem
         lcs = LocalCoordinateSystem(centreLat, centreLon)
         minLat, minLon = lcs.getLatLon(-radiusM, -radiusM)
         maxLat, maxLon = lcs.getLatLon(radiusM, radiusM)
