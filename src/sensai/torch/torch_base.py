@@ -109,6 +109,9 @@ class TorchModel(ABC, ToStringMixin):
         self.trainingInfo: Optional[TrainingInfo] = None
         self._gpu: Optional[int] = None
 
+    def _toStringExcludePrivate(self) -> bool:
+        return True
+
     def setTorchModule(self, module: torch.nn.Module) -> None:
         self.module = module
 
@@ -352,6 +355,13 @@ class VectorTorchModel(TorchModel, ABC):
 
     @abstractmethod
     def createTorchModuleForDims(self, inputDim: int, outputDim: int) -> torch.nn.Module:
+        """
+        :param inputDim: the number of input dimensions as reported by the data set provider (number of columns
+            in input data frame for default providers)
+        :param outputDim: the number of output dimensions as reported by the data set provider (number of columns
+            in output data frame for default providers)
+        :return: the torch module
+        """
         pass
 
 
@@ -510,7 +520,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
             nnOptimiserParams: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
         :param outputMode: specifies the nature of the output of the underlying neural network model
-        :param modelClass: the constructor with which to create the wrapped torch vector model
+        :param modelClass: the constructor with which to create the wrapped torch model
         :param modelArgs: the constructor argument list to pass to modelClass
         :param modelKwArgs: the dictionary of constructor keyword arguments to pass to modelClass
         :param normalisationMode: the normalisation mode to apply to input data frames
