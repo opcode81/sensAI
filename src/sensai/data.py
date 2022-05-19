@@ -57,6 +57,17 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame]):
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         super().__init__(inputs, outputs)
 
+    @classmethod
+    def fromDataFrame(cls, df: pd.DataFrame, *outputColumns: str) -> "InputOutputData":
+        """
+        :param df: a data frame containing both input and output columns
+        :param outputColumns: the output column name(s)
+        :return: an InputOutputData instance with inputs and outputs separated
+        """
+        inputs = df[[c for c in df.columns if c not in outputColumns]]
+        outputs = df[list(outputColumns)]
+        return cls(inputs, outputs)
+
     def filterIndices(self, indices: Sequence[int]) -> __qualname__:
         inputs = self.inputs.iloc[indices]
         outputs = self.outputs.iloc[indices]
