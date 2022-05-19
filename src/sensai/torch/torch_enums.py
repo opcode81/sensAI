@@ -20,7 +20,7 @@ class ActivationFunction(Enum):
                 return item
         raise ValueError(f"No function found for name '{name}'")
 
-    def getTorchFunction(self) -> Callable:
+    def getTorchFunction(self) -> Optional[Callable]:
         return {
                 ActivationFunction.NONE: None,
                 ActivationFunction.SIGMOID: F.sigmoid,
@@ -62,9 +62,13 @@ class ClassificationOutputMode(Enum):
     UNNORMALISED_LOG_PROBABILITIES = "unnormalised_log_probabilities"
 
     @classmethod
-    def forActivationFn(cls, fn: Optional[Callable]):
+    def forActivationFn(cls, fn: Optional[Union[Callable, ActivationFunction]]):
+        if isinstance(fn, ActivationFunction):
+            fn = fn.getTorchFunction()
         if fn is None:
             return cls.UNNORMALISED_LOG_PROBABILITIES
+        if not callable(fn):
+            raise ValueError(fn)
         if isinstance(fn, functools.partial):
             fn = fn.func
         name = fn.__name__
