@@ -12,6 +12,7 @@ docs/sensai
 dist
 *.egg-info*
 /temp
+/temp*.py
 /default_console.py
 /build
 /git-split.sh
