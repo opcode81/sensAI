@@ -10,6 +10,9 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 
+MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
+
+
 def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
         titleAdd: str = None) -> matplotlib.figure.Figure:
     """

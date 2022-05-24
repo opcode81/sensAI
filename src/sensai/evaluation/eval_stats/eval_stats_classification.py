@@ -1,19 +1,18 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Sequence, Optional, Dict
 import logging
+from abc import ABC, abstractmethod
+from typing import List, Sequence, Optional, Dict
 
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import sklearn
+from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, precision_recall_curve, PrecisionRecallDisplay, \
     balanced_accuracy_score, f1_score
 
-from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric, EvalStatsPlot, TEvalStats
+from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric, EvalStatsPlot
+from ...util.aggregation import RelativeFrequencyCounter
 from ...util.pickle import getstate
 from ...util.plot import plotMatrix
-
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +83,58 @@ class ClassificationMetricTopNAccuracy(ClassificationMetric):
             if y_true[i] in (x[0] for x in pairs[:self.n]):
                 cnt += 1
         return cnt / len(y_true)
+
+
+class ClassificationMetricAccuracyMaxProbabilityBeyondThreshold(ClassificationMetric):
+    """
+    Accuracy limited to cases where the probability of the most likely class is at least a given threshold
+    """
+    requiresProbabilities = True
+
+    def __init__(self, threshold: float, zeroValue=0.0):
+        """
+        :param threshold: minimum probability of the most likely class
+        :param zeroValue: the value of the metric for the case where the probability of the most likely class never reaches the threshold
+        """
+        self.threshold = threshold
+        self.zeroValue = zeroValue
+        super().__init__(name=f"accuracy[p_max >= {threshold}]")
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        labels = y_predictedClassProbabilities.columns
+        labelToColIdx = {l: i for i, l in enumerate(labels)}
+        relFreq = RelativeFrequencyCounter()
+        for i, probabilities in enumerate(y_predictedClassProbabilities.values.tolist()):
+            classIdx_predicted = np.argmax(probabilities)
+            prob_predicted = probabilities[classIdx_predicted]
+            if prob_predicted >= self.threshold:
+                classIdx_true = labelToColIdx[y_true[i]]
+                relFreq.count(classIdx_predicted == classIdx_true)
+        if relFreq.numTotal == 0:
+            return self.zeroValue
+        else:
+            return relFreq.getRelativeFrequency()
+
+
+class ClassificationMetricRelFreqMaxProbabilityBeyondThreshold(ClassificationMetric):
+    """
+    Relative frequency of cases where the probability of the most likely class is at least a given threshold
+    """
+    requiresProbabilities = True
+
+    def __init__(self, threshold: float):
+        """
+        :param threshold: minimum probability of the most likely class
+        """
+        self.threshold = threshold
+        super().__init__(name=f"relFreq[p_max >= {threshold}]")
+
+    def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
+        relFreq = RelativeFrequencyCounter()
+        for i, probabilities in enumerate(y_predictedClassProbabilities.values.tolist()):
+            pMax = np.max(probabilities)
+            relFreq.count(pMax >= self.threshold)
+        return relFreq.getRelativeFrequency()
 
 
 class BinaryClassificationMetric(ClassificationMetric, ABC):
@@ -176,7 +227,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         if self._probabilitiesAvailable:
             colSet = set(y_predictedClassProbabilities.columns)
             if colSet != set(labels):
-                raise ValueError(f"Set of columns in class probabilities data frame ({colSet}) does not correspond to labels ({labels}")
+                raise ValueError(f"Columns in class probabilities data frame ({y_predictedClassProbabilities.columns}) do not correspond to labels ({labels}")
             if len(y_predictedClassProbabilities) != len(y_true):
                 raise ValueError("Row count in class probabilities data frame does not match ground truth")
 
@@ -279,8 +330,12 @@ class ClassificationEvalStatsCollection(EvalStatsCollection[ClassificationEvalSt
             es0 = self.statsList[0]
             if es0.y_predictedClassProbabilities is not None:
                 y_probs = pd.concat([evalStats.y_predictedClassProbabilities for evalStats in self.statsList])
+                labels = list(y_probs.columns)
+            else:
+                y_probs = None
+                labels = es0.labels
             self.globalStats = ClassificationEvalStats(y_predicted=y_predicted, y_true=y_true, y_predictedClassProbabilities=y_probs,
-                labels=es0.labels, binaryPositiveLabel=es0.binaryPositiveLabel, metrics=es0.metrics)
+                labels=labels, binaryPositiveLabel=es0.binaryPositiveLabel, metrics=es0.metrics)
         return self.globalStats
 
 

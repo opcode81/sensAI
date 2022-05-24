@@ -25,7 +25,7 @@ class XGBRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRe
         super().__init__(xgboost.XGBRFRegressor, random_state=random_state, **modelArgs)
 
 
-class XGBGradientBoostedVectorClassifictionModel(AbstractSkLearnVectorClassificationModel):
+class XGBGradientBoostedVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     """
     XGBoost's classification model using gradient boosted trees
     """
@@ -36,7 +36,7 @@ class XGBGradientBoostedVectorClassifictionModel(AbstractSkLearnVectorClassifica
         super().__init__(xgboost.XGBClassifier, random_state=random_state, **modelArgs)
 
 
-class XGBRandomForestVectorClassifictionModel(AbstractSkLearnVectorClassificationModel):
+class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     """
     XGBoost's random forest classification model
     """

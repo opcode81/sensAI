@@ -616,7 +616,8 @@ class PickleCached(object):
         :param filenamePrefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
             a hash code of the function arguments will be appended and ".cache.pickle" will be appended; if None, use "" (if filename
             has not been provided)
-        :param filename: the full file name of the cache file to be created; this is admissible only if the function has no arguments
+        :param filename: the full file name of the cache file to be created; if the function takes arguments, the filename must
+            contain a placeholder '%s' for the argument hash
         :param backend: the serialisation backend to use (see dumpPickle)
         :param protocol: the pickle protocol version to use
         :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
@@ -636,16 +637,24 @@ class PickleCached(object):
     def __call__(self, fn: Callable, *_args, **_kwargs):
 
         def wrapped(*args, **kwargs):
+            hashCodeStr = None
             haveArgs = len(args) > 0 or len(kwargs) > 0
+            if haveArgs:
+                hashCodeStr = pickleHash((args, kwargs))
             if self.filename is None:
-                filename = self.filenamePrefix + fn.__qualname__
-                if haveArgs:
-                    filename += "-" + pickleHash((args, kwargs))
+                filename = self.filenamePrefix + fn.__qualname__.replace(".<locals>.", ".")
+                if hashCodeStr is not None:
+                    filename += "-" + hashCodeStr
                 filename += ".cache.pickle"
             else:
-                if haveArgs:
-                    raise Exception("Function called with arguments but full cache filename specified: specify a cache filename prefix only to account for argument values")
-                filename = self.filename
+                if hashCodeStr is not None:
+                    if not "%s" in self.filename:
+                        raise Exception("Function called with arguments but full cache filename contains no placeholder (%s) for argument hash")
+                    filename = self.filename % hashCodeStr
+                else:
+                    if "%s" in self.filename:
+                        raise Exception("Function without arguments but full cache filename with placeholder (%s) was specified")
+                    filename = self.filename
             picklePath = os.path.join(self.cacheBasePath, filename)
             return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend, load=self.load)
 

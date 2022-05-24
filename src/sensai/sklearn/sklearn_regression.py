@@ -8,12 +8,12 @@ import sklearn.neural_network
 import sklearn.svm
 
 from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
-
+from ..feature_importance import FeatureImportanceProvider
 
 log = logging.getLogger(__name__)
 
 
-class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProvider):
     def __init__(self, n_estimators=100, min_samples_leaf=10, random_state=42, **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
@@ -22,7 +22,7 @@ class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
         return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
 
-class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
+class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
     def __init__(self, **modelArgs):
         super().__init__(sklearn.linear_model.LinearRegression, **modelArgs)
 
