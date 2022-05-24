@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 from matplotlib import pyplot as plt
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, precision_recall_curve, PrecisionRecallDisplay, \
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, precision_recall_curve, \
     balanced_accuracy_score, f1_score
 
 from .eval_stats_base import PredictionArray, PredictionEvalStats, EvalStatsCollection, Metric, EvalStatsPlot
@@ -299,6 +299,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         return confusionMatrix.plot(normalize=normalize, titleAdd=titleAdd)
 
     def plotPrecisionRecallCurve(self, titleAdd: str = None):
+        from sklearn.metrics import PrecisionRecallDisplay  # only supported by newer versions of sklearn
         if not self._probabilitiesAvailable:
             raise Exception("Precision-recall curve requires probabilities")
         if not self.isBinary:
