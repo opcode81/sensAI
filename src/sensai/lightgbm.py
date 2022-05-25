@@ -107,3 +107,12 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
 
     def getFeatureImportances(self) -> Dict[str, Dict[str, int]]:
         return dict(zip(self.model.feature_name_, self.model.feature_importances_))
+
+    def _predictClassProbabilities(self, x: pd.DataFrame):
+        if len(self._labels) == 1:
+            # special handling required because LGBMClassifier will return values for two classes even if there is only one
+            Y = self.model.predict_proba(self._transformInput(x))
+            Y = Y[:, 0]
+            return pd.DataFrame(Y, columns=self._labels)
+        else:
+            return super()._predictClassProbabilities(x)

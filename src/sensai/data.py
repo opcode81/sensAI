@@ -176,11 +176,14 @@ class DataFrameSplitter(ABC):
         pass
 
     @staticmethod
-    def split(df: pd.DataFrame, indicesPair: Tuple[Sequence[int], Sequence[int]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def splitWithIndices(df: pd.DataFrame, indicesPair: Tuple[Sequence[int], Sequence[int]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
         indicesA, indicesB = indicesPair
         A = df.iloc[indicesA]
         B = df.iloc[indicesB]
         return A, B
+
+    def split(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        return self.splitWithIndices(df, self.computeSplitIndices(df, fractionalSizeOfFirstSet))
 
 
 class DataFrameSplitterFractional(DataFrameSplitter):
