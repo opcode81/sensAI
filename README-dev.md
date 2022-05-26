@@ -4,7 +4,7 @@ This section explains the steps required to set up an environment in order to de
 
 ## Clone Large Files
 
-Clone the full repo, including large files using [git large file storage](https://git-lfs.github.com):
+Clone the full repo, including large files using [git LFS](https://git-lfs.github.com):
 
     git lfs pull
 
@@ -18,7 +18,7 @@ Use conda to set up the Python environment:
 
 Solving the environment may take several minutes (but should ultimately work).
 
-NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see blow).
+NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see below).
 
 # Build and Test Pipeline
 
