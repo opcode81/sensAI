@@ -241,10 +241,10 @@ class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
             return VectorRegressionModelEvaluatorParams()
         elif type(params) == dict:
             return cls.fromOldKwArgs(**params)
-        elif isinstance(params, VectorRegressionModelEvaluatorParams):
+        elif isinstance(params, cls):
             return params
         else:
-            raise ValueError(f"Must provide dictionary or instance, got {params}")
+            raise ValueError(f"Must provide dictionary or {cls} instance, got {params}, type {type(params)}")
 
     @classmethod
     def fromOldKwArgs(cls, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
