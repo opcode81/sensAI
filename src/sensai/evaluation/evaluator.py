@@ -1,7 +1,7 @@
 import functools
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable, Iterator
 
 import pandas as pd
 
@@ -314,7 +314,16 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
 
 
 class VectorClassificationModelEvaluationData(VectorModelEvaluationData[ClassificationEvalStats]):
-    pass
+    def getMisclassifiedInputsDataFrame(self) -> pd.DataFrame:
+        return self.inputData.iloc[self.getEvalStats().getMisclassifiedIndices()]
+
+    def getMisclassifiedTriplesPredTrueInput(self) -> List[Tuple[Any, Any, pd.Series]]:
+        """
+        :return: a list containing a triple (predicted class, true class, input series) for each misclassified data point
+        """
+        evalStats = self.getEvalStats()
+        indices = evalStats.getMisclassifiedIndices()
+        return [(evalStats.y_predicted[i], evalStats.y_true[i], self.inputData.iloc[i]) for i in indices]
 
 
 class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
