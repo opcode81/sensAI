@@ -539,7 +539,8 @@ class VectorClassificationModel(VectorModel, ABC):
     def predictClassProbabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         :param x: the input data
-        :return: a data frame where the list of columns is the list of class labels and the values are probabilities.
+        :return: a data frame where the list of columns is the list of class labels and the values are probabilities, with the same
+            index as the input data frame.
             Raises an exception if the classifier cannot predict probabilities.
         """
         if not self.isFitted():
@@ -547,6 +548,7 @@ class VectorClassificationModel(VectorModel, ABC):
                             f"This might lead to errors down the line, especially if input/output checks are enabled")
         x = self._computeModelInputs(x)
         result = self._predictClassProbabilities(x)
+        result.index = x.index
         self._checkPrediction(result)
         return result
 

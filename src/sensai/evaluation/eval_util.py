@@ -14,6 +14,7 @@ from typing import Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Calla
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -609,6 +610,16 @@ class ModelComparisonData:
     def __init__(self, resultsDF: pd.DataFrame, resultsByModelName: Dict[str, Result]):
         self.resultsDF = resultsDF
         self.resultByModelName = resultsByModelName
+
+    def getBestModelName(self, metricName: str) -> str:
+        idx = np.argmax(self.resultsDF[metricName])
+        return self.resultsDF.index[idx]
+
+    def getBestModel(self, metricName: str) -> Union[VectorClassificationModel, VectorRegressionModel, VectorModelBase]:
+        result = self.resultByModelName[self.getBestModelName(metricName)]
+        if result.evalData is None:
+            raise ValueError("The best model is not well-defined when using cross-validation")
+        return result.evalData.model
 
 
 class ModelComparisonVisitor(ABC):
