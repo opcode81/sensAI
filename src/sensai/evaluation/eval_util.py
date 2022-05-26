@@ -33,6 +33,7 @@ from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRe
     VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, VectorModelEvaluatorParams
 from ..data import InputOutputData
 from ..feature_importance import AggregatedFeatureImportances, FeatureImportanceProvider
+from ..tracking import TrackedExperiment
 from ..util.io import ResultWriter
 from ..util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
 from ..util.string import prettyStringRepr
@@ -242,11 +243,14 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         return createVectorModelCrossValidator(self.inputOutputData, model=model, isRegression=isRegression, params=self.crossValidatorParams)
 
     def performSimpleEvaluation(self, model: TModel, createPlots=True, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
-            additionalEvaluationOnTrainingData=False, fitModel=True, writeEvalStats=False) -> TEvalData:
+            additionalEvaluationOnTrainingData=False, fitModel=True, writeEvalStats=False,
+            trackedExperiment: TrackedExperiment = None) -> TEvalData:
         if showPlots and not createPlots:
             raise ValueError("showPlots=True requires createPlots=True")
         resultWriter = self._resultWriterForModel(resultWriter, model)
         evaluator = self.createEvaluator(model)
+        if trackedExperiment is not None:
+            evaluator.setTrackedExperiment(trackedExperiment)
         log.info(f"Evaluating {model} via {evaluator}")
         if fitModel:
             evaluator.fitModel(model)
@@ -282,7 +286,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             return None
         return resultWriter.childWithAddedPrefix(model.getName() + "-")
 
-    def performCrossValidation(self, model: TModel, showPlots=False, logResults=True, resultWriter: Optional[ResultWriter] = None) -> TCrossValData:
+    def performCrossValidation(self, model: TModel, showPlots=False, logResults=True, resultWriter: Optional[ResultWriter] = None,
+            trackedExperiment: TrackedExperiment = None) -> TCrossValData:
         """
         Evaluates the given model via cross-validation
 
@@ -291,10 +296,13 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param logResults: whether to log evaluation results
         :param resultWriter: a writer with which to store text files and plots. The evaluated model's name is added to each filename
             automatically
+        :param trackedExperiment: a tracked experiment with which results shall be associated
         :return: cross-validation result data
         """
         resultWriter = self._resultWriterForModel(resultWriter, model)
         crossValidator = self.createCrossValidator(model)
+        if trackedExperiment is not None:
+            crossValidator.setTrackedExperiment(trackedExperiment)
         crossValidationData = crossValidator.evalModel(model)
         aggStatsByVar = {varName: crossValidationData.getEvalStatsCollection(predictedVarName=varName).aggMetricsDict()
                 for varName in crossValidationData.predictedVarNames}
