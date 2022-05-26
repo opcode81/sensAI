@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class TrackedExperiment(ABC):
@@ -24,15 +24,14 @@ class TrackedExperiment(ABC):
 
 
 class TrackingMixin(ABC):
-    # hackidy hack
-    _trackedExperimentAttributeName = "_trackedExperiment"
+    _objectId2trackedExperiment = {}
 
-    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
-        setattr(self, self._trackedExperimentAttributeName, trackedExperiment)
+    def setTrackedExperiment(self, trackedExperiment: Optional[TrackedExperiment]):
+        self._objectId2trackedExperiment[id(self)] = trackedExperiment
 
     def unsetTrackedExperiment(self):
-        setattr(self, self._trackedExperimentAttributeName, None)
+        self.setTrackedExperiment(None)
 
     @property
-    def trackedExperiment(self) -> TrackedExperiment:
-        return getattr(self, self._trackedExperimentAttributeName, None)
+    def trackedExperiment(self) -> Optional[TrackedExperiment]:
+        return self._objectId2trackedExperiment.get(id(self))
