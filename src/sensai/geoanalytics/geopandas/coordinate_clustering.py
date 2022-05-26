@@ -1,14 +1,16 @@
-import geopandas as gp
 import logging
-import numpy as np
-from shapely.geometry import MultiPoint
 from typing import Callable, Union, Iterable
 
-from ...clustering.clustering_base import EuclideanClusterer
+import geopandas as gp
+import numpy as np
+import pandas as pd
+from shapely.geometry import MultiPoint
+
+from .coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ...clustering import SkLearnEuclideanClusterer
+from ...clustering.clustering_base import EuclideanClusterer
 from ...clustering.sklearn_clustering import SkLearnClustererProtocol
 from ...util.cache import LoadSaveInterface
-from .coordinates import validateCoordinates, extractCoordinatesArray, TCoordinates, GeoDataFrameWrapper
 from ...util.profiling import timed
 
 log = logging.getLogger(__name__)
@@ -114,9 +116,9 @@ class CoordinateEuclideanClusterer(EuclideanClusterer, GeoDataFrameWrapper):
         geodf.crs = crs
         # TODO or not TODO: parallelize this or improve performance some another way
         for cluster in self.clusters(condition):
-            geodf = geodf.append(cluster.toGeoDF(crs=crs))
+            geodf = pd.concat((geodf, cluster.toGeoDF(crs=crs)))
         if includeNoise:
-            geodf = geodf.append(self.noiseCluster().toGeoDF(crs=crs))
+            geodf = pd.concat((geodf, self.noiseCluster().toGeoDF(crs=crs)))
         return geodf
 
     def plot(self, includeNoise=False, condition=None, **kwargs):
