@@ -6,6 +6,7 @@ sensAI - the Python library for sensible AI
    :glob:
 
    intro.ipynb
+   neural_networks.ipynb
    intro_old.ipynb
    tracking_experiments.ipynb
    tensor_models_pytorch_lightning.ipynb
