@@ -10,8 +10,10 @@ class TrackedExperiment(ABC):
         """
         self.additionalLoggingValuesDict = additionalLoggingValuesDict
 
-    def trackValues(self, valuesDict: Dict[str, Any]):
+    def trackValues(self, valuesDict: Dict[str, Any], addValuesDict: Dict[str, Any] = None):
         valuesDict = dict(valuesDict)
+        if addValuesDict is not None:
+            valuesDict.update(addValuesDict)
         if self.additionalLoggingValuesDict is not None:
             valuesDict.update(self.additionalLoggingValuesDict)
         self._trackValues(valuesDict)
@@ -32,5 +34,5 @@ class TrackingMixin(ABC):
         setattr(self, self._trackedExperimentAttributeName, None)
 
     @property
-    def trackedExperiment(self):
+    def trackedExperiment(self) -> TrackedExperiment:
         return getattr(self, self._trackedExperimentAttributeName, None)
