@@ -358,8 +358,8 @@ class VectorTorchModel(TorchModel, ABC):
         """
         :param inputDim: the number of input dimensions as reported by the data set provider (number of columns
             in input data frame for default providers)
-        :param outputDim: the number of output dimensions as reported by the data set provider (number of columns
-            in output data frame for default providers)
+        :param outputDim: the number of output dimensions as reported by the data set provider (for default providers,
+            this will be the nnumber of columns in the output data frame or, for classification, the number of classes)
         :return: the torch module
         """
         pass
