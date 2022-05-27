@@ -21,6 +21,16 @@ def countNone(*args: Any) -> int:
     return c
 
 
+def countNotNone(*args: Any) -> int:
+    """
+    Counts the number of arguments that are not None
+
+    :param args: various arguments
+    :return: the number of arguments that are not None
+    """
+    return len(args) - countNone(*args)
+
+
 def anyNone(*args: Any) -> bool:
     """
     :param args: various arguments
