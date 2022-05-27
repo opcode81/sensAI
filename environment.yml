@@ -29,7 +29,7 @@ dependencies:
   - pytest
   # for docs build
   - sphinx 
-  - sphinx_rtd_theme 
+  - sphinx_rtd_theme>=0.5.1
   - nbsphinx
   # for release process
   - bump2version
