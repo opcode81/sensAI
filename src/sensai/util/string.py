@@ -1,7 +1,8 @@
+import functools
 import re
 import sys
 from abc import ABC, abstractmethod
-from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping
+from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping, Callable
 
 reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
 
@@ -98,6 +99,15 @@ def orRegexGroup(allowedNames: Sequence[str]):
     """
     allowedNames = [re.escape(name) for name in allowedNames]
     return r"(%s)" % "|".join(allowedNames)
+
+
+def functionName(x: Callable) -> str:
+    if isinstance(x, functools.partial):
+        return functionName(x.func)
+    elif hasattr(x, "__name__"):
+        return x.__name__
+    else:
+        return str(x)
 
 
 class ToStringMixin:
