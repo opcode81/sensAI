@@ -1,4 +1,5 @@
 import re
+import sys
 from abc import ABC, abstractmethod
 from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping
 
@@ -6,12 +7,25 @@ reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
 
 
 class StringConverter(ABC):
+    """
+    Abstraction for a string conversion mechanism
+    """
     @abstractmethod
     def toString(self, x) -> str:
         pass
 
 
 def dictString(d: Mapping, brackets: Optional[str] = None, converter: StringConverter = None):
+    """
+    Converts a dictionary to a string of the form "<key>=<value>, <key>=<value>, ...", optionally enclosed
+    by brackets
+
+    :param d: the dictionary
+    :param brackets: a two-character string containing the opening and closing bracket to use, e.g. ``"{}"``;
+        if None, do not use enclosing brackets
+    :param converter: the string converter to use for values
+    :return: the string representation
+    """
     s = ', '.join([f'{k}={toString(v, converter=converter)}' for k, v in d.items()])
     if brackets is not None:
         return brackets[:1] + s + brackets[-1:]
@@ -20,6 +34,17 @@ def dictString(d: Mapping, brackets: Optional[str] = None, converter: StringConv
 
 
 def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None, converter: StringConverter = None):
+    """
+    Converts a list or any other iterable to a string of the form "[<value>, <value>, ...]", optionally enclosed
+    by different brackets or with the values quoted.
+
+    :param d: the dictionary
+    :param brackets: a two-character string containing the opening and closing bracket to use, e.g. ``"[]"``;
+        if None, do not use enclosing brackets
+    :param quote: a 1-character string defining the quote to use around each value, e.g. ``"'"``.
+    :param converter: the string converter to use for values
+    :return: the string representation
+    """
     def item(x):
         x = toString(x, converter=converter)
         if quote is not None:
@@ -69,7 +94,7 @@ def orRegexGroup(allowedNames: Sequence[str]):
     """
 
     :param allowedNames: strings to include as literals in the regex
-    :return: raw string of the type (<name1>| ...|<nameN>), where special characters in the names have been escaped
+    :return: a regular expression string of the form (<name1>| ...|<nameN>), which any of the given names
     """
     allowedNames = [re.escape(name) for name in allowedNames]
     return r"(%s)" % "|".join(allowedNames)
@@ -77,12 +102,49 @@ def orRegexGroup(allowedNames: Sequence[str]):
 
 class ToStringMixin:
     """
-    Provides implementations for __str__ and __repr__ which contain all attribute names and their values. The
-    latter also contains the object id.
+    Provides implementations for ``__str__`` and ``__repr__`` which are based on the format ``"<class name>[<object info>]"`` and
+    ``"<class name>[id=<object id>, <object info>]"`` respectively, where ``<object info>`` is usually a list of entries of the
+    form ``"<name>=<value>, ..."``.
+
+    By default, ``<class name>`` will be the qualified name of the class, and ``<object info>`` will include all properties
+    of the class, including private ones starting with an underscore (though the underscore will be dropped in the string
+    representation).
+
+        * To exclude private properties, override :meth:`_toStringExcludePrivate` to return True. If there are exceptions
+          (and some private properties shall be retained), additionally override :meth:`__toStringExcludeExceptions`.
+        * To exclude a particular set of properties, override :meth:`_toStringExcludes`.
+        * To include only select properties (introducing inclusion semantics), override :meth:`_toStringIncludes`.
+        * To add values to the properties list that aren't actually properties of the object (i.e. derived properties),
+          override :meth:`_toStringAdditionalEntries`.
+        * To define a fully custom representation for <object info> which is not based on the above principles, override
+          :meth:`_toStringObjectInfo`.
+
+    For well-defined string conversions within a class hierarchy, it can be good practice to define additional
+    inclusions/exclusions by overriding the respective method once more and basing the return value on an extended
+    version of the value returned by superclass.
+    In some cases, the requirements of a subclass can be at odds with the definitions in the superclass: The superclass
+    may make use of exclusion semantics, but the subclass may want to use inclusion semantics (and include
+    only some of the many properties it adds). If the subclass used :meth:`_toStringInclude` the exclusion semantics
+    of the superclass would be void and none of its properties would be included.
+    In this case, override :meth:`_toStringIncludesForced` to add inclusions regardless of the semantics otherwise used along
+    the class hierarchy.
+
+    .. document private functions
+    .. automethod:: _toStringClassName
+    .. automethod:: _toStringObjectInfo
+    .. automethod:: _toStringExcludes
+    .. automethod:: _toStringExcludeExceptions
+    .. automethod:: _toStringIncludes
+    .. automethod:: _toStringIncludesForced
+    .. automethod:: _toStringAdditionalEntries
+    .. automethod:: _toStringExcludePrivate
     """
     _TOSTRING_INCLUDE_ALL = "__all__"
 
     def _toStringClassName(self):
+        """
+        :return: the string use for <class name> in the string representation ``"<class name>[<object info]"``
+        """
         return type(self).__qualname__
 
     def _toStringProperties(self, exclude: Optional[Union[str, Iterable[str]]] = None, include: Optional[Union[str, Iterable[str]]] = None,
@@ -93,10 +155,12 @@ class ToStringMixin:
         Exclusions take precedence over inclusions.
 
         :param exclude: attributes to be excluded
-        :param include: attributes to be included; if None/empty, include all that are not excluded
-        :param additionalEntries: additional key-value-pairs which are added to the string just like the other attributes
-        :param converter: the string converter to use; if None, use default
-        :return: a string containing attribute names and values
+        :param include: attributes to be included; if non-empty, only the specified attributes will be printed (bar the ones
+            excluded by ``exclude``)
+        :param includeForced: additional attributes to be included
+        :param additionalEntries: additional key-value entries to be added
+        :param converter: the string converter to use; if None, use default (which avoids infinite recursions)
+        :return: a string containing entry/property names and values
         """
         def mklist(x):
             if x is None:
@@ -139,12 +203,13 @@ class ToStringMixin:
 
     def _toStringObjectInfo(self) -> str:
         """
-        Creates a string containing information on the object instance which is to appear between the square brackets in the string
-        representation, i.e. if the class name is Foo, then it is the asterisk in "Foo[*]".
-        By default will make use of all the exclusions/inclusions that are specified by other member functions.
-        This method can be overwritten by sub-classes to provide a custom string.
+        Override this method to use a fully custom definition of the ``<object info>`` part in the full string
+        representation ``"<class name>[<object info>]"`` to be generated.
+        As soon as this method is overridden, any property-based exclusions, inclusions, etc. will have no effect
+        (unless the implementation is specifically designed to make use of them - as is the default
+        implementation).
 
-        :return: a string containing the desired content
+        :return: a string containing the string to use for ``<object info>``
         """
         return self._toStringProperties(exclude=self._toStringExcludes(), include=self._toStringIncludes(),
             excludeExceptions=self._toStringExcludeExceptions(), includeForced=self._toStringIncludesForced(),
@@ -153,9 +218,9 @@ class ToStringMixin:
     def _toStringExcludes(self) -> List[str]:
         """
         Makes the string representation exclude the returned attributes.
-        Returns a list of attribute names to be excluded from __str__ and __repr__. This method can be overwritten by
-        sub-classes which can call super and extend the list returned.
-        This method will only have no effect if _toStringObjectInfo is overridden to not use its result.
+        This method can be conveniently overridden by subclasses which can call super and extend the list returned.
+
+        This method will only have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
 
         :return: a list of attribute names
         """
@@ -166,14 +231,14 @@ class ToStringMixin:
         Makes the string representation include only the returned attributes (i.e. introduces inclusion semantics);
         By default, the list contains only a marker element, which is interpreted as "all attributes included".
 
-        This method can be overridden by sub-classes, which can call super in order to extend the list.
-        If a list containing the aforementioned marker element (which stands for all attributes) is extended, the marker element will be ignored,
-        and only the user-added elements will be considered as included.
+        This method can be conveniently overridden by sub-classes which can call super and extend the list returned.
+        Note that it is not a problem for a list containing the aforementioned marker element (which stands for all attributes)
+        to be extended; the marker element will be ignored and only the user-added elements will be considered as included.
 
         Note: To add an included attribute in a sub-class, regardless of any super-classes using exclusion or inclusion semantics,
         use _toStringIncludesForced instead.
 
-        This method will only have no effect if _toStringObjectInfo is overridden to not use its result.
+        This method will have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
 
         :return: a list of attribute names to be included in the string representation
         """
@@ -185,24 +250,29 @@ class ToStringMixin:
         Defines a list of attribute names that are required to be present in the string representation, regardless of the
         instance using include semantics or exclude semantics, thus facilitating added inclusions in sub-classes.
 
+        This method will have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
+
         :return: a list of attribute names
         """
         return []
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
+        """
+        :return: a dictionary of entries to be included in the ``<object info>`` part of the string representation
+        """
         return {}
 
     def _toStringExcludePrivate(self) -> bool:
         """
-        :return: whether to exclude properties that are private, i.e. start with an underscore; explicitly included attributes
-            will still be considered
+        :return: whether to exclude properties that are private (start with an underscore); explicitly included attributes
+            will still be considered - as will properties exempt from the rule via :meth:`toStringExcludeException`.
         """
         return False
 
     def _toStringExcludeExceptions(self) -> List[str]:
         """
-        Defines attribute names which should not be excluded even though other rules (e.g. the exclusion of private members
-        via _toStringExcludePrivate) would otherwise exclude them.
+        Defines attribute names which should not be excluded even though other rules (particularly the exclusion of private members
+        via :meth:`_toStringExcludePrivate`) would otherwise exclude them.
 
         :return: a list of attribute names
         """
@@ -218,16 +288,29 @@ class ToStringMixin:
             info += ", " + propertyInfo
         return f"{self._toStringClassName()}[{info}]"
 
-    def pprint(self):
-        print(prettyStringRepr(self))
+    def pprint(self, file=sys.stdout):
+        """
+        Prints a prettily formatted string representation of the object (with line breaks and indentations)
+        to ``stdout`` or the given file.
+
+        :param file: the file to print to
+        """
+        print(self.pprints(), file=file)
+
+    def pprints(self) -> str:
+        """
+        :return: a prettily formatted string representation with line breaks and indentations
+        """
+        return prettyStringRepr(self)
 
     class _StringConverterAvoidToStringMixinRecursion(StringConverter):
         """
-        Avoids recursions when converting objects implementing ToStringMixin which may contain themselves to strings.
-        Use of this object prevents infinite recursions caused by a ToStringMixin instance recursively containing itself in
-        either a property of another ToStringMixin, a list or a tuple.
-        It handles all ToStringMixin instances recursively encountered.
-        A previously handled instance is converted to a string of the form "<class name>[<<]"
+        Avoids recursions when converting objects implementing :class:`ToStringMixin` which may contain themselves to strings.
+        Use of this object prevents infinite recursions caused by a :class:`ToStringMixin` instance recursively containing itself in
+        either a property of another :class:`ToStringMixin`, a list or a tuple.
+        It handles all :class:`ToStringMixin` instances recursively encountered.
+
+        A previously handled instance is converted to a string of the form "<class name>[<<]".
         """
         def __init__(self, *handledObjects: "ToStringMixin"):
             """
