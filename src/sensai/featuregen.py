@@ -12,6 +12,7 @@ from .columngen import ColumnGenerator
 from .data_transformation import DFTNormalisation
 from .util import flattenArguments
 from .util.string import orRegexGroup, ToStringMixin, listString
+from .util.typing import PandasNamedTuple
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -221,9 +222,10 @@ class FeatureGenerator(ToStringMixin, ABC):
         :param df: the input data frame for which to generate features
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
-        :return: a data frame containing the generated features, which uses the same index as X (and Y).
-            The data frame's columns holding categorical columns are not required to have dtype 'category';
-            this will be ensured by the encapsulating call.
+        :return: a data frame containing the generated features, which uses the same index as ``df``.
+            The data frame's columns holding categorical columns are not required to have dtype ``category``;
+            this will be ensured by the encapsulating call as long as the respective columns' names
+            were appropriately provided at construction.
         """
         pass
 
@@ -382,6 +384,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
     def _generate(self, df: pd.DataFrame, ctx=None):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
+            nt: PandasNamedTuple
             if idx % 100 == 0:
                 log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
             value = None
