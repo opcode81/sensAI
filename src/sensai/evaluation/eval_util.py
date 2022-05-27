@@ -3,8 +3,6 @@ This module contains methods and classes that facilitate evaluation of different
 workflow for evaluation is to use these higher-level functionalities instead of instantiating
 the evaluation classes directly.
 """
-# TODO: provide a notebook (and possibly an rst file) that illustrates standard evaluation scenarios and at the same
-#  time serves as an integration test
 import functools
 import logging
 from abc import ABC, abstractmethod
