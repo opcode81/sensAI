@@ -1,21 +1,27 @@
-from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping
 import re
-
+from abc import ABC, abstractmethod
+from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping
 
 reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
 
 
-def dictString(d: Mapping, brackets: Optional[str] = None):
-    s = ', '.join([f'{k}={toString(v)}' for k, v in d.items()])
+class StringConverter(ABC):
+    @abstractmethod
+    def toString(self, x) -> str:
+        pass
+
+
+def dictString(d: Mapping, brackets: Optional[str] = None, converter: StringConverter = None):
+    s = ', '.join([f'{k}={toString(v, converter=converter)}' for k, v in d.items()])
     if brackets is not None:
         return brackets[:1] + s + brackets[-1:]
     else:
         return s
 
 
-def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None):
+def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None, converter: StringConverter = None):
     def item(x):
-        x = toString(x)
+        x = toString(x, converter=converter)
         if quote is not None:
             return quote + x + quote
         else:
@@ -24,15 +30,29 @@ def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None):
     return brackets[:1] + ", ".join((item(x) for x in l)) + brackets[-1:]
 
 
-def toString(x):
+def toString(x, converter: StringConverter = None, applyConverterToNonComplexObjects=True):
+    """
+    Converts the given object to a string, with proper handling of lists, tuples and dictionaries, optionally using a converter.
+    The conversion also removes unwanted line breaks (as present, in particular, in sklearn's string representations).
+
+    :param x: the object to convert
+    :param converter: the converter with which to convert objects to strings
+    :param applyConverterToNonComplexObjects: whether to apply/pass on the converter (if any) not only when converting complex objects but also
+        non-complex, primitive objects; use of this flag enables converters to implement their conversion functionality using this function
+        for complex objects without causing an infinite recursion.
+    :return: the string representation
+    """
     if type(x) == list:
-        return listString(x)
+        return listString(x, converter=converter)
     elif type(x) == tuple:
-        return listString(x, brackets="()")
+        return listString(x, brackets="()", converter=converter)
     elif type(x) == dict:
-        return dictString(x, brackets="{}")
+        return dictString(x, brackets="{}", converter=converter)
     else:
-        s = str(x)
+        if converter and applyConverterToNonComplexObjects:
+            s = converter.toString(x)
+        else:
+            s = str(x)
         s = reCommaWhitespacePotentiallyBreaks.sub(", ", s)  # remove any unwanted line breaks and indentation after commas (as generated, for example, by sklearn objects)
         return s
 
@@ -57,7 +77,7 @@ def orRegexGroup(allowedNames: Sequence[str]):
 
 class ToStringMixin:
     """
-    Provides default implementations for __str__ and __repr__ which contain all attribute names and their values. The
+    Provides implementations for __str__ and __repr__ which contain all attribute names and their values. The
     latter also contains the object id.
     """
     _TOSTRING_INCLUDE_ALL = "__all__"
@@ -67,7 +87,7 @@ class ToStringMixin:
 
     def _toStringProperties(self, exclude: Optional[Union[str, Iterable[str]]] = None, include: Optional[Union[str, Iterable[str]]] = None,
             excludeExceptions: Optional[List[str]] = None, includeForced: Optional[List[str]] = None,
-            additionalEntries: Dict[str, Any] = None) -> str:
+            additionalEntries: Dict[str, Any] = None, converter: StringConverter = None) -> str:
         """
         Creates a string of the class attributes, with optional exclusions/inclusions/additions.
         Exclusions take precedence over inclusions.
@@ -75,6 +95,7 @@ class ToStringMixin:
         :param exclude: attributes to be excluded
         :param include: attributes to be included; if None/empty, include all that are not excluded
         :param additionalEntries: additional key-value-pairs which are added to the string just like the other attributes
+        :param converter: the string converter to use; if None, use default
         :return: a string containing attribute names and values
         """
         def mklist(x):
@@ -112,7 +133,9 @@ class ToStringMixin:
         if additionalEntries is not None:
             d.update(additionalEntries)
 
-        return dictString(d)
+        if converter is None:
+            converter = self._StringConverterAvoidToStringMixinRecursion(self)
+        return dictString(d, converter=converter)
 
     def _toStringObjectInfo(self) -> str:
         """
@@ -156,6 +179,7 @@ class ToStringMixin:
         """
         return [self._TOSTRING_INCLUDE_ALL]
 
+    # noinspection PyMethodMayBeStatic
     def _toStringIncludesForced(self) -> List[str]:
         """
         Defines a list of attribute names that are required to be present in the string representation, regardless of the
@@ -194,6 +218,60 @@ class ToStringMixin:
             info += ", " + propertyInfo
         return f"{self._toStringClassName()}[{info}]"
 
+    def pprint(self):
+        print(prettyStringRepr(self))
+
+    class _StringConverterAvoidToStringMixinRecursion(StringConverter):
+        """
+        Avoids recursions when converting objects implementing ToStringMixin which may contain themselves to strings.
+        Use of this object prevents infinite recursions caused by a ToStringMixin instance recursively containing itself in
+        either a property of another ToStringMixin, a list or a tuple.
+        It handles all ToStringMixin instances recursively encountered.
+        A previously handled instance is converted to a string of the form "<class name>[<<]"
+        """
+        def __init__(self, *handledObjects: "ToStringMixin"):
+            """
+            :param handledObjects: objects which are initially assumed to have been handled already
+            """
+            self._handledToStringMixinIds = set([id(o) for o in handledObjects])
+
+        def toString(self, x) -> str:
+            if isinstance(x, ToStringMixin):
+                oid = id(x)
+                if oid in self._handledToStringMixinIds:
+                    return f"{x._toStringClassName()}[<<]"
+                self._handledToStringMixinIds.add(oid)
+                return str(self._ToStringMixinProxy(x, self))
+            else:
+                return toString(x, converter=self, applyConverterToNonComplexObjects=False)
+
+        class _ToStringMixinProxy:
+            """
+            A proxy object which wraps a ToStringMixin to ensure that the converter is applied when creating the properties string.
+            The proxy is to achieve that all ToStringMixin methods that aren't explicitly overwritten are bound to this proxy
+            (rather than the original object), such that the transitive call to _toStringProperties will call the new
+            implementation.
+            """
+            def __init__(self, x: "ToStringMixin", converter):
+                self.x = x
+                self.converter = converter
+
+            def _toStringProperties(self, *args, **kwargs):
+                return self.x._toStringProperties(*args, **kwargs, converter=self.converter)
+
+            def _toStringClassName(self):
+                return self.x._toStringClassName()
+
+            def __getattr__(self, attr: str):
+                if attr.startswith("_toString"):  # ToStringMixin method which we bind to use this proxy
+                    method = getattr(ToStringMixin, attr)
+                    return lambda *args, **kwargs: method(self, *args, **kwargs)
+                else:
+                    return getattr(self.x, attr)
+
+            def __str__(self: "ToStringMixin"):
+                return ToStringMixin.__str__(self)
+
 
 def prettyStringRepr(s: Any, initialIndentationLevel=0, indentationString="    "):
     """
@@ -203,7 +281,7 @@ def prettyStringRepr(s: Any, initialIndentationLevel=0, indentationString="    "
     :param s: an object or object string representation
     :param initialIndentationLevel: the initial indentation level
     :param indentationString: the string which corresponds to a single indentation level
-    :return: a reformatted version of the input string with added indentations and line break
+    :return: a reformatted version of the input string with added indentations and line breaks
     """
     if type(s) != str:
         s = str(s)
