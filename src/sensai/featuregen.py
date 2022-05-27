@@ -259,6 +259,37 @@ class FeatureGenerator(ToStringMixin, ABC):
         return flattenedFeatureGenerator(self, columnsToFlatten=columnsToFlatten, normalisationRules=normalisationRules,
             keepOtherColumns=keepOtherColumns, normalisationRuleTemplate=normalisationRuleTemplate)
 
+    def concat(self, *others: "FeatureGenerator") -> "MultiFeatureGenerator":
+        """
+        Concatenates this feature generator with one or more other feature generator in order to produce a feature generator that
+        jointly generates all features
+
+        :param others: other feature generators
+        :return: a :class:`MultiFeatureGenerator`
+        """
+        if isinstance(self, MultiFeatureGenerator):
+            fgens = list(self.featureGenerators)
+        else:
+            fgens = [self]
+        fgens.extend(others)
+        return MultiFeatureGenerator(fgens)
+
+    def chain(self, *others: "FeatureGenerator") -> "ChainedFeatureGenerator":
+        """
+        Chains this feature generator with one or more other feature generators such that each feature generator
+        receives as input the output of the preceding feature generator. The resulting feature generator
+        produces the features of the last element in the chain.
+
+        :param others: other feature generator
+        :return: a :class:`ChainedFeatureGenerator`
+        """
+        if isinstance(self, ChainedFeatureGenerator):
+            fgens = self.featureGenerators
+        else:
+            fgens = [self]
+        fgens.extend(others)
+        return ChainedFeatureGenerator(fgens)
+
 
 class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
     """
