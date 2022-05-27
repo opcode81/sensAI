@@ -3,7 +3,7 @@ import xgboost
 from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
 
-class XGBGradientBosstedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class XGBGradientBoostedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
     """
     XGBoost's regression model using gradient boosted trees
     """
