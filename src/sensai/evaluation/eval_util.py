@@ -32,7 +32,7 @@ from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRe
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, \
     VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, VectorModelEvaluatorParams
 from ..data import InputOutputData
-from ..feature_importance import AggregatedFeatureImportances, FeatureImportanceProvider
+from ..feature_importance import AggregatedFeatureImportances, FeatureImportanceProvider, plotFeatureImportance
 from ..util.io import ResultWriter
 from ..util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
 from ..util.string import prettyStringRepr
@@ -592,8 +592,9 @@ class MultiDataEvaluationUtil:
 
         # create plots from visitors (if any)
         resultCollector = EvaluationResultCollector(showPlots=False, resultWriter=resultWriter)
-        for visitor in visitors:
-            visitor.collectPlots(resultCollector)
+        if visitors is not None:
+            for visitor in visitors:
+                visitor.collectPlots(resultCollector)
 
         if isRegression:
             return RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
@@ -641,12 +642,16 @@ class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor)
     """
     During a model comparison, computes aggregated feature importance values for the model with the given name
     """
-    def __init__(self, modelName: str):
+    def __init__(self, modelName: str, featureAggRegEx: Sequence[str] = ()):
         """
         :param modelName: the name of the model for which to compute the aggregated feature importance values
+        :param featureAggRegEx: a sequence of regular expressions describing which feature names to sum as one. Each regex must
+            contain exactly one group. If a regex matches a feature name, the feature importance will be summed under the key
+            of the matched group instead of the full feature name. For example, the regex r"(\w+)_\d+$" will cause "foo_1" and "foo_2"
+            to be summed under "foo" and similarly "bar_1" and "bar_2" to be summed under "bar".
         """
         self.modelName = modelName
-        self.aggFeatureImportance = AggregatedFeatureImportances()
+        self.aggFeatureImportance = AggregatedFeatureImportances(featureAggRegEx=featureAggRegEx)
 
     def visit(self, modelName: str, result: ModelComparisonData.Result):
         if modelName == self.modelName:
@@ -666,15 +671,7 @@ class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor)
         self.aggFeatureImportance.add(model.getFeatureImportances())
 
     def plotFeatureImportance(self) -> plt.Figure:
-        featureImportanceDict = self.aggFeatureImportance.aggDict
-        numFeatures = len(featureImportanceDict)
-        defaultWidth, defaultHeight = MATPLOTLIB_DEFAULT_FIGURE_SIZE
-        height = max(defaultHeight, defaultHeight * numFeatures / 20)
-        fig, ax = plt.subplots(figsize=(defaultWidth, height))
-        sns.barplot(list(featureImportanceDict.values()), list(featureImportanceDict.keys()), ax=ax)
-        plt.title(f"Feature Importance\n{self.modelName}")
-        plt.tight_layout()
-        return fig
+        return plotFeatureImportance(self.aggFeatureImportance.getFeatureImportanceSum(), subtitle=self.modelName)
 
     def collectPlots(self, resultCollector: EvaluationResultCollector):
         resultCollector.addFigure(f"{self.modelName}_feature-importance", self.plotFeatureImportance())

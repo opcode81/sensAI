@@ -5,10 +5,10 @@ from typing import Sequence, Callable
 import matplotlib.figure
 from matplotlib import pyplot as plt
 import numpy as np
+import seaborn as sns
 
 
 log = logging.getLogger(__name__)
-
 
 MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
 
@@ -142,5 +142,16 @@ class HeatMapPlot(Plot):
             if yLabel is not None:
                 plt.ylabel(yLabel)
             return plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation="none", cmap=cmap, zorder=1, aspect="auto", **kwargs)
+
+        super().__init__(draw)
+
+
+class HistogramPlot(Plot):
+    def __init__(self, values, bins="auto", kde=False, binwidth=None, stat="percent", xlabel=None, **kwargs):
+        def draw():
+            ax = sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
+            if xlabel is not None:
+                plt.xlabel(xlabel)
+            return ax
 
         super().__init__(draw)

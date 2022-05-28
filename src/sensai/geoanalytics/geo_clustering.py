@@ -30,7 +30,7 @@ class GeoCoordClusterer(ABC):
         pass
 
 
-class GreedyAgglomerativeGeoCoordClusterer:
+class GreedyAgglomerativeGeoCoordClusterer(GeoCoordClusterer):
     def __init__(self, maxMinDistanceForMergeM: float, maxDistanceM: float, minClusterSize: int, lcs: LocalCoordinateSystem = None):
         """
         :param maxMinDistanceForMergeM: the maximum distance, in metres, for the minimum distance between two existing clusters for a merge
