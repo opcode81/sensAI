@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+from sensai.util.aggregation import RelativeFrequencyCounter
+
 log = logging.getLogger(__name__)
 
 
@@ -387,23 +389,6 @@ class SAOperator(Generic[TSAState]):
             parameters and costValue is either an instance of CostValue or None if the costs have not been computed.
         """
         pass
-
-
-class RelativeFrequencyCounter:
-    def __init__(self):
-        self.numTotal = 0
-        self.numRelevant = 0
-
-    def count(self, isRelevantEvent):
-        self.numTotal += 1
-        if isRelevantEvent:
-            self.numRelevant += 1
-
-    def __str__(self):
-        info = f"{self.numRelevant}/{self.numTotal}"
-        if self.numTotal > 0:
-            info += f", {100 * self.numRelevant / self.numTotal:.2f}%"
-        return f"RelativeFrequencyCounter[{info}]"
 
 
 class SAChain(Generic[TSAState]):

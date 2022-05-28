@@ -4,7 +4,7 @@ This section explains the steps required to set up an environment in order to de
 
 ## Clone Large Files
 
-Clone the full repo, including large files using [git large file storage](https://git-lfs.github.com):
+Clone the full repo, including large files using [git LFS](https://git-lfs.github.com):
 
     git lfs pull
 
@@ -18,7 +18,7 @@ Use conda to set up the Python environment:
 
 Solving the environment may take several minutes (but should ultimately work).
 
-NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see blow).
+NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see below).
 
 # Build and Test Pipeline
 
@@ -33,33 +33,27 @@ Docs are automatically created during the GitHub build via tox.
 
 All .rst files are auto-generated (by `build_scripts/update_docs.py`), with the exception of the root index file  `index.rst`.
 
-### Dependency Handling
+### Declaring Optional Dependencies
 
-**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`.
+**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`. Otherwise the tox build will fail.
 
 ### Notebooks
 
-Notebooks in the `notebooks/` folder are executed and saved with outputs to the `docs/` folder by a test in `notebooks/test_notebooks.py`.
+`docs/index.rst` includes the names of notebooks which reside in the `notebooks/` folder. They are not initially present in the `docs/` folder, but any notebooks whose names are referenced in `index.rst` will be executed and saved with outputs to the `docs/` folder by a test in `notebooks/test_notebooks.py`.
 
-Notebooks are included in the documentation in `docs/index.rst`.
+Therefore, in order for the docs build to work (without temporarily removing the notebook inclusions), it is necessary to run the aforementioned test at least once via
+
+    sh run_pytest_notebooks.sh
+
+For changes in notebooks to be reflected in the docs build, the test needs to be rerun.
 
 ### Manually Running the Docs Build
 
-The docs build is designed to be run by tox. As soon as a single iPython notebook is included in index.rst, `sensai` must be available as an installed dependency in the environment in which the docs build is run, as the notebook executions take place in a Jupyter environment where we can't simply extend sys.path. 
+The docs build can be run without tox via 
 
-Under Linux, running tox should work fine. Under Windows, we are yet to succeed.
+    sh build-docs.sh
 
-To run the docs build without tox (under Windows), first create an environment that has the additional requirements installed.
-
-    conda env create -n sensai-docs -f environment.yml
-    conda activate sensai-docs
-    pip install sphinx sphinx_rtd_theme nbsphinx
-
-Then, to build the docs, we need to perform the following steps with the new environment `sensai-docs` activated. The first command installs the current source version of  `sensai` itself.
-
-    pip install .
-    rm -rf docs-build; mkdir docs-build
-    sphinx-build -b html docs docs-build
+Results will be stored in `docs/build/`.
 
 # Creating a New Release
 

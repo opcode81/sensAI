@@ -21,3 +21,9 @@ data
 .coverage
 /*.env
 /docs-build
+/code.sh
+/lightning_logs
+*.code-workspace
+/TODO.txt
+notebooks/temp.ipynb
+/docs/build

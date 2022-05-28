@@ -12,6 +12,7 @@ from .columngen import ColumnGenerator
 from .data_transformation import DFTNormalisation
 from .util import flattenArguments
 from .util.string import orRegexGroup, ToStringMixin, listString
+from .util.typing import PandasNamedTuple
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
@@ -221,9 +222,10 @@ class FeatureGenerator(ToStringMixin, ABC):
         :param df: the input data frame for which to generate features
         :param ctx: a context object whose functionality may be required for feature generation;
             this is typically the model instance that this feature generator is to generate inputs for
-        :return: a data frame containing the generated features, which uses the same index as X (and Y).
-            The data frame's columns holding categorical columns are not required to have dtype 'category';
-            this will be ensured by the encapsulating call.
+        :return: a data frame containing the generated features, which uses the same index as ``df``.
+            The data frame's columns holding categorical columns are not required to have dtype ``category``;
+            this will be ensured by the encapsulating call as long as the respective columns' names
+            were appropriately provided at construction.
         """
         pass
 
@@ -243,18 +245,52 @@ class FeatureGenerator(ToStringMixin, ABC):
 
     def flattened(self, columnsToFlatten: List[str] = None,
             normalisationRules=(),
-            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None) -> "ChainedFeatureGenerator":
+            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None,
+            keepOtherColumns=True) -> "ChainedFeatureGenerator":
         """
         Returns a new feature generator which returns flattened versions of one or more of the vector-valued columns generated
-        by this feature generator
+        by this feature generator.
 
         :param columnsToFlatten: the list of columns to flatten; if None, flatten all columns
         :param normalisationRules: a list of normalisation rules which apply to the flattened columns
         :param normalisationRuleTemplate: a normalisation rule template which applies to all generated flattened columns
+        :param keepOtherColumns: if True, any additional columns that are not to be flattened are to be retained
+            by the returned feature generator; if False, additional columns are to be discarded
         :return: a feature generator which generates the flattened columns
         """
         return flattenedFeatureGenerator(self, columnsToFlatten=columnsToFlatten, normalisationRules=normalisationRules,
-            normalisationRuleTemplate=normalisationRuleTemplate)
+            keepOtherColumns=keepOtherColumns, normalisationRuleTemplate=normalisationRuleTemplate)
+
+    def concat(self, *others: "FeatureGenerator") -> "MultiFeatureGenerator":
+        """
+        Concatenates this feature generator with one or more other feature generator in order to produce a feature generator that
+        jointly generates all features
+
+        :param others: other feature generators
+        :return: a :class:`MultiFeatureGenerator`
+        """
+        if isinstance(self, MultiFeatureGenerator):
+            fgens = list(self.featureGenerators)
+        else:
+            fgens = [self]
+        fgens.extend(others)
+        return MultiFeatureGenerator(fgens)
+
+    def chain(self, *others: "FeatureGenerator") -> "ChainedFeatureGenerator":
+        """
+        Chains this feature generator with one or more other feature generators such that each feature generator
+        receives as input the output of the preceding feature generator. The resulting feature generator
+        produces the features of the last element in the chain.
+
+        :param others: other feature generator
+        :return: a :class:`ChainedFeatureGenerator`
+        """
+        if isinstance(self, ChainedFeatureGenerator):
+            fgens = self.featureGenerators
+        else:
+            fgens = [self]
+        fgens.extend(others)
+        return ChainedFeatureGenerator(fgens)
 
 
 class RuleBasedFeatureGenerator(FeatureGenerator, ABC):
@@ -348,6 +384,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
     def _generate(self, df: pd.DataFrame, ctx=None):
         dicts = []
         for idx, nt in enumerate(df.itertuples()):
+            nt: PandasNamedTuple
             if idx % 100 == 0:
                 log.debug(f"Generating feature via {self.__class__.__name__} for index {idx}")
             value = None
@@ -907,15 +944,16 @@ class FeatureGeneratorNAMarker(RuleBasedFeatureGenerator):
         return pd.DataFrame(newCols, index=df.index)
 
 
-def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None,
-                            normalisationRules=(), normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
+def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str] = None, keepOtherColumns=True,
+        normalisationRules: Sequence[DFTNormalisation.Rule] = (),
+        normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None):
     """
-    Return a flattening version of the input feature generator, leaving additional columns (if any) that are not to be flattened
-    but are also generated by the input feature generator untouched.
+    Return a flattening version of the input feature generator.
 
     :param fgen: the feature generator which generates columns that are to be flattened
-    :param columnsToFlatten: list of names of output columns to be flattened.
-        If None, all output columns will be flattened.
+    :param columnsToFlatten: list of names of output columns to be flattened; if None, flatten all columns
+    :param keepOtherColumns: whether any additional columns that are not to be flattened are to be retained
+        by the returned feature generator
     :param normalisationRules: additional normalisation rules for the flattened output columns
     :param normalisationRuleTemplate: This parameter can be supplied instead of normalisationRules for the case where
         there shall be a single rule that applies to all flattened output columns
@@ -935,7 +973,7 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
     """
     flatteningGenerator = FeatureGeneratorFlattenColumns(columns=columnsToFlatten, normalisationRules=normalisationRules,
         normalisationRuleTemplate=normalisationRuleTemplate)
-    if columnsToFlatten is None:
+    if columnsToFlatten is None or not keepOtherColumns:
         return ChainedFeatureGenerator(fgen, flatteningGenerator)
     else:
         return ChainedFeatureGenerator(fgen,

@@ -293,6 +293,9 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
                 d[metric.name] = self.computeMetricValue(metric)
         return d
 
+    def getMisclassifiedIndices(self) -> List[int]:
+        return [i for i, (predClass, trueClass) in enumerate(zip(self.y_predicted, self.y_true)) if predClass != trueClass]
+
     def plotConfusionMatrix(self, normalize=True, titleAdd: str = None):
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         confusionMatrix = self.getConfusionMatrix()

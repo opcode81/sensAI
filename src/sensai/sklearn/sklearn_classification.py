@@ -56,3 +56,8 @@ class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassif
 class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, random_state=42, **modelArgs):
         super().__init__(sklearn.svm.SVC, random_state=random_state, **modelArgs)
+
+
+class SkLearnLogisticRegressionVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, random_state=42, **modelArgs):
+        super().__init__(sklearn.linear_model.LogisticRegression, random_state=random_state, **modelArgs)
