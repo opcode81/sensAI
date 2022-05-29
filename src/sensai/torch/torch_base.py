@@ -575,7 +575,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     @classmethod
     def fromModule(cls, module: torch.nn.Module, outputMode: ClassificationOutputMode, cuda=True,
             normalisationMode: NormalisationMode = NormalisationMode.NONE,
-            nnOptimiserParams: Optional[NNOptimiserParams] = None) -> "TorchVectorRegressionModel":
+            nnOptimiserParams: Optional[NNOptimiserParams] = None) -> "TorchVectorClassificationModel":
         return cls(outputMode, TorchModelFromModule, modelKwArgs=dict(module=module, cuda=cuda),
             normalisationMode=normalisationMode, nnOptimiserParams=nnOptimiserParams)
 
