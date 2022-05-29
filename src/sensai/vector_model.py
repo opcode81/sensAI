@@ -393,21 +393,63 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         """
         return self._modelInputVariableNames
 
+    @deprecated("Use getFeatureTransformer instead, this method will be removed in a future release")
     def getInputTransformer(self, cls: Type[DataFrameTransformer]):
         """
-        Gets the (first) input transformer of the given type (if any) within this models input transformer chain
+        Gets the (first) feature transformer of the given type (if any) within this models feature transformer chain
 
         :param cls: the type of transformer to look for
-        :return: the first matching transformer or None
+        :return: the first matching feature transformer or None
         """
         for it in self._featureTransformerChain.dataFrameTransformers:
             if isinstance(it, cls):
                 return it
         return None
 
+    def getFeatureTransformer(self, cls: Type[DataFrameTransformer]):
+        """
+        Gets the (first) feature transformer of the given type (if any) within this models feature transformer chain
+
+        :param cls: the type of transformer to look for
+        :return: the first matching feature transformer or None
+        """
+        for it in self._featureTransformerChain.dataFrameTransformers:
+            if isinstance(it, cls):
+                return it
+        return None
+
+    def getRawInputTransformer(self, cls: Type[DataFrameTransformer]):
+        """
+        Gets the (first) raw input transformer of the given type (if any) within this models raw input transformer chain
+
+        :param cls: the type of transformer to look for
+        :return: the first matching raw input transformer or None
+        """
+        for it in self._rawInputTransformerChain.dataFrameTransformers:
+            if isinstance(it, cls):
+                return it
+        return None
+
+    @deprecated("Use getFeatureTransformerChain instead, this method will be removed in a future release")
     def getInputTransformerChain(self) -> DataFrameTransformerChain:
         """
-        :return: the model's input transformer chain (which may be empty and contain no actual transformers)
+        :return: the model's feature transformer chain (which may be empty and contain no actual transformers),
+            i.e. the transformers that are applied after feature generation
+        """
+        return self._featureTransformerChain
+
+
+    def getRawInputTransformerChain(self) -> DataFrameTransformerChain:
+        """
+        :return: the model's raw input transformer chain (which may be empty and contain no actual transformers),
+            i.e. the transformers that are applied before feature generation
+        """
+        return self._rawInputTransformerChain
+
+    def getFeatureTransformerChain(self) -> DataFrameTransformerChain:
+        """
+        :return: the model's feature transformer chain (which may be empty and contain no actual transformers),
+            i.e. the transformers that are applied after feature generation
         """
         return self._featureTransformerChain
 
