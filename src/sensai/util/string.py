@@ -52,8 +52,11 @@ def listString(l: Iterable[Any], brackets="[]", quote: Optional[str] = None, con
             return quote + x + quote
         else:
             return x
-
-    return brackets[:1] + ", ".join((item(x) for x in l)) + brackets[-1:]
+    s = ", ".join((item(x) for x in l))
+    if brackets is not None:
+        return brackets[:1] + s + brackets[-1:]
+    else:
+        return s
 
 
 def toString(x, converter: StringConverter = None, applyConverterToNonComplexObjects=True):
@@ -121,22 +124,22 @@ class ToStringMixin:
     representation).
 
         * To exclude private properties, override :meth:`_toStringExcludePrivate` to return True. If there are exceptions
-          (and some private properties shall be retained), additionally override :meth:`__toStringExcludeExceptions`.
+          (and some private properties shall be retained), additionally override :meth:`_toStringExcludeExceptions`.
         * To exclude a particular set of properties, override :meth:`_toStringExcludes`.
         * To include only select properties (introducing inclusion semantics), override :meth:`_toStringIncludes`.
         * To add values to the properties list that aren't actually properties of the object (i.e. derived properties),
           override :meth:`_toStringAdditionalEntries`.
-        * To define a fully custom representation for <object info> which is not based on the above principles, override
+        * To define a fully custom representation for ``<object info>`` which is not based on the above principles, override
           :meth:`_toStringObjectInfo`.
 
-    For well-defined string conversions within a class hierarchy, it can be good practice to define additional
+    For well-defined string conversions within a class hierarchy, it can be a good practice to define additional
     inclusions/exclusions by overriding the respective method once more and basing the return value on an extended
     version of the value returned by superclass.
     In some cases, the requirements of a subclass can be at odds with the definitions in the superclass: The superclass
     may make use of exclusion semantics, but the subclass may want to use inclusion semantics (and include
-    only some of the many properties it adds). If the subclass used :meth:`_toStringInclude` the exclusion semantics
-    of the superclass would be void and none of its properties would be included.
-    In this case, override :meth:`_toStringIncludesForced` to add inclusions regardless of the semantics otherwise used along
+    only some of the many properties it adds). In this case, if the subclass used :meth:`_toStringInclude`, the exclusion semantics
+    of the superclass would be void and none of its properties would actually be included.
+    In such cases, override :meth:`_toStringIncludesForced` to add inclusions regardless of the semantics otherwise used along
     the class hierarchy.
 
     .. document private functions
