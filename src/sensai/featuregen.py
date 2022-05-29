@@ -16,6 +16,7 @@ from .util.typing import PandasNamedTuple
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
+    from .data_transformation import DataFrameTransformer
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,11 @@ class FeatureGenerator(ToStringMixin, ABC):
             If True, normalisation rules for categorical features (which are unsupported by normalisation) and their corresponding one-hot
             encoded features (with "_<index>" appended) will be added.
         """
+        # NOTE: While it would be more elegant to not have all of the above constructor arguments and instead provide
+        # them later using "with*" methods, this would have the significant drawback that it would enable
+        # all such attributes to be provided in all subclasses, even in ones where we know settings exactly
+        # and can provide them directly in the subclass constructor implementation. Thus it would enable
+        # non-sensical settings which should be avoided.
         if len(normalisationRules) > 0 and normalisationRuleTemplate is not None:
             raise ValueError(f"normalisationRules should be empty when a normalisationRuleTemplate is provided")
 
@@ -981,3 +987,19 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
     else:
         return ChainedFeatureGenerator(fgen,
             MultiFeatureGenerator(flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)))
+
+
+class FeatureGeneratorFromDataFrameTransformer(FeatureGenerator):
+    def __init__(self, dft: DataFrameTransformer, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
+            normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
+            normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None,
+            addCategoricalDefaultRules=True):
+        super().__init__(categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate, addCategoricalDefaultRules=addCategoricalDefaultRules)
+        self.dft = dft
+
+    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+        self.dft.fit(X)
+
+    def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+        return self.dft.apply(df)
