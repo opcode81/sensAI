@@ -9,7 +9,7 @@ import pandas as pd
 
 from . import util, data_transformation
 from .columngen import ColumnGenerator
-from .data_transformation import DFTNormalisation
+from .data_transformation import DFTNormalisation, DFTFromFeatureGenerator
 from .util import flattenArguments
 from .util.string import orRegexGroup, ToStringMixin, listString
 from .util.typing import PandasNamedTuple
@@ -137,6 +137,9 @@ class FeatureGenerator(ToStringMixin, ABC):
             Returns None if generate was never called.
         """
         return self._generatedColumnNames
+
+    def toDFT(self):
+        return DFTFromFeatureGenerator(self)
 
     @abstractmethod
     def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):

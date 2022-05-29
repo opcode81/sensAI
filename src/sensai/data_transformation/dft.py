@@ -15,6 +15,11 @@ from ..util.pandas import DataFrameColumnChangeTracker
 from ..util.pickle import setstate
 from ..util.string import orRegexGroup, ToStringMixin
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..featuregen import FeatureGenerator
+
 log = logging.getLogger(__name__)
 
 
@@ -48,8 +53,12 @@ class DataFrameTransformer(ABC, ToStringMixin):
         """
         return self._name
 
-    def setName(self, name):
+    def setName(self, name: str):
         self._name = name
+
+    def withName(self, name: str):
+        self.setName(name)
+        return self
 
     @abstractmethod
     def _fit(self, df: pd.DataFrame):
@@ -85,6 +94,19 @@ class DataFrameTransformer(ABC, ToStringMixin):
     def fitApply(self, df: pd.DataFrame) -> pd.DataFrame:
         self.fit(df)
         return self.apply(df)
+
+
+class DFTFromFeatureGenerator(DataFrameTransformer):
+    def _fit(self, df: pd.DataFrame):
+        self.fgen.fit(df, ctx=None)
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.fgen.generate(df)
+
+    def __init__(self, fgen: FeatureGenerator):
+        super().__init__()
+        self.fgen = fgen
+        self.setName(f"{self.__class__.__name__}[{self.fgen.getName()}]")
 
 
 class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
