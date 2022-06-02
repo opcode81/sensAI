@@ -480,7 +480,10 @@ class MultiDataEvaluationUtil:
             crossValidatorParams: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
             columnNameForModelRanking: str = None,
             rankMax=True,
+            createMetricDistributionPlots=True,
             createCombinedEvalStatsPlots=False,
+            distributionPlots_cdf = True,
+            distributionPlots_cdfComplementary = False,
             visitors: Optional[Iterable["ModelComparisonVisitor"]] = None) -> Union["RegressionMultiDataModelComparisonData", "ClassificationMultiDataModelComparisonData"]:
         """
         :param modelFactories: a sequence of factory functions for the creation of models to evaluate; every factory must result
@@ -493,6 +496,7 @@ class MultiDataEvaluationUtil:
         :param crossValidatorParams: parameters to use for the instantiation of cross-validators (relevant if useCrossValidation==True)
         :param columnNameForModelRanking: column name to use for ranking models
         :param rankMax: if true, use max for ranking, else min
+        :param createMetricDistributionPlots: whether to create, for each model, plots of the distribution of each metric across the datasets
         :param createCombinedEvalStatsPlots: whether to combine, for each type of model, the EvalStats objects from the individual experiments
             into a single objects that holds all results and use it to create plots reflecting the overall result.
             Note that for classification, this is only possible if all individual experiments use the same set of class labels.
@@ -506,6 +510,7 @@ class MultiDataEvaluationUtil:
         isRegression = None
         plotCollector: Optional[EvalStatsPlotCollector] = None
         modelNames = None
+        modelName2StringRepr = None
 
         for i, (key, inputOutputData) in enumerate(self.inputOutputDataDict.items(), start=1):
             log.info(f"Evaluating models for data set #{i}/{len(self.inputOutputDataDict)}: {self.keyName}={key}")
@@ -552,6 +557,9 @@ class MultiDataEvaluationUtil:
 
             allResultsDF = pd.concat((allResultsDF, df))
 
+            if modelName2StringRepr is None:
+                modelName2StringRepr = {model.getName(): model.pprints() for model in models}
+
         if self.metaDF is not None:
             allResultsDF = allResultsDF.join(self.metaDF, on=self.keyName, how="left")
 
@@ -583,7 +591,10 @@ class MultiDataEvaluationUtil:
         log.info(strFurtherAggs)
 
         if resultWriter is not None:
-            resultWriter.writeTextFile("model-comparison-results", strMeanResults + "\n\n" + strFurtherAggs + "\n\n" + strAllResults)
+            comparisonContent = strMeanResults + "\n\n" + strFurtherAggs + "\n\n" + strAllResults
+            comparisonContent += "\n\nModels [example instance]:\n\n"
+            comparisonContent += "\n\n".join(f"{name} = {s}" for name, s in modelName2StringRepr.items())
+            resultWriter.writeTextFile("model-comparison-results", comparisonContent)
 
         # create plots from combined data for each model
         if createCombinedEvalStatsPlots:
@@ -602,10 +613,17 @@ class MultiDataEvaluationUtil:
             for visitor in visitors:
                 visitor.collectPlots(resultCollector)
 
+        # create result
         if isRegression:
-            return RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+            mdmcData = RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
         else:
-            return ClassificationMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+            mdmcData = ClassificationMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+
+        # plot distributions
+        if createMetricDistributionPlots and resultWriter is not None:
+            mdmcData.createDistributionPlots(resultWriter, cdf=distributionPlots_cdf, cdfComplementary=distributionPlots_cdfComplementary)
+
+        return mdmcData
 
 
 class ModelComparisonData:
@@ -700,6 +718,30 @@ class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], AB
     @abstractmethod
     def getEvalStatsCollection(self, modelName: str) -> TEvalStatsCollection:
         pass
+
+    def createDistributionPlots(self, resultWriter: ResultWriter, cdf=True, cdfComplementary=False):
+        """
+        Creates plots of distributions of metrics across datasets for each model as a histogram, and additionally
+        any x-y plots (scatter plots & heat maps) for metrics that have associated paired metrics that were also computed
+
+        :param resultWriter: the result writer
+        :param cdf: whether to additionally plot, for each distribution, the cumulative distribution function
+        :param cdfComplementary: whether to plot the complementary cdf, provided that ``cdf`` is True
+        """
+        for modelName in self.getModelNames():
+            evalStatsCollection = self.getEvalStatsCollection(modelName)
+            for metricName in evalStatsCollection.getMetricNames():
+                # plot distribution
+                fig = evalStatsCollection.plotDistribution(metricName, cdf=cdf, cdfComplementary=cdfComplementary)
+                resultWriter.writeFigure(f"{modelName}_dist-{metricName}", fig)
+                # scatter plot with paired metrics
+                metric = evalStatsCollection.getMetricByName(metricName)
+                for pairedMetric in metric.getPairedMetrics():
+                    if evalStatsCollection.hasMetric(pairedMetric):
+                        fig = evalStatsCollection.plotScatter(metric.name, pairedMetric.name)
+                        resultWriter.writeFigure(f"{modelName}_scatter-{metric.name}-{pairedMetric.name}", fig)
+                        fig = evalStatsCollection.plotHeatMap(metric.name, pairedMetric.name)
+                        resultWriter.writeFigure(f"{modelName}_heatmap-{metric.name}-{pairedMetric.name}", fig)
 
 
 class ClassificationMultiDataModelComparisonData(MultiDataModelComparisonData[ClassificationEvalStats, ClassificationEvalStatsCollection]):
