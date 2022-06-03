@@ -195,7 +195,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "Scatter Plot of Ground Truth vs. Predicted Values"
+        title = "Scatter Plot of Predicted Values vs. Ground Truth"
         if titleAdd is not None:
             title += "\n" + titleAdd
         if figure:
@@ -225,7 +225,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "Heat Map of Ground Truth vs. Predicted Values"
+        title = "Heat Map of Predicted Values vs. Ground Truth"
         if titleAdd:
             title += "\n" + titleAdd
         if figure:
@@ -257,7 +257,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         return fig
 
 
-class RegressionEvalStatsCollection(EvalStatsCollection):
+class RegressionEvalStatsCollection(EvalStatsCollection[RegressionEvalStats, RegressionMetric]):
     def __init__(self, evalStatsList: List[RegressionEvalStats]):
         super().__init__(evalStatsList)
         self.globalStats = None
