@@ -75,3 +75,9 @@ class SkLearnExtraTreesVectorRegressionModel(AbstractSkLearnMultipleOneDimVector
     def __init__(self, n_estimators=100, min_samples_leaf=10, random_state=42, **modelArgs):
         super().__init__(sklearn.ensemble.ExtraTreesRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
+
+
+class SkLearnDummyVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+    def __init__(self, strategy='mean', constant=None, quantile=None):
+        super().__init__(sklearn.dummy.DummyRegressor,
+            strategy=strategy, constant=constant, quantile=quantile)

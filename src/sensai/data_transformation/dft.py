@@ -842,7 +842,7 @@ class DFTFillNA(RuleBasedDataFrameTransformer):
 
 class DFTDropNA(RuleBasedDataFrameTransformer):
     """
-    Drops rows or columns containin NA/NaN values
+    Drops rows or columns containing NA/NaN values
     """
     def __init__(self, axis=0, inplace=False):
         """

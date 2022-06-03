@@ -333,8 +333,9 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         """
         statsList = []
         resultByModelName = {}
-        for model in models:
+        for i, model in enumerate(models, start=1):
             modelName = model.getName()
+            log.info(f"Evaluating model {i}/{len(models)} named '{modelName}' ...")
             if useCrossValidation:
                 if not fitModels:
                     raise ValueError("Cross-validation necessitates that models be retrained; got fitModels=False")
