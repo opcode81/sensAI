@@ -95,6 +95,17 @@ class DataFrameTransformer(ABC, ToStringMixin):
         self.fit(df)
         return self.apply(df)
 
+    def toFeatureGenerator(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
+            normalisationRules: Sequence['DFTNormalisation.Rule'] = (),
+            normalisationRuleTemplate: 'DFTNormalisation.RuleTemplate' = None,
+            addCategoricalDefaultRules=True):
+        # need to import here to prevent circular imports
+        from ..featuregen import FeatureGeneratorFromDFT
+        return FeatureGeneratorFromDFT(
+            self, categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate, addCategoricalDefaultRules=addCategoricalDefaultRules
+        )
+
 
 class DFTFromFeatureGenerator(DataFrameTransformer):
     def _fit(self, df: pd.DataFrame):
@@ -103,7 +114,7 @@ class DFTFromFeatureGenerator(DataFrameTransformer):
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return self.fgen.generate(df)
 
-    def __init__(self, fgen: FeatureGenerator):
+    def __init__(self, fgen: "FeatureGenerator"):
         super().__init__()
         self.fgen = fgen
         self.setName(f"{self.__class__.__name__}[{self.fgen.getName()}]")

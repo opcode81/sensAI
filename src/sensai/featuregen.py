@@ -9,14 +9,13 @@ import pandas as pd
 
 from . import util, data_transformation
 from .columngen import ColumnGenerator
-from .data_transformation import DFTNormalisation, DFTFromFeatureGenerator
+from .data_transformation import DFTNormalisation, DFTFromFeatureGenerator, DataFrameTransformer
 from .util import flattenArguments
 from .util.string import orRegexGroup, ToStringMixin, listString
 from .util.typing import PandasNamedTuple
 
 if TYPE_CHECKING:
     from .vector_model import VectorModel
-    from .data_transformation import DataFrameTransformer
 
 log = logging.getLogger(__name__)
 
@@ -998,7 +997,7 @@ def flattenedFeatureGenerator(fgen: FeatureGenerator, columnsToFlatten: List[str
             MultiFeatureGenerator(flatteningGenerator, FeatureGeneratorTakeColumns(exceptColumns=columnsToFlatten)))
 
 
-class FeatureGeneratorFromDataFrameTransformer(FeatureGenerator):
+class FeatureGeneratorFromDFT(FeatureGenerator):
     def __init__(self, dft: DataFrameTransformer, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
             normalisationRules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
             normalisationRuleTemplate: data_transformation.DFTNormalisation.RuleTemplate = None,
