@@ -212,7 +212,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         return self
 
     def _preProcessorsAreFitted(self):
-        result = self._featureTransformerChain.isFitted()
+        result = self._rawInputTransformerChain.isFitted() and self._featureTransformerChain.isFitted()
         if self.getFeatureGenerator() is not None:
             result = result and self.getFeatureGenerator().isFitted()
         return result
@@ -312,6 +312,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         return True
 
     def _fitPreprocessors(self, X: pd.DataFrame, Y: pd.DataFrame = None):
+        self._rawInputTransformerChain.fit(X)
         # no need for fitGenerate if chain is empty
         if self._featureGenerator is not None:
             if len(self._featureTransformerChain) == 0:
