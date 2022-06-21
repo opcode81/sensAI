@@ -565,18 +565,19 @@ class CachedValueProviderMixin(ABC):
 
 
 def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: Optional[Callable[[T], bool]] = None,
-        backend="pickle", protocol=pickle.HIGHEST_PROTOCOL, load=True) -> T:
+        backend="pickle", protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None) -> T:
     """
     :param fn: the function whose result is to be cached
     :param picklePath: the path in which to store the cached result
     :param functionName: the name of the function fn (for the case where its __name__ attribute is not
         informative)
     :param validityCheckFn: an optional function to call in order to check whether a cached result is still valid;
-        the function shall return True if the res is still valid and false otherwise. If a cached result is invalid,
+        the function shall return True if the result is still valid and false otherwise. If a cached result is invalid,
         the function fn is called to compute the result and the cached result is updated.
     :param backend: pickle or joblib
     :param protocol: the pickle protocol version
     :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
+    :param version: if not None, previously persisted data will only be returned if it was stored with the same version
     :return: the result (either obtained from the cache or the function)
     """
     if functionName is None:
@@ -585,7 +586,11 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
     def callFnAndCacheResult():
         res = fn()
         log.info(f"Saving cached result in {picklePath}")
-        dumpPickle(res, picklePath, backend=backend, protocol=protocol)
+        if version is not None:
+            persistedRes = {"__cacheVersion": version, "obj": res}
+        else:
+            persistedRes = res
+        dumpPickle(persistedRes, picklePath, backend=backend, protocol=protocol)
         return res
 
     if os.path.exists(picklePath):
@@ -596,6 +601,15 @@ def cached(fn: Callable[[], T], picklePath, functionName=None, validityCheckFn: 
                 if not validityCheckFn(result):
                     log.info(f"Cached result is no longer valid, recomputing ...")
                     result = callFnAndCacheResult()
+            if version is not None:
+                cachedVersion = None
+                if type(result) == dict:
+                    cachedVersion = result.get("__cacheVersion")
+                if cachedVersion != version:
+                    log.info(f"Cached result has incorrect version ({cachedVersion}, expected {version}), recomputing ...")
+                    result = callFnAndCacheResult()
+                else:
+                    result = result["obj"]
             return result
         else:
             log.info(f"Ignoring previously stored result in {picklePath}, calling function '{functionName}' ...")
@@ -610,7 +624,7 @@ class PickleCached(object):
     Function decorator for caching function results via pickle
     """
     def __init__(self, cacheBasePath: str, filenamePrefix: str = None, filename: str = None, backend="pickle",
-            protocol=pickle.HIGHEST_PROTOCOL, load=True):
+            protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None):
         """
         :param cacheBasePath: the directory where the pickle cache file will be stored
         :param filenamePrefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
@@ -621,6 +635,7 @@ class PickleCached(object):
         :param backend: the serialisation backend to use (see dumpPickle)
         :param protocol: the pickle protocol version to use
         :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
+        :param version: if not None, previously persisted data will only be returned if it was stored with the same version
         """
         self.filename = filename
         self.cacheBasePath = cacheBasePath
@@ -628,6 +643,7 @@ class PickleCached(object):
         self.backend = backend
         self.protocol = protocol
         self.load = load
+        self.version = version
 
         if self.filenamePrefix is None:
             self.filenamePrefix = ""
@@ -656,7 +672,8 @@ class PickleCached(object):
                         raise Exception("Function without arguments but full cache filename with placeholder (%s) was specified")
                     filename = self.filename
             picklePath = os.path.join(self.cacheBasePath, filename)
-            return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend, load=self.load)
+            return cached(lambda: fn(*args, **kwargs), picklePath, functionName=fn.__name__, backend=self.backend, load=self.load,
+                version=self.version)
 
         return wrapped
 

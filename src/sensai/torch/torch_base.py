@@ -335,6 +335,15 @@ class TorchModelFromModuleFactory(TorchModel):
         return self.moduleFactory(*self.args, **self.kwargs)
 
 
+class TorchModelFromModule(TorchModel):
+    def __init__(self, module: torch.nn.Module, cuda: bool = True):
+        super().__init__(cuda=cuda)
+        self.module = module
+
+    def createTorchModule(self) -> torch.nn.Module:
+        return self.module
+
+
 class VectorTorchModel(TorchModel, ABC):
     """
     Base class for TorchModels that can be used within VectorModels, where the input and output dimensions
@@ -375,9 +384,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
             normalisationMode: NormalisationMode = NormalisationMode.NONE,
             nnOptimiserParams: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
-        :param modelClass: the constructor with which to create the wrapped torch vector model
-        :param modelArgs: the constructor argument list to pass to modelClass
-        :param modelKwArgs: the dictionary of constructor keyword arguments to pass to modelClass
+        :param modelClass: the constructor/factory function with which to create the contained TorchModel instance
+        :param modelArgs: the constructor argument list to pass to ``modelClass``
+        :param modelKwArgs: the dictionary of constructor keyword arguments to pass to ``modelClass``
         :param normalisationMode: the normalisation mode to apply to input data frames
         :param nnOptimiserParams: the parameters to apply in NNOptimiser during training
         """
@@ -409,6 +418,12 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
             "outputTensorToArrayConverter"]
         setstate(TorchVectorRegressionModel, self, state, newOptionalProperties=newOptionalMembers)
+
+    @classmethod
+    def fromModule(cls, module: torch.nn.Module, cuda=True, normalisationMode: NormalisationMode = NormalisationMode.NONE,
+            nnOptimiserParams: Optional[NNOptimiserParams] = None) -> "TorchVectorRegressionModel":
+        return cls(TorchModelFromModule, modelKwArgs=dict(module=module, cuda=cuda), normalisationMode=normalisationMode,
+            nnOptimiserParams=nnOptimiserParams)
 
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
         """
@@ -556,6 +571,13 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         newDefaultProperties = {"outputMode": ClassificationOutputMode.PROBABILITIES}
         setstate(TorchVectorClassificationModel, self, state, newOptionalProperties=newOptionalMembers,
             newDefaultProperties=newDefaultProperties)
+
+    @classmethod
+    def fromModule(cls, module: torch.nn.Module, outputMode: ClassificationOutputMode, cuda=True,
+            normalisationMode: NormalisationMode = NormalisationMode.NONE,
+            nnOptimiserParams: Optional[NNOptimiserParams] = None) -> "TorchVectorClassificationModel":
+        return cls(outputMode, TorchModelFromModule, modelKwArgs=dict(module=module, cuda=cuda),
+            normalisationMode=normalisationMode, nnOptimiserParams=nnOptimiserParams)
 
     def withInputTensoriser(self, tensoriser: Tensoriser) -> __qualname__:
         """

@@ -25,7 +25,7 @@ class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassifi
             useComputedClassWeights=useComputedClassWeights,
             **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 

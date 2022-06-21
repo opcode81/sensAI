@@ -873,9 +873,34 @@ class DFTFillNA(RuleBasedDataFrameTransformer):
             return df.fillna(value=self.fillValue)
 
 
+class DFTCastCategoricalColumns(RuleBasedDataFrameTransformer):
+    """
+    Casts columns with dtype category to the given type.
+    This can be useful in cases where categorical columns are not accepted by the model but the column values are actually numeric,
+    in which case the cast to a numeric value yields an acceptable label encoding.
+    """
+    def __init__(self, columns: Optional[List[str]] = None, dtype=float):
+        """
+        :param columns: the columns to convert; if None, convert all that have dtype category
+        :param dtype: the data type to which categorical columns are to be converted
+        """
+        super().__init__()
+        self.columns = columns
+        self.dtype = dtype
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        columns = self.columns if self.columns is not None else df.columns
+        for col in columns:
+            s = df[col]
+            if s.dtype.name == "category":
+                df[col] = s.astype(self.dtype)
+        return df
+    
+
 class DFTDropNA(RuleBasedDataFrameTransformer):
     """
-    Drops rows or columns containin NA/NaN values
+    Drops rows or columns containing NA/NaN values
     """
     def __init__(self, axis=0, inplace=False):
         """

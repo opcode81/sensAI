@@ -1,12 +1,42 @@
 import collections
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, Union, Sequence
+from typing import Dict, Union, Sequence, List, Tuple
 
 import seaborn as sns
 from matplotlib import pyplot as plt
 
+from .util.deprecation import deprecated
 from .util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
+
+
+class FeatureImportance:
+    def __init__(self, featureImportanceDict: Union[Dict[str, float], Dict[str, Dict[str, float]]]):
+        self.featureImportanceDict = featureImportanceDict
+        self._isMultiVar = self._isDict(next(iter(featureImportanceDict.values())))
+
+    @staticmethod
+    def _isDict(x):
+        return hasattr(x, "get")
+
+    def getFeatureImportanceDict(self, predictedVarName=None) -> Dict[str, float]:
+        if self._isMultiVar:
+            self.featureImportanceDict: Dict[str, Dict[str, float]]
+            if predictedVarName is not None:
+                return self.featureImportanceDict[predictedVarName]
+            else:
+                if len(self.featureImportanceDict) > 1:
+                    raise ValueError("Must provide predicted variable name (multiple output variables)")
+                else:
+                    return next(iter(self.featureImportanceDict.values()))
+        else:
+            return self.featureImportanceDict
+
+    def getSortedTuples(self, predictedVarName=None) -> List[Tuple[str, float]]:
+        # noinspection PyTypeChecker
+        tuples: List[Tuple[str, float]] = list(self.getFeatureImportanceDict(predictedVarName).items())
+        tuples.sort(key=lambda t: t[1])
+        return tuples
 
 
 class FeatureImportanceProvider(ABC):
@@ -14,7 +44,7 @@ class FeatureImportanceProvider(ABC):
     Interface for models that can provide feature importance values
     """
     @abstractmethod
-    def getFeatureImportances(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+    def getFeatureImportanceDict(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
         """
         Gets the feature importance values
 
@@ -22,6 +52,13 @@ class FeatureImportanceProvider(ABC):
             variables (independently)) a dictionary which maps predicted variable names to such dictionaries
         """
         pass
+
+    def getFeatureImportance(self) -> FeatureImportance:
+        return FeatureImportance(self.getFeatureImportanceDict())
+
+    @deprecated("Use getFeatureImportanceDict or the high-level interface getFeatureImportance instead.")
+    def getFeatureImportances(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+        return self.getFeatureImportanceDict()
 
 
 def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None) -> plt.Figure:
@@ -38,15 +75,15 @@ def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str
     return fig
 
 
-class AggregatedFeatureImportances:
+class AggregatedFeatureImportance:
     """
     Aggregates feature importance values (e.g. from models implementing FeatureImportanceProvider, such as sklearn's RandomForest
     models and compatible models from lightgbm, etc.)
     """
-    def __init__(self, *featureImportances: Union[FeatureImportanceProvider, Dict[str, float], Dict[str, Dict[str, float]]],
+    def __init__(self, *items: Union[FeatureImportanceProvider, Dict[str, float], Dict[str, Dict[str, float]]],
             featureAggRegEx: Sequence[str] = ()):
         r"""
-        :param featureImportances: (optional) initial list of feature importance providers or dictionaries to aggregate; further
+        :param items: (optional) initial list of feature importance providers or dictionaries to aggregate; further
             values can be added via method add
         :param featureAggRegEx: a sequence of regular expressions describing which feature names to sum as one. Each regex must
             contain exactly one group. If a regex matches a feature name, the feature importance will be summed under the key
@@ -57,8 +94,8 @@ class AggregatedFeatureImportances:
         self._isNested = None
         self._numDictsAdded = 0
         self._featureAggRegEx = [re.compile(p) for p in featureAggRegEx]
-        for d in featureImportances:
-            self.add(d)
+        for item in items:
+            self.add(item)
 
     @staticmethod
     def _isDict(x):
@@ -71,7 +108,7 @@ class AggregatedFeatureImportances:
         :param featureImportance: the dictionary obtained via a model's getFeatureImportances method
         """
         if isinstance(featureImportance, FeatureImportanceProvider):
-            featureImportance = featureImportance.getFeatureImportances()
+            featureImportance = featureImportance.getFeatureImportanceDict()
         if self._isNested is None:
             self._isNested = self._isDict(next(iter(featureImportance.values())))
         if self._isNested:
@@ -95,5 +132,8 @@ class AggregatedFeatureImportances:
                 return m.group(1)
         return featureName
 
-    def getFeatureImportanceSum(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+    def getAggregatedFeatureImportanceDict(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
         return self.aggDict
+
+    def getAggregatedFeatureImportance(self) -> FeatureImportance:
+        return FeatureImportance(self.aggDict)
