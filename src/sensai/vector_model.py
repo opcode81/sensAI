@@ -128,7 +128,8 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
     def __setstate__(self, state):
         for m in VectorModel._TRANSIENT_MEMBERS:
             state[m] = None
-        setstate(VectorModel, self, state, renamedProperties=self._RENAMED_MEMBERS)
+        setstate(VectorModel, self, state, renamedProperties=self._RENAMED_MEMBERS,
+            newDefaultProperties={"_rawInputTransformerChain": DataFrameTransformerChain()})
 
     def _toStringExcludePrivate(self) -> bool:
         return True
