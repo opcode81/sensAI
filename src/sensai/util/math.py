@@ -1,3 +1,4 @@
+import math
 import scipy.stats
 
 from .string import objectRepr
@@ -23,6 +24,10 @@ class NormalDistribution:
 
     def __str__(self):
         return objectRepr(self, ["mean", "std", "unitMax"])
+
+
+def sigmoid(x: float):
+    return math.exp(x) / (1 + math.exp(x))
 
 
 def reduceFloatPrecisionDecimals(f: float, decimals: int) -> float:

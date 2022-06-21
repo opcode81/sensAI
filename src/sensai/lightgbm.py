@@ -61,7 +61,7 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
     def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         _updateFitArgs(self.fitArgs, inputs, outputs, self._categoricalFeatureNameRegex)
 
-    def getFeatureImportances(self) -> Dict[str, Dict[str, int]]:
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
         return {targetFeature: dict(zip(model.feature_name_, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
 
@@ -105,7 +105,7 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
     def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         _updateFitArgs(self.fitArgs, inputs, outputs, self._categoricalFeatureNameRegex)
 
-    def getFeatureImportances(self) -> Dict[str, Dict[str, int]]:
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
         return dict(zip(self.model.feature_name_, self.model.feature_importances_))
 
     def _predictClassProbabilities(self, x: pd.DataFrame):

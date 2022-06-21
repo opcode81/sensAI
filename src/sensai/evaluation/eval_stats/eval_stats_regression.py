@@ -1,12 +1,13 @@
 import logging
-import numpy as np
-import seaborn as sns
 from abc import abstractmethod, ABC
-from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from typing import List, Sequence, Optional
 
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot
+from ...util.plot import HistogramPlot
 
 log = logging.getLogger(__name__)
 
@@ -168,26 +169,25 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
-    def plotErrorDistribution(self, bins=None, figure=True, titleAdd=None) -> Optional[plt.Figure]:
+    def plotErrorDistribution(self, bins="auto", titleAdd=None) -> Optional[plt.Figure]:
         """
-        :param bins: if None, seaborns default binning will be used
+        :param bins: bin specification (see :class:`HistogramPlot`)
         :param figure: whether to plot in a separate figure and return that figure
         :param titleAdd: a string to add to the title (on a second line)
 
         :return: the resulting figure object or None
         """
         errors = np.array(self.y_predicted) - np.array(self.y_true)
-        fig = None
         title = "Prediction Error Distribution"
         if titleAdd is not None:
             title += "\n" + titleAdd
-        if figure:
-            fig = plt.figure(title.replace("\n", " "))
-        sns.distplot(errors, bins=bins)
-        plt.title(title)
-        plt.xlabel("error (prediction - ground truth)")
-        plt.ylabel("probability density")
-        return fig
+        if bins == "auto" and len(errors) < 100:
+            bins = 10  # seaborn can crash with low number of data points and bins="auto" (tries to allocate vast amounts of memory)
+        plot = HistogramPlot(errors, bins=bins, kde=True)
+        plot.title(title)
+        plot.xlabel("error (prediction - ground truth)")
+        plot.ylabel("probability density")
+        return plot.fig
 
     def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
         """

@@ -262,15 +262,15 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
     def getNumPredictedClasses(self):
         return self._numPredictedClasses
 
-    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, fitPreprocessors=True):
+    def fit(self, X: pd.DataFrame, Y: pd.DataFrame, fitPreprocessors=True, fitModel=True):
         """
 
         :param X: data frame containing input tensors on which to train
         :param Y: ground truth has to be an array containing only zeroes and ones (one-hot-encoded labels) of the shape
             `(*predictionShape, numLabels)`
 
-        :param fitPreprocessors:
-        :return:
+        :param fitPreprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
+        :param fitModel: whether the model itself shall be fitted
         """
         if len(Y.columns) != 1:
             raise ValueError(f"{self.__class__.__name__} requires exactly one output "
@@ -290,7 +290,7 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
                                     f"predictionShape. If the predictions are scalars, a TensorToScalarClassificationModel "
                                     f"should be used instead of {self.__class__.__name__}")
         self._numPredictedClasses = dfYToCheck.shape[-1]
-        super().fit(X, Y, fitPreprocessors=fitPreprocessors)
+        super().fit(X, Y, fitPreprocessors=fitPreprocessors, fitModel=True)
 
     def getModelOutputShape(self):
         # The ground truth contains one-hot-encoded labels in the last dimension
