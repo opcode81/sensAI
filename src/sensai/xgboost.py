@@ -16,7 +16,7 @@ class XGBGradientBoostedVectorRegressionModel(AbstractSkLearnMultipleOneDimVecto
         """
         super().__init__(xgboost.XGBRegressor, random_state=random_state, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, Dict[str, float]]:
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, float]]:
         return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
 
@@ -30,7 +30,7 @@ class XGBRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRe
         """
         super().__init__(xgboost.XGBRFRegressor, random_state=random_state, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, Dict[str, float]]:
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, float]]:
         return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
 
@@ -44,7 +44,7 @@ class XGBGradientBoostedVectorClassificationModel(AbstractSkLearnVectorClassific
         """
         super().__init__(xgboost.XGBClassifier, random_state=random_state, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
@@ -58,5 +58,5 @@ class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificati
         """
         super().__init__(xgboost.XGBRFClassifier, random_state=random_state, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))

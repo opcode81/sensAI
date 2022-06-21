@@ -18,7 +18,7 @@ class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
         super().__init__(sklearn.ensemble.RandomForestRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, Dict[str, float]]:
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, float]]:
         return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
 
@@ -31,7 +31,7 @@ class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVector
         """
         super().__init__(sklearn.linear_model.LinearRegression, fit_intercept=fit_intercept, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
@@ -49,7 +49,7 @@ class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         super().__init__(sklearn.linear_model.Ridge, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol,
             solver=solver, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
@@ -66,7 +66,7 @@ class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         """
         super().__init__(sklearn.linear_model.Lasso, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol, **modelArgs)
 
-    def getFeatureImportances(self) -> Dict[str, float]:
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 

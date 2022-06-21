@@ -8,7 +8,7 @@ import numpy as np
 
 from sensai import VectorModel, InputOutputData
 from sensai.evaluation import VectorModelCrossValidatorParams, createVectorModelCrossValidator
-from sensai.feature_importance import FeatureImportanceProvider, AggregatedFeatureImportances
+from sensai.feature_importance import FeatureImportanceProvider, AggregatedFeatureImportance
 from sensai.util.plot import ScatterPlot
 
 log = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class RecursiveFeatureEliminationCV:
 
             # eliminate feature(s)
             log.info(f"Model performance with {len(features)} features: {metricKey}={metricValue}")
-            aggImportance = AggregatedFeatureImportances(*crossValData.trainedModels)
+            aggImportance = AggregatedFeatureImportance(*crossValData.trainedModels)
             fi = aggImportance.getAggregatedFeatureImportance()
             tuples = fi.getSortedTuples()
             minImportance = tuples[0][1]

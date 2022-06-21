@@ -30,7 +30,7 @@ from .evaluator import VectorModelEvaluator, VectorModelEvaluationData, VectorRe
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluator, VectorClassificationModelEvaluationData, \
     VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, VectorModelEvaluatorParams
 from ..data import InputOutputData
-from ..feature_importance import AggregatedFeatureImportances, FeatureImportanceProvider, plotFeatureImportance
+from ..feature_importance import AggregatedFeatureImportance, FeatureImportanceProvider, plotFeatureImportance
 from ..tracking import TrackedExperiment
 from ..util.io import ResultWriter
 from ..util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
@@ -663,7 +663,7 @@ class ModelComparisonVisitor(ABC):
         pass
 
 
-class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor):
+class ModelComparisonVisitorAggregatedFeatureImportance(ModelComparisonVisitor):
     """
     During a model comparison, computes aggregated feature importance values for the model with the given name
     """
@@ -676,7 +676,7 @@ class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor)
             to be summed under "foo" and similarly "bar_1" and "bar_2" to be summed under "bar".
         """
         self.modelName = modelName
-        self.aggFeatureImportance = AggregatedFeatureImportances(featureAggRegEx=featureAggRegEx)
+        self.aggFeatureImportance = AggregatedFeatureImportance(featureAggRegEx=featureAggRegEx)
 
     def visit(self, modelName: str, result: ModelComparisonData.Result):
         if modelName == self.modelName:
@@ -693,7 +693,7 @@ class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor)
     def _collect(self, model: Union[FeatureImportanceProvider, VectorModelBase]):
         if not isinstance(model, FeatureImportanceProvider):
             raise ValueError(f"Got model which does inherit from {FeatureImportanceProvider.__qualname__}: {model}")
-        self.aggFeatureImportance.add(model.getFeatureImportances())
+        self.aggFeatureImportance.add(model.getFeatureImportanceDict())
 
     def plotFeatureImportance(self) -> plt.Figure:
         return plotFeatureImportance(self.aggFeatureImportance.getAggregatedFeatureImportanceDict(), subtitle=self.modelName)
