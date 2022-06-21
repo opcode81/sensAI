@@ -2,9 +2,11 @@ import logging
 
 import numpy as np
 import pandas as pd
+import pytest
 import sklearn.preprocessing
 
 from sensai.data_transformation import DataFrameTransformer, RuleBasedDataFrameTransformer, DataFrameTransformerChain, DFTNormalisation
+from sensai.featuregen import FeatureGenerator
 
 log = logging.getLogger(__name__)
 
@@ -21,11 +23,17 @@ class TestDFTTransformerBasics:
         def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
             return df
 
+    class TestFgen(FeatureGenerator):
+        def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+            pass
+
+        def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
+            return pd.DataFrame({"foo": [1, 2], "baz": [1, 2]})
+
     testdf = pd.DataFrame({"foo": [1, 2], "bar": [1, 2]})
 
-    def test_basicProperties(self):
-        testdft = self.TestDFT()
-
+    @pytest.mark.parametrize("testdft", [TestDFT(), TestFgen().toDFT()])
+    def test_basicProperties(self, testdft):
         assert not testdft.isFitted()
         assert testdft.info()["changeInColumnNames"] is None
         testdft.fit(self.testdf)
