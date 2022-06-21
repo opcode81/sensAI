@@ -6,6 +6,7 @@ from typing import Dict, Union, Sequence, List, Tuple
 import seaborn as sns
 from matplotlib import pyplot as plt
 
+from .util.deprecation import deprecated
 from .util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
 
 
@@ -54,6 +55,10 @@ class FeatureImportanceProvider(ABC):
 
     def getFeatureImportance(self) -> FeatureImportance:
         return FeatureImportance(self.getFeatureImportanceDict())
+
+    @deprecated("Use getFeatureImportanceDict or the high-level interface getFeatureImportance instead.")
+    def getFeatureImportances(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+        return self.getFeatureImportanceDict()
 
 
 def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None) -> plt.Figure:
