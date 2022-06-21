@@ -447,7 +447,6 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         """
         return self._featureTransformerChain
 
-
     def getRawInputTransformerChain(self) -> DataFrameTransformerChain:
         """
         :return: the model's raw input transformer chain (which may be empty and contain no actual transformers),
@@ -472,8 +471,12 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         return self._featureGenerator
 
     def removeInputPreprocessors(self):
+        """
+        Removes all input preprocessors (i.e. raw input transformers, feature generators and feature transformers) from the model
+        """
+        self.withRawInputTransformers()
         self.withFeatureGenerator(None)
-        self.withInputTransformers()
+        self.withFeatureTransformers()
 
 
 class VectorRegressionModel(VectorModel, ABC):
