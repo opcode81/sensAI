@@ -23,8 +23,48 @@ class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
 
 
 class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
-    def __init__(self, **modelArgs):
-        super().__init__(sklearn.linear_model.LinearRegression, **modelArgs)
+    def __init__(self, fit_intercept=True, **modelArgs):
+        """
+        :param fit_intercept: whether to determine the intercept, i.e. the constant term which is not scaled with an input feature value;
+            set to False if the data is already centred
+        :param modelArgs: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html
+        """
+        super().__init__(sklearn.linear_model.LinearRegression, fit_intercept=fit_intercept, **modelArgs)
+
+    def getFeatureImportances(self) -> Dict[str, float]:
+        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
+
+
+class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
+    """
+    Linear least squares with L2 regularisation
+    """
+    def __init__(self, alpha=1.0, fit_intercept=True, solver="auto", max_iter=None, tol=1e-3, **modelArgs):
+        """
+        :param alpha: multiplies the L2 term, controlling regularisation strength
+        :param fit_intercept: whether to determine the intercept, i.e. the constant term which is not scaled with an input feature value;
+            set to False if the data is already centred
+        :param modelArgs: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html#sklearn.linear_model.Ridge
+        """
+        super().__init__(sklearn.linear_model.Ridge, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol,
+            solver=solver, **modelArgs)
+
+    def getFeatureImportances(self) -> Dict[str, float]:
+        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
+
+
+class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
+    """
+    Linear least squares with L1 regularisation, a.k.a. the lasso
+    """
+    def __init__(self, alpha=1.0, fit_intercept=True, max_iter=1000, tol=0.0001, **modelArgs):
+        """
+        :param alpha: multiplies the L1 term, controlling regularisation strength
+        :param fit_intercept: whether to determine the intercept, i.e. the constant term which is not scaled with an input feature value;
+            set to False if the data is already centred
+        :param modelArgs: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Lasso.html#sklearn.linear_model.Lasso
+        """
+        super().__init__(sklearn.linear_model.Lasso, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol, **modelArgs)
 
     def getFeatureImportances(self) -> Dict[str, float]:
         return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))

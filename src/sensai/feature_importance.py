@@ -1,12 +1,41 @@
 import collections
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, Union, Sequence
+from typing import Dict, Union, Sequence, List, Tuple
 
 import seaborn as sns
 from matplotlib import pyplot as plt
 
 from .util.plot import MATPLOTLIB_DEFAULT_FIGURE_SIZE
+
+
+class FeatureImportance:
+    def __init__(self, featureImportances: Union[Dict[str, float], Dict[str, Dict[str, float]]]):
+        self.featureImportances = featureImportances
+        self._isMultiVar = self._isDict(next(iter(featureImportances.values())))
+
+    @staticmethod
+    def _isDict(x):
+        return hasattr(x, "get")
+
+    def getFeatureImportanceDict(self, predictedVarName=None) -> Dict[str, float]:
+        if self._isMultiVar:
+            self.featureImportances: Dict[str, Dict[str, float]]
+            if predictedVarName is not None:
+                return self.featureImportances[predictedVarName]
+            else:
+                if len(self.featureImportances) > 1:
+                    raise ValueError("Must provide predicted variable name (multiple output variables)")
+                else:
+                    return next(iter(self.featureImportances.values()))
+        else:
+            return self.featureImportances
+
+    def getSortedTuples(self, predictedVarName=None) -> List[Tuple[str, float]]:
+        # noinspection PyTypeChecker
+        tuples: List[Tuple[str, float]] = list(self.getFeatureImportanceDict(predictedVarName).items())
+        tuples.sort(key=lambda t: t[1])
+        return tuples
 
 
 class FeatureImportanceProvider(ABC):
@@ -22,6 +51,9 @@ class FeatureImportanceProvider(ABC):
             variables (independently)) a dictionary which maps predicted variable names to such dictionaries
         """
         pass
+
+    def getFeatureImportance(self) -> FeatureImportance:
+        return FeatureImportance(self.getFeatureImportances())
 
 
 def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None) -> plt.Figure:
@@ -95,5 +127,8 @@ class AggregatedFeatureImportances:
                 return m.group(1)
         return featureName
 
-    def getFeatureImportanceSum(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
+    def getAggregatedFeatureImportanceDict(self) -> Union[Dict[str, float], Dict[str, Dict[str, float]]]:
         return self.aggDict
+
+    def getAggregatedFeatureImportance(self) -> FeatureImportance:
+        return FeatureImportance(self.aggDict)

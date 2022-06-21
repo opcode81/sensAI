@@ -136,6 +136,8 @@ class LogTime:
         Starts the stopwatch
         """
         self.stopwatch = StopWatch()
+        if self.enabled:
+            self.logger.info(f"{self.name} starting ...")
 
     def stop(self):
         """

@@ -696,7 +696,7 @@ class ModelComparisonVisitorAggregatedFeatureImportances(ModelComparisonVisitor)
         self.aggFeatureImportance.add(model.getFeatureImportances())
 
     def plotFeatureImportance(self) -> plt.Figure:
-        return plotFeatureImportance(self.aggFeatureImportance.getFeatureImportanceSum(), subtitle=self.modelName)
+        return plotFeatureImportance(self.aggFeatureImportance.getAggregatedFeatureImportanceDict(), subtitle=self.modelName)
 
     def collectPlots(self, resultCollector: EvaluationResultCollector):
         resultCollector.addFigure(f"{self.modelName}_feature-importance", self.plotFeatureImportance())

@@ -243,6 +243,9 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
     def _computeModelOutputs(self, Y: pd.DataFrame) -> pd.DataFrame:
         return Y
 
+    def computeModelOutputs(self, Y: pd.DataFrame) -> pd.DataFrame:
+        return self._computeModelOutputs(Y)
+
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
         """
         Applies the model to the given input data frame
@@ -295,23 +298,25 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
                 X = self._featureGenerator.fitGenerate(X, Y, self)
         self._inputTransformerChain.fit(X)
 
-    def fitInputOutputData(self, ioData: InputOutputData, fitPreprocessors=True):
+    def fitInputOutputData(self, ioData: InputOutputData, fitPreprocessors=True, fitModel=True):
         """
         Fits the model using the given data
 
         :param ioData: the input/output data
-        :param fitPreprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall also be fitted
+        :param fitPreprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
+        :param fitModel: whether the model itself shall be fitted
         """
-        self.fit(ioData.inputs, ioData.outputs, fitPreprocessors=fitPreprocessors)
+        self.fit(ioData.inputs, ioData.outputs, fitPreprocessors=fitPreprocessors, fitModel=fitModel)
 
-    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True):
+    def fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame], fitPreprocessors=True, fitModel=True):
         """
         Fits the model using the given data
 
         :param X: a data frame containing input data
         :param Y: a data frame containing output data; may be None if the underlying model does not actually require
             fitting, e.g. in the case of a rule-based models, but fitting is still necessary for preprocessors
-        :param fitPreprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall also be fitted
+        :param fitPreprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
+        :param fitModel: whether the model itself shall be fitted
         """
         self._trainingContext = TrainingContext(X, Y)
         try:
@@ -336,11 +341,14 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
                         raise ValueError("Could not recover matching outputs for changed inputs. Only input filtering is admissible, "
                             "indices of input & ouput data frames must match.")
                 self._modelInputVariableNames = list(X.columns)
-                inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
-                log.info(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
-                    f"inputs[{len(self._modelInputVariableNames)}]=[{inputsWithTypes}]; N={len(X)} data points")
-                self._fit(X, Y)
-                self._isFitted = True
+                if fitModel:
+                    inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
+                    log.info(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
+                             f"inputs[{len(self._modelInputVariableNames)}]=[{inputsWithTypes}]; N={len(X)} data points")
+                    self._fit(X, Y)
+                    self._isFitted = True
+                else:
+                    log.info("Fitting of underlying model skipped")
             log.info(f"Fitting completed in {sw.getElapsedTimeSecs():.2f} seconds: {self}")
         finally:
             self._trainingContext = None
@@ -394,6 +402,10 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
         :return: the model's feature generator (if any)
         """
         return self._featureGenerator
+
+    def removeInputPreprocessors(self):
+        self.withFeatureGenerator(None)
+        self.withInputTransformers()
 
 
 class VectorRegressionModel(VectorModel, ABC):
@@ -496,7 +508,8 @@ class VectorRegressionModel(VectorModel, ABC):
     def _computeModelOutputs(self, Y: pd.DataFrame) -> pd.DataFrame:
         if self._targetTransformer is not None:
             Y = self._targetTransformer.fitApply(Y)
-        self._modelOutputVariableNames = list(Y.columns)
+        if self.isBeingFitted():
+            self._modelOutputVariableNames = list(Y.columns)
         return Y
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:

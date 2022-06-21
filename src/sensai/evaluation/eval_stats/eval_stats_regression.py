@@ -1,10 +1,10 @@
 import logging
-import numpy as np
-import seaborn as sns
 from abc import abstractmethod, ABC
+from typing import List, Sequence, Optional
+
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from typing import List, Sequence, Optional
 
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot
 from ...util.plot import HistogramPlot
@@ -181,7 +181,10 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         title = "Prediction Error Distribution"
         if titleAdd is not None:
             title += "\n" + titleAdd
-        plot = HistogramPlot(errors, bins=bins, kde=True).title(title)
+        if bins == "auto" and len(errors) < 100:
+            bins = 10  # seaborn can crash with low number of data points and bins="auto" (tries to allocate vast amounts of memory)
+        plot = HistogramPlot(errors, bins=bins, kde=True)
+        plot.title(title)
         plot.xlabel("error (prediction - ground truth)")
         plot.ylabel("probability density")
         return plot.fig
