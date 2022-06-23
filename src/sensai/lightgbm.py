@@ -1,12 +1,13 @@
-from typing import Sequence, Union, Optional, Dict
 import logging
+import re
+from typing import Sequence, Union, Optional
+
 import lightgbm
 import pandas as pd
-import re
 
-from .feature_importance import FeatureImportanceProvider
+from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel, \
+    FeatureImportanceProviderSkLearnRegressionMultipleOneDim, FeatureImportanceProviderSkLearnClassification
 from .util.string import orRegexGroup
-from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def _updateFitArgs(fitArgs: dict, inputs: pd.DataFrame, outputs: pd.DataFrame, c
         fitArgs.pop("categorical_feature", None)
 
 
-class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProvider):
+class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultipleOneDim):
     log = log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None, random_state=42, num_leaves=31,
@@ -61,11 +62,8 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
     def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         _updateFitArgs(self.fitArgs, inputs, outputs, self._categoricalFeatureNameRegex)
 
-    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
-        return {targetFeature: dict(zip(model.feature_name_, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
-
-class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProvider):
+class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     log = log.getChild(__qualname__)
 
     def __init__(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None, random_state=42, num_leaves=31,
@@ -104,9 +102,6 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
 
     def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         _updateFitArgs(self.fitArgs, inputs, outputs, self._categoricalFeatureNameRegex)
-
-    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
-        return dict(zip(self.model.feature_name_, self.model.feature_importances_))
 
     def _predictClassProbabilities(self, x: pd.DataFrame):
         if len(self._labels) == 1:

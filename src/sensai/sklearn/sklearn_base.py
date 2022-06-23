@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn import compose
 
+from ..feature_importance import FeatureImportanceProvider
 from ..util.pickle import setstate
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
@@ -304,3 +305,21 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         rfreqs = counts / counts.sum()
         weights: pd.Series = 1.0 / rfreqs
         return weights.to_dict()
+
+
+class FeatureImportanceProviderSkLearnRegressionMultipleOneDim(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
+        self: AbstractSkLearnMultipleOneDimVectorRegressionModel
+        return {targetFeature: dict(zip(model.feature_name_, model.feature_importances_)) for targetFeature, model in self.models.items()}
+
+
+class FeatureImportanceProviderSkLearnRegressionMultiDim(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
+        self: AbstractSkLearnMultiDimVectorRegressionModel
+        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
+
+
+class FeatureImportanceProviderSkLearnClassification(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
+        self: AbstractSkLearnVectorClassificationModel
+        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
