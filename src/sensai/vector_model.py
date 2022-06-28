@@ -343,7 +343,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ToStringMixin, A
                 self._modelInputVariableNames = list(X.columns)
                 if fitModel:
                     inputsWithTypes = ', '.join([n + '/' + X[n].dtype.name for n in self._modelInputVariableNames])
-                    log.info(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
+                    log.debug(f"Fitting with outputs[{len(Y.columns)}]={list(Y.columns)}, "
                              f"inputs[{len(self._modelInputVariableNames)}]=[{inputsWithTypes}]; N={len(X)} data points")
                     self._fit(X, Y)
                     self._isFitted = True

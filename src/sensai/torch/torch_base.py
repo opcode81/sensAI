@@ -521,7 +521,11 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return pd.DataFrame(yArray, columns=self.getModelOutputVariableNames())
 
     def _toStringExcludes(self) -> List[str]:
-        return super()._toStringExcludes() + ["modelClass", "modelArgs", "modelKwArgs", "inputTensoriser"]
+        excludes = super()._toStringExcludes()
+        if self.model is not None:
+            return excludes + ["modelClass", "modelArgs", "modelKwArgs"]
+        else:
+            return excludes
 
 
 class TorchVectorClassificationModel(VectorClassificationModel):
@@ -671,7 +675,11 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         return pd.DataFrame(y.numpy(), columns=self._labels)
 
     def _toStringExcludes(self) -> List[str]:
-        return super()._toStringExcludes() + ["modelClass", "modelArgs", "modelKwArgs", "inputTensoriser"]
+        excludes = super()._toStringExcludes()
+        if self.model is not None:
+            return excludes + ["modelClass", "modelArgs", "modelKwArgs"]
+        else:
+            return excludes
 
 
 class TorchDataSetProviderFactory(ABC):

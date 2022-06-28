@@ -139,9 +139,13 @@ class EvaluationResultCollector:
         self.showPlots = showPlots
         self.resultWriter = resultWriter
 
-    def addFigure(self, name, fig: matplotlib.figure.Figure):
+    def addFigure(self, name: str, fig: matplotlib.figure.Figure):
         if self.resultWriter is not None:
             self.resultWriter.writeFigure(name, fig, closeFigure=not self.showPlots)
+
+    def addDataFrameCsvFile(self, name: str, df: pd.DataFrame):
+        if self.resultWriter is not None:
+            self.resultWriter.writeDataFrameCsvFile(name, df)
 
     def child(self, addedFilenamePrefix):
         resultWriter = self.resultWriter
@@ -315,7 +319,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
 
     def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False,
             fitModels=True, writeIndividualResults=True, sortColumn: Optional[str] = None, sortAscending: bool = True,
-            visitors: Optional[Iterable["ModelComparisonVisitor"]] = None) -> "ModelComparisonData":
+            visitors: Optional[Iterable["ModelComparisonVisitor"]] = None,
+            writeVisitorResults=False) -> "ModelComparisonData":
         """
         Compares several models via simple evaluation or cross-validation
 
@@ -329,6 +334,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param sortColumn: column/metric name by which to sort
         :param sortAscending: whether to sort in ascending order
         :param visitors: visitors which may process individual results
+        :param writeVisitorResults: whether to collect results from visitors (if any) after the comparison
         :return: the comparison results
         """
         statsList = []
@@ -368,6 +374,10 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             suffix = "crossval" if useCrossValidation else "simple-eval"
             strResults += "\n\n" + "\n\n".join([f"{model.getName()} = {str(model)}" for model in models])
             resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
+        if visitors is not None and writeVisitorResults:
+            resultCollector = EvaluationResultCollector(showPlots=False, resultWriter=resultWriter)
+            for visitor in visitors:
+                visitor.collectResults(resultCollector)
         return ModelComparisonData(resultsDF, resultByModelName)
 
     def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> "ModelComparisonData":
@@ -540,7 +550,8 @@ class MultiDataEvaluationUtil:
 
             # compute data frame with results for current data set
             childResultWriter = resultWriter.childForSubdirectory(key) if (writePerDatasetResults and resultWriter is not None) else None
-            comparisonData = ev.compareModels(models, useCrossValidation=useCrossValidation, resultWriter=childResultWriter, visitors=visitors)
+            comparisonData = ev.compareModels(models, useCrossValidation=useCrossValidation, resultWriter=childResultWriter,
+                visitors=visitors, writeVisitorResults=False)
             df = comparisonData.resultsDF
 
             # augment data frame
@@ -608,11 +619,11 @@ class MultiDataEvaluationUtil:
                     evalStats = ClassificationEvalStatsCollection(evalStatsList).getGlobalStats()
                 plotCollector.createPlots(evalStats, subtitle=modelName, resultCollector=resultCollector)
 
-        # create plots from visitors (if any)
+        # collect results from visitors (if any)
         resultCollector = EvaluationResultCollector(showPlots=False, resultWriter=resultWriter)
         if visitors is not None:
             for visitor in visitors:
-                visitor.collectPlots(resultCollector)
+                visitor.collectResults(resultCollector)
 
         # create result
         if isRegression:
@@ -654,9 +665,9 @@ class ModelComparisonVisitor(ABC):
         pass
 
     @abstractmethod
-    def collectPlots(self, resultCollector: EvaluationResultCollector) -> None:
+    def collectResults(self, resultCollector: EvaluationResultCollector) -> None:
         """
-        Collects figures at the end of the model comparison, based on the results collected
+        Collects results (such as figures) at the end of the model comparison, based on the results collected
 
         :param resultCollector: the collector to which figures are to be added
         """
@@ -667,7 +678,7 @@ class ModelComparisonVisitorAggregatedFeatureImportance(ModelComparisonVisitor):
     """
     During a model comparison, computes aggregated feature importance values for the model with the given name
     """
-    def __init__(self, modelName: str, featureAggRegEx: Sequence[str] = ()):
+    def __init__(self, modelName: str, featureAggRegEx: Sequence[str] = (), writeFigure=True, writeDataFrameCSV=False):
         """
         :param modelName: the name of the model for which to compute the aggregated feature importance values
         :param featureAggRegEx: a sequence of regular expressions describing which feature names to sum as one. Each regex must
@@ -677,6 +688,8 @@ class ModelComparisonVisitorAggregatedFeatureImportance(ModelComparisonVisitor):
         """
         self.modelName = modelName
         self.aggFeatureImportance = AggregatedFeatureImportance(featureAggRegEx=featureAggRegEx)
+        self.writeFigure = writeFigure
+        self.writeDataFrameCSV = writeDataFrameCSV
 
     def visit(self, modelName: str, result: ModelComparisonData.Result):
         if modelName == self.modelName:
@@ -698,8 +711,13 @@ class ModelComparisonVisitorAggregatedFeatureImportance(ModelComparisonVisitor):
     def plotFeatureImportance(self) -> plt.Figure:
         return plotFeatureImportance(self.aggFeatureImportance.getAggregatedFeatureImportanceDict(), subtitle=self.modelName)
 
-    def collectPlots(self, resultCollector: EvaluationResultCollector):
-        resultCollector.addFigure(f"{self.modelName}_feature-importance", self.plotFeatureImportance())
+    def collectResults(self, resultCollector: EvaluationResultCollector):
+        if self.writeFigure:
+            resultCollector.addFigure(f"{self.modelName}_feature-importance", self.plotFeatureImportance())
+        if self.writeDataFrameCSV:
+            namesAndImportance = self.aggFeatureImportance.getAggregatedFeatureImportance().getSortedTuples()
+            df = pd.DataFrame(namesAndImportance, columns=["feature", "importance"])
+            resultCollector.addDataFrameCsvFile(f"{self.modelName}_feature-importance", df)
 
 
 class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], ABC):
