@@ -113,6 +113,7 @@ def functionName(x: Callable) -> str:
         return str(x)
 
 
+# TODO: allow returning json string for easier parsing/printing
 class ToStringMixin:
     """
     Provides implementations for ``__str__`` and ``__repr__`` which are based on the format ``"<class name>[<object info>]"`` and

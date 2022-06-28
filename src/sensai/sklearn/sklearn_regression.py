@@ -1,5 +1,5 @@
 import logging
-from typing import Union, Optional, Dict
+from typing import Union, Optional
 
 import sklearn.ensemble
 import sklearn.linear_model
@@ -7,22 +7,19 @@ import sklearn.neighbors
 import sklearn.neural_network
 import sklearn.svm
 
-from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel
-from ..feature_importance import FeatureImportanceProvider
+from .sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnMultiDimVectorRegressionModel, \
+    FeatureImportanceProviderSkLearnRegressionMultipleOneDim, FeatureImportanceProviderSkLearnRegressionMultiDim
 
 log = logging.getLogger(__name__)
 
 
-class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProvider):
+class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultipleOneDim):
     def __init__(self, n_estimators=100, min_samples_leaf=10, random_state=42, **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
 
-    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, float]]:
-        return {targetFeature: dict(zip(self._modelInputVariableNames, model.feature_importances_)) for targetFeature, model in self.models.items()}
 
-
-class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
+class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultiDim):
     def __init__(self, fit_intercept=True, **modelArgs):
         """
         :param fit_intercept: whether to determine the intercept, i.e. the constant term which is not scaled with an input feature value;
@@ -31,11 +28,8 @@ class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVector
         """
         super().__init__(sklearn.linear_model.LinearRegression, fit_intercept=fit_intercept, **modelArgs)
 
-    def getFeatureImportanceDict(self) -> Dict[str, float]:
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
-
-class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
+class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultiDim):
     """
     Linear least squares with L2 regularisation
     """
@@ -49,11 +43,8 @@ class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         super().__init__(sklearn.linear_model.Ridge, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol,
             solver=solver, **modelArgs)
 
-    def getFeatureImportanceDict(self) -> Dict[str, float]:
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
-
-class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProvider):
+class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultiDim):
     """
     Linear least squares with L1 regularisation, a.k.a. the lasso
     """
@@ -65,9 +56,6 @@ class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         :param modelArgs: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Lasso.html#sklearn.linear_model.Lasso
         """
         super().__init__(sklearn.linear_model.Lasso, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol, **modelArgs)
-
-    def getFeatureImportanceDict(self) -> Dict[str, float]:
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
 class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
