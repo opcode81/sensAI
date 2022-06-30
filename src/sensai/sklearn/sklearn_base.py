@@ -10,6 +10,7 @@ from sklearn import compose
 
 from ..feature_importance import FeatureImportanceProvider
 from ..util.pickle import setstate
+from ..util.string import dictString
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
 log = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
         if len(self.models) > 0:
             d["model[0]"] = strSkLearnModel(next(iter(self.models.values())))
         else:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -177,7 +178,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
         if self.model is not None:
             d["model"] = strSkLearnModel(self.model)
         else:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -221,7 +222,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
         if self.model is None:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         else:
             d["model"] = strSkLearnModel(self.model)
         return d
@@ -307,19 +308,30 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         return weights.to_dict()
 
 
+def _getModelFeatureImportanceVector(model):
+    candAttributes = ("feature_importances_", "coef_")
+    for attr in candAttributes:
+        if hasattr(model, attr):
+            importanceValues = getattr(model, attr)
+            if attr == "coef_":
+                importanceValues = np.abs(importanceValues)  # for coefficients in linear models, use the absolute values
+            return importanceValues
+    raise ValueError(f"Model {model} has none of the attributes {candAttributes}")
+
+
 class FeatureImportanceProviderSkLearnRegressionMultipleOneDim(FeatureImportanceProvider):
     def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
         self: AbstractSkLearnMultipleOneDimVectorRegressionModel
-        return {targetFeature: dict(zip(model.feature_name_, model.feature_importances_)) for targetFeature, model in self.models.items()}
+        return {targetFeature: dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(model))) for targetFeature, model in self.models.items()}
 
 
 class FeatureImportanceProviderSkLearnRegressionMultiDim(FeatureImportanceProvider):
     def getFeatureImportanceDict(self) -> Dict[str, float]:
         self: AbstractSkLearnMultiDimVectorRegressionModel
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
+        return dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(self.model)))
 
 
 class FeatureImportanceProviderSkLearnClassification(FeatureImportanceProvider):
     def getFeatureImportanceDict(self) -> Dict[str, float]:
         self: AbstractSkLearnVectorClassificationModel
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
+        return dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(self.model)))

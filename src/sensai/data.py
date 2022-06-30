@@ -7,6 +7,8 @@ import pandas as pd
 import scipy.stats
 from sklearn.model_selection import StratifiedShuffleSplit
 
+from sensai.util.string import ToStringMixin
+
 log = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -50,12 +52,15 @@ class InputOutputArrays(BaseInputOutputData[np.ndarray]):
         return DataLoader(dataSet, batch_size=batchSize, shuffle=shuffle)
 
 
-class InputOutputData(BaseInputOutputData[pd.DataFrame]):
+class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
     """
     Holds input and output data for learning problems
     """
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         super().__init__(inputs, outputs)
+
+    def _toStringObjectInfo(self) -> str:
+        return f"N={len(self.inputs)}, numInputColumns={len(self.inputs.columns)}, numOutputColumns={len(self.outputs.columns)}"
 
     @classmethod
     def fromDataFrame(cls, df: pd.DataFrame, *outputColumns: str) -> "InputOutputData":

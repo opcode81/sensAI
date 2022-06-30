@@ -60,13 +60,13 @@ class MetricsDictProviderFromFunction(MetricsDictProvider):
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: VectorModelBase):
+    def __init__(self, statsDict: Dict[str, TEvalStats], ioData: InputOutputData, model: VectorModelBase):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
-        :param inputData: the input data that was used to produce the results
+        :param ioData: the input/output data that was used to produce the results
         :param model: the model that was used to produce predictions
         """
-        self.inputData = inputData
+        self.ioData = ioData
         self.evalStatsByVarName = statsDict
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
         self.model = model
@@ -74,6 +74,10 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
     @property
     def modelName(self):
         return self.model.getName()
+
+    @property
+    def inputData(self):  # for backward compatibility
+        return self.ioData.inputs
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -303,7 +307,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
                 metrics=self.params.metrics,
                 additionalMetrics=self.params.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
-        return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, data, model)
 
     def computeTestDataOutputs(self, model: VectorModelBase) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -414,7 +418,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
             labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics, binaryPositiveLabel=self.params.binaryPositiveLabel)
         predictedVarName = model.getPredictedVariableNames()[0]
-        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data, model)
 
     def computeTestDataOutputs(self, model) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
