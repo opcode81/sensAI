@@ -361,7 +361,7 @@ class ToStringMixin:
 
             def __getattr__(self, attr: str):
                 if attr.startswith("_toString"):  # ToStringMixin method which we bind to use this proxy
-                    method = getattr(ToStringMixin, attr)
+                    method = getattr(self.x.__class__, attr)
                     return lambda *args, **kwargs: method(self, *args, **kwargs)
                 else:
                     return getattr(self.x, attr)
