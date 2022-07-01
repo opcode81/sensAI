@@ -21,7 +21,7 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
         :return:
         """
         evalStats = self.evalModel(model, **kwargs)
-        return evalStats.getAll()
+        return evalStats.metricsDict()
 
     @abstractmethod
     def evalModel(self, model: EuclideanClusterer, **kwargs) -> TClusteringEvalStats:

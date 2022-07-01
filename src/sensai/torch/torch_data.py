@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+import math
 from typing import Tuple, Sequence, Optional, Union, List, Iterator
 
 import numpy as np
@@ -485,7 +486,15 @@ class TorchDataSetFromTensors(TorchDataSet):
             index = torch.LongTensor(range(length))
         start_idx = 0
         while start_idx < length:
-            end_idx = min(length, start_idx + batch_size)
+            remaining_items = length - start_idx
+            is_second_last_batch = remaining_items <= 2*batch_size and remaining_items > batch_size
+            if is_second_last_batch:
+                # to avoid cases where the last batch is excessively small (1 item in the worst case, where e.g. batch
+                # normalisation would not be applicable), we evenly distribute the items across the last two batches
+                adjusted_batch_size = math.ceil(remaining_items / 2)
+                end_idx = min(length, start_idx + adjusted_batch_size)
+            else:
+                end_idx = min(length, start_idx + batch_size)
             excerpt = index[start_idx:end_idx]
             batch = []
             for tensorTuple in tensorTuples:
@@ -504,7 +513,7 @@ class TorchDataSetFromTensors(TorchDataSet):
                 yield batch[0]
             else:
                 yield tuple(batch)
-            start_idx += batch_size
+            start_idx = end_idx
 
     def size(self):
         return len(self.x)
@@ -596,6 +605,18 @@ class TorchDataSetProviderFromDataUtil(TorchDataSetProvider):
     def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
         (x1, y1), (x2, y2) = self.dataUtil.splitIntoTensors(fractionalSizeOfFirstSet)
         return TorchDataSetFromTensors(x1, y1, self.cuda), TorchDataSetFromTensors(x2, y2, self.cuda)
+
+
+class TorchDataSetProviderFromVectorDataUtil(TorchDataSetProvider):
+    def __init__(self, dataUtil: VectorDataUtil, cuda: bool, tensoriseDynamically=False):
+        super().__init__(inputTensorScaler=dataUtil.getInputTensorScaler(), outputTensorScaler=dataUtil.getOutputTensorScaler(),
+            inputDim=dataUtil.inputDim(), modelOutputDim=dataUtil.modelOutputDim())
+        self.dataUtil = dataUtil
+        self.cuda = cuda
+        self.tensoriseDynamically = tensoriseDynamically
+
+    def provideSplit(self, fractionalSizeOfFirstSet: float) -> Tuple[TorchDataSet, TorchDataSet]:
+        return self.dataUtil.splitIntoDataSets(fractionalSizeOfFirstSet, self.cuda, tensoriseDynamically=self.tensoriseDynamically)
 
 
 class TensorTransformer(ABC):

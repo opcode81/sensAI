@@ -1,8 +1,8 @@
 """
 This module contains various helper functions.
 """
+import math
 from typing import Any, Sequence, Union, TypeVar, List
-
 
 T = TypeVar("T")
 
@@ -21,6 +21,16 @@ def countNone(*args: Any) -> int:
     return c
 
 
+def countNotNone(*args: Any) -> int:
+    """
+    Counts the number of arguments that are not None
+
+    :param args: various arguments
+    :return: the number of arguments that are not None
+    """
+    return len(args) - countNone(*args)
+
+
 def anyNone(*args: Any) -> bool:
     """
     :param args: various arguments
@@ -35,6 +45,17 @@ def allNone(*args: Any) -> bool:
     :return: True if all of the arguments are None, False otherwise
     """
     return countNone(*args) == len(args)
+
+
+def checkNotNaNDict(d: dict):
+    """
+    Raises ValueError if any of the values in the given dictionary are NaN, reporting the respective keys
+
+    :param d: a dictionary mapping to floats that are to be checked for NaN
+    """
+    invalidKeys = [k for k, v in d.items() if math.isnan(v)]
+    if len(invalidKeys) > 0:
+        raise ValueError(f"Got one or more NaN values: {invalidKeys}")
 
 
 def markUsed(*args):

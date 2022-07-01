@@ -3,8 +3,9 @@ import pandas as pd
 import seaborn as sns
 from abc import ABC, abstractmethod
 from matplotlib import pyplot as plt
-from typing import Generic, TypeVar, List, Union, Dict, Sequence, Optional
+from typing import Generic, TypeVar, List, Union, Dict, Sequence, Optional, Tuple, Callable
 
+from ...util.plot import ScatterPlot, HistogramPlot, Plot, HeatMapPlot
 from ...util.string import ToStringMixin, dictString
 from ...vector_model import VectorModel
 
@@ -40,15 +41,23 @@ class EvalStats(Generic[TMetric], ToStringMixin):
     def computeMetricValue(self, metric: TMetric) -> float:
         return metric.computeValueForEvalStats(self)
 
-    def getAll(self) -> Dict[str, float]:
-        """Gets a dictionary with all metrics"""
+    def metricsDict(self) -> Dict[str, float]:
+        """
+        Computes all metrics
+
+        :return: a dictionary mapping metric names to values
+        """
         d = {}
         for metric in self.metrics:
             d[metric.name] = self.computeMetricValue(metric)
         return d
 
+    def getAll(self) -> Dict[str, float]:
+        """Alias for metricsDict; may be deprecated in the future"""
+        return self.metricsDict()
+
     def _toStringObjectInfo(self) -> str:
-        return dictString(self.getAll())
+        return dictString(self.metricsDict())
 
 
 TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
@@ -57,52 +66,149 @@ TEvalStats = TypeVar("TEvalStats", bound=EvalStats)
 class Metric(Generic[TEvalStats], ABC):
     name: str
 
-    def __init__(self, name: str = None):
+    def __init__(self, name: str = None, bounds: Optional[Tuple[float, float]] = None):
         """
         :param name: the name of the metric; if None use the class' name attribute
+        :param bounds: the minimum and maximum values the metric can take on (or None if the bounds are not specified)
         """
         # this raises an attribute error if a subclass does not specify a name as a static attribute nor as parameter
         self.name = name if name is not None else self.__class__.name
+        self.bounds = bounds
 
     @abstractmethod
     def computeValueForEvalStats(self, evalStats: TEvalStats) -> float:
         pass
 
+    def getPairedMetrics(self) -> List[TMetric]:
+        """
+        Gets a list of metrics that should be considered together with this metric (e.g. for paired visualisations/plots).
+        The direction of the pairing should be such that if this metric is "x", the other is "y" for x-y type visualisations.
 
-class EvalStatsCollection(Generic[TEvalStats], ABC):
+        :return: a list of metrics
+        """
+        return []
+
+    def hasFiniteBounds(self) -> bool:
+        return self.bounds is not None and not any((np.isinf(x) for x in self.bounds))
+
+
+class EvalStatsCollection(Generic[TEvalStats, TMetric], ABC):
     def __init__(self, evalStatsList: List[TEvalStats]):
         self.statsList = evalStatsList
-        metricsList = [es.getAll() for es in evalStatsList]
+        metricNamesSet = None
+        metricsList = []
+        for es in evalStatsList:
+            metrics = es.metricsDict()
+            currentMetricNamesSet = set(metrics.keys())
+            if metricNamesSet is None:
+                metricNamesSet = currentMetricNamesSet
+            else:
+                if metricNamesSet != currentMetricNamesSet:
+                    raise Exception(f"Inconsistent set of metrics in evaluation stats collection: Got {metricNamesSet} for one instance, {currentMetricNamesSet} for another")
+            metricsList.append(metrics)
         metricNames = sorted(metricsList[0].keys())
-        self.metrics = {metric: [d[metric] for d in metricsList] for metric in metricNames}
+        self._valuesByMetricName = {metric: [d[metric] for d in metricsList] for metric in metricNames}
+        self._metrics: List[TMetric] = evalStatsList[0].metrics
 
-    def getValues(self, metric):
-        return self.metrics[metric]
+    def getValues(self, metricName: str):
+        return self._valuesByMetricName[metricName]
 
-    def aggStats(self):
+    def getMetricNames(self) -> List[str]:
+        return list(self._valuesByMetricName.keys())
+
+    def getMetrics(self) -> List[TMetric]:
+        return self._metrics
+
+    def getMetricByName(self, name: str) -> Optional[TMetric]:
+        for m in self._metrics:
+            if m.name == name:
+                return m
+        return None
+
+    def hasMetric(self, metric: Union[Metric, str]) -> bool:
+        if type(metric) != str:
+            metric = metric.name
+        return metric in self._valuesByMetricName
+
+    def aggMetricsDict(self, aggFns=(np.mean, np.std)) -> Dict[str, float]:
         agg = {}
-        for metric, values in self.metrics.items():
-            agg[f"mean[{metric}]"] = float(np.mean(values))
-            agg[f"std[{metric}]"] = float(np.std(values))
+        for metric, values in self._valuesByMetricName.items():
+            for aggFn in aggFns:
+                agg[f"{aggFn.__name__}[{metric}]"] = float(aggFn(values))
         return agg
 
-    def meanStats(self):
-        metrics = {metric: np.mean(values) for (metric, values) in self.metrics.items()}
-        metrics.update({f"StdDev[{metric}]": np.std(values) for (metric, values) in self.metrics.items()})
+    def meanMetricsDict(self) -> Dict[str, float]:
+        metrics = {metric: np.mean(values) for (metric, values) in self._valuesByMetricName.items()}
         return metrics
 
-    def plotDistribution(self, metric):
-        values = self.metrics[metric]
-        plt.figure()
-        plt.title(metric)
-        sns.distplot(values)
+    def plotDistribution(self, metricName: str, subtitle: Optional[str] = None, bins=None, kde=False, cdf=False,
+            cdfComplementary=False, stat="proportion", **kwargs) -> plt.Figure:
+        """
+        Plots the distribution of a metric as a histogram
+
+        :param metricName: name of the metric for which to plot the distribution (histogram) across evaluations
+        :param subtitle: the subtitle to add, if any
+        :param bins: the histogram bins (number of bins or boundaries); metrics bounds will be used to define the x limits.
+            If None, use 'auto' bins
+        :param kde: whether to add a kernel density estimator plot
+        :param cdf: whether to add the cumulative distribution function (cdf)
+        :param cdfComplementary: whether to plot, if ``cdf`` is True, the complementary cdf instead of the regular cdf
+        :param stat: the statistic to compute for each bin ('percent', 'probability'='proportion', 'count', 'frequency' or 'density'), y-axis value
+        :param kwargs: additional parameters to pass to seaborn.histplot (see https://seaborn.pydata.org/generated/seaborn.histplot.html)
+        :return:
+        """
+        # define bins based on metric bounds where available
+        xTick = None
+        if bins is None or type(bins) == int:
+            metric = self.getMetricByName(metricName)
+            if metric.bounds == (0, 1):
+                xTick = 0.1
+                if bins is None:
+                    numBins = 10 if cdf else 20
+                else:
+                    numBins = bins
+                bins = np.linspace(0, 1, numBins+1)
+
+        values = self._valuesByMetricName[metricName]
+        title = metricName
+        if subtitle is not None:
+            title += "\n" + subtitle
+        plot = HistogramPlot(values, bins=bins, stat=stat, kde=kde, cdf=cdf, cdfComplementary=cdfComplementary, **kwargs).title(title)
+        if xTick is not None:
+            plot.xtickMajor(xTick)
+        return plot.fig
+
+    def _plotXY(self, metricNameX, metricNameY, plotFactory: Callable[[Sequence, Sequence], Plot], adjustBounds: bool) -> plt.Figure:
+        def axlim(bounds):
+            minValue, maxValue = bounds
+            diff = maxValue - minValue
+            return (minValue - 0.05 * diff, maxValue + 0.05 * diff)
+
+        x = self._valuesByMetricName[metricNameX]
+        y = self._valuesByMetricName[metricNameY]
+        plot = plotFactory(x, y)
+        plot.xlabel(metricNameX)
+        plot.ylabel(metricNameY)
+        mx = self.getMetricByName(metricNameX)
+        if adjustBounds and mx.hasFiniteBounds():
+            plot.xlim(*axlim(mx.bounds))
+        my = self.getMetricByName(metricNameY)
+        if adjustBounds and my.hasFiniteBounds():
+            plot.ylim(*axlim(my.bounds))
+        return plot.fig
+
+    def plotScatter(self, metricNameX: str, metricNameY: str) -> plt.Figure:
+        return self._plotXY(metricNameX, metricNameY, ScatterPlot, adjustBounds=True)
+
+    def plotHeatMap(self, metricNameX: str, metricNameY: str) -> plt.Figure:
+        return self._plotXY(metricNameX, metricNameY, HeatMapPlot, adjustBounds=False)
 
     def toDataFrame(self) -> pd.DataFrame:
         """
         :return: a DataFrame with the evaluation metrics from all contained EvalStats objects;
             the EvalStats' name field being used as the index if it is set
         """
-        data = dict(self.metrics)
+        data = dict(self._valuesByMetricName)
         index = [stats.name for stats in self.statsList]
         if len([n for n in index if n is not None]) == 0:
             index = None
@@ -110,11 +216,14 @@ class EvalStatsCollection(Generic[TEvalStats], ABC):
 
     @abstractmethod
     def getGlobalStats(self) -> TEvalStats:
+        """
+        :return: an EvalStats object that combines the data from all contained EvalStats objects
+        """
         pass
 
     def __str__(self):
         return f"{self.__class__.__name__}[" + \
-               ", ".join([f"{key}={self.aggStats()[key]:.4f}" for key in self.metrics]) + "]"
+               ", ".join([f"{key}={self.aggMetricsDict()[key]:.4f}" for key in self._valuesByMetricName]) + "]"
 
 
 class PredictionEvalStats(EvalStats[TMetric], ABC):
@@ -203,6 +312,17 @@ def meanStats(evalStatsList: Sequence[EvalStats]) -> Dict[str, float]:
     For a list of EvalStats objects compute the mean values of all metrics in a dictionary.
     Assumes that all provided EvalStats have the same metrics
     """
-    dicts = [s.getAll() for s in evalStatsList]
+    dicts = [s.metricsDict() for s in evalStatsList]
     metrics = dicts[0].keys()
     return {m: np.mean([d[m] for d in dicts]) for m in metrics}
+
+
+class EvalStatsPlot(Generic[TEvalStats], ABC):
+    @abstractmethod
+    def createFigure(self, evalStats: TEvalStats, subtitle: str) -> Optional[plt.Figure]:
+        """
+        :param evalStats: the evaluation stats from which to generate the plot
+        :param subtitle: the plot's subtitle
+        :return: the figure or None if this plot is not applicable/cannot be created
+        """
+        pass

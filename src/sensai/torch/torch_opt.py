@@ -41,12 +41,19 @@ class Optimiser(enum.Enum):
     LBFGS = ("lbfgs", optim.LBFGS)
 
     @classmethod
-    def fromName(cls, name: str):
+    def fromName(cls, name: str) -> "Optimiser":
         lname = name.lower()
         for o in cls:
             if o.value[0] == lname:
                 return o
         raise ValueError(f"Unknown optimiser name '{name}'; known names: {[o.value[0] for o in cls]}")
+
+    @classmethod
+    def fromNameOrInstance(cls, nameOrInstance: Union[str, "Optimiser"]) -> "Optimiser":
+        if type(nameOrInstance) == str:
+            return cls.fromName(nameOrInstance)
+        else:
+            return nameOrInstance
 
 
 class _Optimiser(object):
@@ -61,10 +68,7 @@ class _Optimiser(object):
         :param max_grad_norm: gradient norm value beyond which to apply gradient shrinkage
         :param optimiserArgs: keyword arguments to be used in actual torch optimiser
         """
-        if type(method) == str:
-            self.method = Optimiser.fromName(method)
-        else:
-            self.method = method
+        self.method = Optimiser.fromNameOrInstance(method)
         self.params = list(params)  # careful: params may be a generator
         self.last_ppl = None
         self.lr = lr
@@ -119,7 +123,7 @@ class NNLossEvaluator(ABC):
         def computeTrainBatchLoss(self, modelOutput, groundTruth, X, Y) -> torch.Tensor:
             """
             Computes the loss for the given model outputs and ground truth values for a batch
-            and aggregates the computed loss values such that getEpochLoss can return an appropriate
+            and aggregates the computed loss values such that :meth:``getEpochTrainLoss`` can return an appropriate
             result for the entire epoch.
             The original batch tensors X and Y are provided as meta-information only.
 
@@ -538,7 +542,7 @@ class NNOptimiserParams(ToStringMixin):
         """
         :param lossEvaluator: the loss evaluator to use
         :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained); if None, default to first GPU
-        :param optimiser: the name of the optimizer to be used; defaults to "adam"
+        :param optimiser: the optimiser to use
         :param optimiserLR: the optimiser's learning rate
         :param earlyStoppingEpochs: the number of epochs without validation score improvement after which to abort training and
             use the best epoch's model (early stopping); if None, never abort training before all epochs are completed
@@ -548,12 +552,12 @@ class NNOptimiserParams(ToStringMixin):
             If no validation is to be performed, pass 1.0.
         :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
             Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
-        :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
-        :param shrinkageClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
+        :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds ``shrinkageClip``, scaling the gradient down to ``shrinkageClip``
+        :param shrinkageClip: the maximum gradient norm beyond which to apply shrinkage (if ``useShrinkage`` is True)
         :param shuffle: whether to shuffle the training data
         :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
         """
-        if optimiser == 'lbfgs':
+        if Optimiser.fromNameOrInstance(optimiser) == Optimiser.LBFGS:
             largeBatchSize = 1e12
             if batchSize is not None:
                 log.warning(f"LBFGS does not make use of batches, therefore using large batch size {largeBatchSize} to achieve use of a single batch")
@@ -614,20 +618,7 @@ class NNOptimiser:
 
     def __init__(self, params: NNOptimiserParams):
         """
-        :param cuda: whether to use CUDA
-        :param lossEvaluator: the loss evaluator to use
-        :param gpu: index of the gpu to be used (if CUDA is enabled in the model to be trained)
-        :param optimiser: the optimizer to be used; defaults to "adam"
-        :param optimiserClip: the maximum gradient norm beyond which to apply shrinkage (if useShrinkage is True)
-        :param optimiserLR: the optimiser's learning rate
-        :param batchSize: the batch size to use; for algorithms L-BFGS (optimiser='lbfgs'), which do not use batches, leave this at None.
-            If the algorithm uses batches and None is specified, batch size 64 will be used by default.
-        :param trainFraction: the fraction of the data used for training (with the remainder being used for validation).
-            If no validation is to be performed, pass 1.0.
-        :param scaledOutputs: whether to scale all outputs, resulting in computations of the loss function based on scaled values rather than normalised values.
-            Enabling scaling may not be appropriate in cases where there are multiple outputs on different scales/with completely different units.
-        :param useShrinkage: whether to apply shrinkage to gradients whose norm exceeds optimiserClip
-        :param optimiserArgs: keyword arguments to be passed on to the actual torch optimiser
+        :param params: parameters
         """
         if params.lossEvaluator is None:
             raise ValueError("Must provide a loss evaluator")

@@ -7,7 +7,6 @@ from typing import List, Tuple
 
 import pandas as pd
 
-
 log = getLogger(__name__)
 
 LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(message)s'
@@ -69,6 +68,16 @@ class StopWatch:
     def getElapsedTimeSecs(self) -> float:
         return time.time() - self.startTime
 
+    def getElapsedTimedelta(self) -> pd.Timedelta:
+        return pd.Timedelta(self.getElapsedTimeSecs(), unit="s")
+
+    def getElapsedTimeString(self) -> str:
+        secs = self.getElapsedTimeSecs()
+        if secs < 60:
+            return f"{secs:.3f} seconds"
+        else:
+            return str(pd.Timedelta(secs, unit="s"))
+
 
 class StopWatchManager:
     """
@@ -93,7 +102,7 @@ class StopWatchManager:
 
     def stop(self, name) -> float:
         """
-        :param name: the name of the time
+        :param name: the name of the stopwatch
         :return: the time that has passed in seconds
         """
         timePassedSecs = time.time() - self._stopWatches[name]
@@ -105,18 +114,41 @@ class StopWatchManager:
 
 
 class LogTime:
-    def __init__(self, name):
+    """
+    An execution time logger which can be conveniently applied using a with-statement - in order to log the executing time of the respective
+    with-block.
+    """
+
+    def __init__(self, name, enabled=True, logger: Logger = None):
+        """
+        :param name: the name of the event whose time is to be logged upon completion as "<name> completed in <time>"
+        :param enabled: whether the logging is actually enabled; can be set to False to disable logging without necessitating
+            changes to client code
+        :param logger: the logger to use; if None, use the logger of LogTime's module
+        """
         self.name = name
-        self.startTime = None
+        self.enabled = enabled
+        self.stopwatch = None
+        self.logger = logger if logger is not None else log
 
     def start(self):
-        self.startTime = time.time()
+        """
+        Starts the stopwatch
+        """
+        self.stopwatch = StopWatch()
+        if self.enabled:
+            self.logger.info(f"{self.name} starting ...")
 
     def stop(self):
-        log.info(f"{self.name} completed in {time.time()-self.startTime:.3f} seconds")
+        """
+        Stops the stopwatch and logs the time taken (if enabled)
+        """
+        if self.stopwatch is not None and self.enabled:
+            self.logger.info(f"{self.name} completed in {self.stopwatch.getElapsedTimeString()}")
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
 
     def __enter__(self):
-        return self.start()
+        self.start()
+        return self

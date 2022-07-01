@@ -5,12 +5,13 @@ from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Opti
 
 import pandas as pd
 
+from .eval_stats import GUESS
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
-from ..data_transformation import DataFrameTransformer
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
-from ..tracking import TrackingMixin
+from ..data_transformation import DataFrameTransformer
+from ..tracking import TrackingMixin, TrackedExperiment
 from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase
@@ -46,9 +47,7 @@ class MetricsDictProvider(TrackingMixin, ABC):
         """
         valuesDict = self._computeMetrics(model, **kwargs)
         if self.trackedExperiment is not None:
-            trackedDict = valuesDict.copy()
-            trackedDict["str(model)"] = str(model)
-            self.trackedExperiment.trackValues(trackedDict)
+            self.trackedExperiment.trackValues(valuesDict, addValuesDict={"str(model)": str(model)})
         return valuesDict
 
 
@@ -61,13 +60,13 @@ class MetricsDictProviderFromFunction(MetricsDictProvider):
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: VectorModelBase):
+    def __init__(self, statsDict: Dict[str, TEvalStats], ioData: InputOutputData, model: VectorModelBase):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
-        :param inputData: the input data that was used to produce the results
+        :param ioData: the input/output data that was used to produce the results
         :param model: the model that was used to produce predictions
         """
-        self.inputData = inputData
+        self.ioData = ioData
         self.evalStatsByVarName = statsDict
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
         self.model = model
@@ -75,6 +74,10 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
     @property
     def modelName(self):
         return self.model.getName()
+
+    @property
+    def inputData(self):  # for backward compatibility
+        return self.ioData.inputs
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -96,7 +99,7 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         statsDicts = []
         varNames = []
         for predictedVarName, evalStats in self.evalStatsByVarName.items():
-            statsDicts.append(evalStats.getAll())
+            statsDicts.append(evalStats.metricsDict())
             varNames.append(predictedVarName)
         df = pd.DataFrame(statsDicts, index=varNames)
         df.index.name = "predictedVar"
@@ -174,16 +177,31 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
             self.trainingData = data
             self.testData = testData
 
-    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> TEvalData:
+    def setTrackedExperiment(self, trackedExperiment: TrackedExperiment):
+        """
+        Sets a tracked experiment which will result in metrics being saved whenever computeMetrics is called
+        or evalModel is called with track=True.
+
+        :param trackedExperiment: the experiment in which to track evaluation metrics.
+        """
+        super().setTrackedExperiment(trackedExperiment)
+
+    def evalModel(self, model: VectorModelBase, onTrainingData=False, track=True) -> TEvalData:
         """
         Evaluates the given model
 
         :param model: the model to evaluate
         :param onTrainingData: if True, evaluate on this evaluator's training data rather than the held-out test data
+        :param track: whether to track the evaluation metrics for the case where a tracked experiment was set on this object
         :return: the evaluation result
         """
         data = self.trainingData if onTrainingData else self.testData
-        return self._evalModel(model, data)
+        result: VectorModelEvaluationData = self._evalModel(model, data)
+        if track and self.trackedExperiment is not None:
+            for predVarName in result.predictedVarNames:
+                addValuesDict = {"str(model)": str(model), "predVarName": predVarName}
+                self.trackedExperiment.trackValues(result.getEvalStats(predVarName).metricsDict(), addValuesDict=addValuesDict)
+        return result
 
     @abstractmethod
     def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> TEvalData:
@@ -194,8 +212,9 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
     def _computeMetricsForVarName(self, model, predictedVarName: Optional[str], onTrainingData=False):
         self.fitModel(model)
-        evalData = self.evalModel(model, onTrainingData=onTrainingData)
-        return evalData.getEvalStats(predictedVarName=predictedVarName).getAll()
+        track = False  # avoid duplicate tracking (as this function is only called by computeMetrics, which already tracks)
+        evalData: VectorModelEvaluationData = self.evalModel(model, onTrainingData=onTrainingData, track=track)
+        return evalData.getEvalStats(predictedVarName=predictedVarName).metricsDict()
 
     def createMetricsDictProvider(self, predictedVarName: Optional[str]) -> MetricsDictProvider:
         """
@@ -216,7 +235,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
 class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
     def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
-            fractionalSplitShuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
+            fractionalSplitShuffle=True, metrics: Sequence[RegressionMetric] = None, additionalMetrics: Sequence[RegressionMetric] = None,
             outputDataFrameTransformer: DataFrameTransformer = None):
         """
         :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
@@ -225,12 +244,14 @@ class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
         :param fractionalSplitRandomSeed: [if dataSplitter is none, test data must be obtained via split] the random seed to use for the fractional split of the data
         :param fractionalSplitShuffle: [if dataSplitter is None, test data must be obtained via split] whether to randomly (based on randomSeed) shuffle the dataset before
             splitting it
+
         :param additionalMetrics: additional regression metrics to apply
         :param outputDataFrameTransformer: a data frame transformer to apply to all output data frames (both model outputs and ground truth),
             such that evaluation metrics are computed on the transformed data frame
         """
         super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
             fractionalSplitShuffle=fractionalSplitShuffle)
+        self.metrics = metrics
         self.additionalMetrics = additionalMetrics
         self.outputDataFrameTransformer = outputDataFrameTransformer
 
@@ -240,10 +261,10 @@ class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
             return VectorRegressionModelEvaluatorParams()
         elif type(params) == dict:
             return cls.fromOldKwArgs(**params)
-        elif isinstance(params, VectorRegressionModelEvaluatorParams):
+        elif isinstance(params, cls):
             return params
         else:
-            raise ValueError(f"Must provide dictionary or instance, got {params}")
+            raise ValueError(f"Must provide dictionary or {cls} instance, got {params}, type {type(params)}")
 
     @classmethod
     def fromOldKwArgs(cls, dataSplitter=None, testFraction=None, randomSeed=42, shuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
@@ -283,9 +304,10 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         predictions, groundTruth = self._computeOutputs(model, data)
         for predictedVarName in predictions.columns:
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
+                metrics=self.params.metrics,
                 additionalMetrics=self.params.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
-        return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, data, model)
 
     def computeTestDataOutputs(self, model: VectorModelBase) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -313,13 +335,22 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
 
 
 class VectorClassificationModelEvaluationData(VectorModelEvaluationData[ClassificationEvalStats]):
-    pass
+    def getMisclassifiedInputsDataFrame(self) -> pd.DataFrame:
+        return self.inputData.iloc[self.getEvalStats().getMisclassifiedIndices()]
+
+    def getMisclassifiedTriplesPredTrueInput(self) -> List[Tuple[Any, Any, pd.Series]]:
+        """
+        :return: a list containing a triple (predicted class, true class, input series) for each misclassified data point
+        """
+        evalStats = self.getEvalStats()
+        indices = evalStats.getMisclassifiedIndices()
+        return [(evalStats.y_predicted[i], evalStats.y_true[i], self.inputData.iloc[i]) for i in indices]
 
 
 class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
     def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
             fractionalSplitShuffle=True, additionalMetrics: Sequence[ClassificationMetric] = None,
-            computeProbabilities: bool = False):
+            computeProbabilities: bool = False, binaryPositiveLabel=GUESS):
         """
         :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
             fractionalSplitTestFraction for fractional split (default)
@@ -329,11 +360,14 @@ class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
             splitting it
         :param additionalMetrics: additional metrics to apply
         :param computeProbabilities: whether to compute class probabilities
+        :param binaryPositiveLabel: the positive class label for binary classification; if GUESS, true to detect from labels;
+            if None, no detection (non-binary classification)
         """
         super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
             fractionalSplitShuffle=fractionalSplitShuffle)
         self.additionalMetrics = additionalMetrics
         self.computeProbabilities = computeProbabilities
+        self.binaryPositiveLabel = binaryPositiveLabel
 
     @classmethod
     def fromOldKwArgs(cls, dataSplitter=None, testFraction=None,
@@ -382,9 +416,9 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
             raise ValueError(f"Expected a classification model, got {model}")
         predictions, predictions_proba, groundTruth = self._computeOutputs(model, data)
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
-            labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics)
+            labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics, binaryPositiveLabel=self.params.binaryPositiveLabel)
         predictedVarName = model.getPredictedVariableNames()[0]
-        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data, model)
 
     def computeTestDataOutputs(self, model) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
@@ -417,16 +451,17 @@ class RuleBasedVectorClassificationModelEvaluator(VectorClassificationModelEvalu
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> VectorClassificationModelEvaluationData:
+    def evalModel(self, model: VectorModelBase, onTrainingData=False, track=True) -> VectorClassificationModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
         same data set.
 
-        :param model:
+        :param model: the model to evaluate
         :param onTrainingData: has to be False here. Setting to True is not supported and will lead to an
             exception
-        :return:
+        :param track: whether to track the evaluation metrics for the case where a tracked experiment was set on this object
+        :return: the evaluation result
         """
         if onTrainingData:
             raise Exception("Evaluating rule based models on training data is not supported. In this evaluator"
@@ -438,16 +473,17 @@ class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, testData=data)
 
-    def evalModel(self, model: VectorModelBase, onTrainingData=False) -> VectorRegressionModelEvaluationData:
+    def evalModel(self, model: VectorModelBase, onTrainingData=False, track=True) -> VectorRegressionModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
         same data set.
 
-        :param model:
+        :param model: the model to evaluate
         :param onTrainingData: has to be False here. Setting to True is not supported and will lead to an
             exception
-        :return:
+        :param track: whether to track the evaluation metrics for the case where a tracked experiment was set on this object
+        :return: the evaluation result
         """
         if onTrainingData:
             raise Exception("Evaluating rule based models on training data is not supported. In this evaluator"

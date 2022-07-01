@@ -1,13 +1,16 @@
 import copy
 import logging
-from abc import ABC, abstractmethod
-from typing import List, Any, Dict
 import re
+from abc import ABC, abstractmethod
+from typing import List, Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
 from sklearn import compose
 
+from ..feature_importance import FeatureImportanceProvider
+from ..util.pickle import setstate
+from ..util.string import dictString
 from ..vector_model import VectorRegressionModel, VectorClassificationModel
 
 log = logging.getLogger(__name__)
@@ -30,6 +33,21 @@ def strSkLearnModel(model):
     return re.sub(r",\s*", ", ", str(model))
 
 
+def _applySkLearnInputTransformer(inputs: pd.DataFrame, sklearnInputTransformer: Optional, fit: bool) -> pd.DataFrame:
+    if sklearnInputTransformer is None:
+        return inputs
+    else:
+        inputValues = inputs.values
+        shapeBefore = inputValues.shape
+        if fit:
+            inputValues = sklearnInputTransformer.fit_transform(inputValues)
+        else:
+            inputValues = sklearnInputTransformer.transform(inputValues)
+        if inputValues.shape != shapeBefore:
+            raise Exception("sklearnInputTransformer changed the shape of the input, which is unsupported. Consider using an a DFTSkLearnTransformer in inputTransformers instead.")
+        return pd.DataFrame(inputValues, index=inputs.index, columns=inputs.columns)
+
+
 class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
     """
     Base class for models built upon scikit-learn's model implementations
@@ -46,6 +64,7 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         self.sklearnOutputTransformer = None
         self.modelConstructor = modelConstructor
         self.modelArgs = modelArgs
+        self.fitArgs = {}
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["sklearnInputTransformer", "sklearnOutputTransformer", "modelConstructor", "modelArgs"]
@@ -67,18 +86,7 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         return self
 
     def _transformInput(self, inputs: pd.DataFrame, fit=False) -> pd.DataFrame:
-        if self.sklearnInputTransformer is None:
-            return inputs
-        else:
-            inputValues = inputs.values
-            shapeBefore = inputValues.shape
-            if fit:
-                inputValues = self.sklearnInputTransformer.fit_transform(inputValues)
-            else:
-                inputValues = self.sklearnInputTransformer.transform(inputValues)
-            if inputValues.shape != shapeBefore:
-                raise Exception("sklearnInputTransformer changed the shape of the input, which is unsupported. Consider using an a DFTSkLearnTransformer in inputTransformers instead.")
-            return pd.DataFrame(inputValues, index=inputs.index, columns=inputs.columns)
+        return _applySkLearnInputTransformer(inputs, self.sklearnInputTransformer, fit)
 
     def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         """
@@ -89,9 +97,20 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
         """
         pass
 
+    def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        """
+        Designed to be overridden in order to make input data-specific changes to fitArgs (arguments to be passed to the
+        underlying model's fit method)
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        """
+        pass
+
     def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         inputs = self._transformInput(inputs, fit=True)
         self._updateModelArgs(inputs, outputs)
+        self._updateFitArgs(inputs, outputs)
         self._fitSkLearn(inputs, outputs)
 
     @abstractmethod
@@ -124,7 +143,7 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
         if len(self.models) > 0:
             d["model[0]"] = strSkLearnModel(next(iter(self.models.values())))
         else:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -133,7 +152,7 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             model = createSkLearnModel(self.modelConstructor,
                     self.modelArgs,
                     outputTransformer=copy.deepcopy(self.sklearnOutputTransformer))
-            model.fit(inputs, outputs[predictedVarName])
+            model.fit(inputs, outputs[predictedVarName], **self.fitArgs)
             self.models[predictedVarName] = model
 
     def _predictSkLearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
@@ -159,7 +178,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
         if self.model is not None:
             d["model"] = strSkLearnModel(self.model)
         else:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         return d
 
     def _fitSkLearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -169,7 +188,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
         outputValues = outputs.values
         if outputValues.shape[1] == 1:  # for 1D output, shape must be (numSamples,) rather than (numSamples, 1)
             outputValues = np.ravel(outputValues)
-        self.model.fit(inputs, outputValues)
+        self.model.fit(inputs, outputValues, **self.fitArgs)
 
     def _predictSkLearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
         Y = self.model.predict(inputs)
@@ -177,26 +196,33 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor, **modelArgs):
+    def __init__(self, modelConstructor, useComputedClassWeights=False, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
         :param modelArgs: arguments to be passed to the sklearn model constructor
+        :param useComputedClassWeights: whether to compute class weights from the training data that is given and pass it on to the
+            classifier's fit method; weighted data points may not be supported for all types of models
         """
         super().__init__()
         self.modelConstructor = modelConstructor
         self.sklearnInputTransformer = None
         self.sklearnOutputTransformer = None
         self.modelArgs = modelArgs
+        self.fitArgs = {}
+        self.useComputedClassWeights = useComputedClassWeights
         self.model = None
+
+    def __setstate__(self, state):
+        setstate(AbstractSkLearnVectorClassificationModel, self, state, newDefaultProperties={"useComputedClassWeights": False})
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["modelConstructor", "sklearnInputTransformer", "sklearnOutputTransformer",
-                                              "modelArgs", "model"]
+            "modelArgs", "model"]
 
     def _toStringAdditionalEntries(self) -> Dict[str, Any]:
         d = super()._toStringAdditionalEntries()
         if self.model is None:
-            d["modelConstructor"] = f"{self.modelConstructor.__name__}{self.modelArgs}"
+            d["modelConstructor"] = f"{self.modelConstructor.__name__}({dictString(self.modelArgs)})"
         else:
             d["model"] = strSkLearnModel(self.model)
         return d
@@ -226,21 +252,33 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         """
         pass
 
+    def _updateFitArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+        """
+        Designed to be overridden in order to make input data-specific changes to fitArgs (arguments to be passed to the
+        underlying model's fit method)
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        """
+        pass
+
     def _fitClassifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        inputValues = self._transformInput(inputs, fit=True)
+        inputs = self._transformInput(inputs, fit=True)
         self._updateModelArgs(inputs, outputs)
+        self._updateFitArgs(inputs, outputs)
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
-        self.model.fit(inputValues, np.ravel(outputs.values))
+        kwargs = dict(self.fitArgs)
+        if self.useComputedClassWeights:
+            class2weight = self._computeClassWeights(outputs)
+            classes = outputs.iloc[:, 0]
+            weights = [class2weight[cls] for cls in classes]
+            kwargs["sample_weight"] = np.array(weights)
+        outputValues = np.ravel(outputs.values)
+        self.model.fit(inputs, outputValues, **kwargs)
 
-    def _transformInput(self, inputs: pd.DataFrame, fit=False) -> np.ndarray:
-        inputValues = inputs.values
-        if self.sklearnInputTransformer is not None:
-            if fit:
-                inputValues = self.sklearnInputTransformer.fit_transform(inputValues)
-            else:
-                inputValues = self.sklearnInputTransformer.transform(inputValues)
-        return inputValues
+    def _transformInput(self, inputs: pd.DataFrame, fit=False) -> pd.DataFrame:
+        return _applySkLearnInputTransformer(inputs, self.sklearnInputTransformer, fit)
 
     def _predict(self, x: pd.DataFrame):
         inputValues = self._transformInput(x)
@@ -258,3 +296,42 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
     def set_params(self, **params):
         self.model.set_params(**params)
 
+    def _computeClassWeights(self, outputs: pd.DataFrame):
+        """
+        :param outputs: the output data frame containing the class labels as the first column
+        :return: the dictionary of class weights mapping class to weight value
+        """
+        classes: pd.Series = outputs.iloc[:,0]
+        counts = classes.value_counts()
+        rfreqs = counts / counts.sum()
+        weights: pd.Series = 1.0 / rfreqs
+        return weights.to_dict()
+
+
+def _getModelFeatureImportanceVector(model):
+    candAttributes = ("feature_importances_", "coef_")
+    for attr in candAttributes:
+        if hasattr(model, attr):
+            importanceValues = getattr(model, attr)
+            if attr == "coef_":
+                importanceValues = np.abs(importanceValues)  # for coefficients in linear models, use the absolute values
+            return importanceValues
+    raise ValueError(f"Model {model} has none of the attributes {candAttributes}")
+
+
+class FeatureImportanceProviderSkLearnRegressionMultipleOneDim(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, Dict[str, int]]:
+        self: AbstractSkLearnMultipleOneDimVectorRegressionModel
+        return {targetFeature: dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(model))) for targetFeature, model in self.models.items()}
+
+
+class FeatureImportanceProviderSkLearnRegressionMultiDim(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
+        self: AbstractSkLearnMultiDimVectorRegressionModel
+        return dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(self.model)))
+
+
+class FeatureImportanceProviderSkLearnClassification(FeatureImportanceProvider):
+    def getFeatureImportanceDict(self) -> Dict[str, float]:
+        self: AbstractSkLearnVectorClassificationModel
+        return dict(zip(self._modelInputVariableNames, _getModelFeatureImportanceVector(self.model)))

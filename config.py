@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 __config_instance = None
 
-topLevelDirectory = os.path.dirname(__file__)
+topLevelDirectory = os.path.abspath(os.path.dirname(__file__))
 
 
 class __Configuration:
@@ -66,7 +66,7 @@ class __Configuration:
         :return: the queried path
         """
         path_string = self._get_non_empty_entry(key)
-        path = os.path.abspath(path_string)
+        path = os.path.abspath(os.path.join(topLevelDirectory, path_string))
         if not os.path.exists(path):
             if isinstance(key, list):
                 key = ".".join(key)  # purely for logging

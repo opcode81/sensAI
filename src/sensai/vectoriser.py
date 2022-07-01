@@ -4,6 +4,7 @@ from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Ite
 
 import numpy as np
 
+from .util import LogTime
 from .util.pickle import setstate
 from .util.string import listString, ToStringMixin
 
@@ -17,6 +18,9 @@ class Vectoriser(Generic[T], ToStringMixin):
     A vectoriser represents a method for the conversion of instances of some type T into
     vectors, i.e. one-dimensional (numeric) arrays, or (in the special case of a 1D vector) scalars
     """
+
+    log = log.getChild(__qualname__)
+
     def __init__(self, f: Callable[[T], Union[float, np.ndarray, list]], transformer=None):
         """
         :param f: the function which maps from an instance of T to an array/list/scalar
@@ -75,7 +79,7 @@ class Vectoriser(Generic[T], ToStringMixin):
             value = self.transformer.transform([value])[0]
         return value
 
-    def applyMulti(self, items: Iterable[T], transform=True) -> List[np.array]:
+    def applyMulti(self, items: Iterable[T], transform=True, useCache=False, verbose=False) -> List[np.array]:
         """
         Applies this vectoriser to multiple items at once.
         Especially for cases where this vectoriser uses a transformer, this method is significantly faster than
@@ -83,12 +87,33 @@ class Vectoriser(Generic[T], ToStringMixin):
 
         :param items: the items to be vectorised
         :param transform: whether to apply this instance's transformer (if any)
+        :param useCache: whether to apply caching of the value function f given at construction (keeping track of outputs for
+            each input object id), which can significantly speed up computation in cases where an items appears more than
+            once in the collection of items
+        :param verbose: whether to generate log messages
         :return: a list of vectors
         """
-        values = [self._f(x) for x in items]
-        if self.transformer is not None and transform:
-            values = self.transformer.transform(values)
-        return values
+        if verbose:
+            self.log.info(f"Applying {self}")
+
+        with LogTime("Application", enabled=verbose, logger=self.log):
+            if not useCache:
+                computeValue = self._f
+            else:
+                cache = {}
+
+                def computeValue(x):
+                    key = id(x)
+                    value = cache.get(key)
+                    if value is None:
+                        value = self._f(x)
+                        cache[key] = value
+                    return value
+
+            values = [computeValue(x) for x in items]
+            if self.transformer is not None and transform:
+                values = self.transformer.transform(values)
+            return values
 
     class ResultType(Enum):
         SCALAR = 0
@@ -124,6 +149,9 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
     are used for training, we take into consideration the fact that the sequences of T may overlap and thus training
     is performed on the set of unique instances.
     """
+
+    log = log.getChild(__qualname__)
+
     class FittingMode(Enum):
         """
         Determines how the individual vectorisers are fitted based on several sequences of objects of type T that are given.
@@ -183,7 +211,7 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
             vectorsList.append(conc)
         return vectorsList
 
-    def applyMulti(self, sequences: Iterable[Sequence[T]]) -> Tuple[List[List[np.array]], List[int]]:
+    def applyMulti(self, sequences: Iterable[Sequence[T]], useCache=False, verbose=False) -> Tuple[List[List[np.array]], List[int]]:
         """
         Applies this vectoriser to multiple sequences of objects of type T, where each sequence is mapped to a sequence
         of 1D arrays.
@@ -191,16 +219,25 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         use transformers.
 
         :param sequences: the sequences to vectorise
+        :param useCache: whether to apply caching of the value functions of contained vectorisers (keeping track of outputs for
+            each input object id), which can significantly speed up computation in cases where the given sequences contain individual
+            items more than once
+        :param verbose: whether to generate log messages
         :return: a pair (vl, l) where vl is a list of lists of vectors/arrays and l is a list of integers containing the lengths
             of the sequences
         """
+        if verbose:
+            self.log.info(f"Applying {self} (useCache={useCache})")
+
         lengths = [len(s) for s in sequences]
 
+        if verbose:
+            self.log.info("Generating combined sequence")
         combinedSeq = []
         for seq in sequences:
             combinedSeq.extend(seq)
 
-        individualVectoriserResults = [vectoriser.applyMulti(combinedSeq) for vectoriser in self.vectorisers]
+        individualVectoriserResults = [vectoriser.applyMulti(combinedSeq, useCache=useCache, verbose=verbose) for vectoriser in self.vectorisers]
         concVectors = [np.concatenate(x, axis=0) for x in zip(*individualVectoriserResults)]
 
         vectorSequences = []
@@ -211,7 +248,7 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
 
         return vectorSequences, lengths
 
-    def applyMultiWithPadding(self, sequences: Sequence[Sequence[T]]) -> Tuple[List[List[np.array]], List[int]]:
+    def applyMultiWithPadding(self, sequences: Sequence[Sequence[T]], useCache=False, verbose=False) -> Tuple[List[List[np.array]], List[int]]:
         """
         Applies this vectoriser to multiple sequences of objects of type T, where each sequence is mapped to a sequence
         of 1D arrays.
@@ -219,10 +256,16 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         is reached (padding).
 
         :param sequences: the sequences to vectorise
+        :param useCache: whether to apply caching of the value functions of contained vectorisers (keeping track of outputs for
+            each input object id), which can significantly speed up computation in cases where the given sequences contain individual
+            items more than once
+        :param verbose: whether to generate log messages
         :return: a pair (vl, l) where vl is a list of lists of vectors/arrays, each list having the same length, and l is a list of
             integers containing the original unpadded lengths of the sequences
         """
-        result, lengths = self.applyMulti(sequences)
+        result, lengths = self.applyMulti(sequences, useCache=useCache, verbose=verbose)
+        if verbose:
+            self.log.info("Applying padding")
         maxLength = max(lengths)
         dim = len(result[0][0])
         dummyVec = np.zeros((dim,))

@@ -10,10 +10,15 @@ from sklearn.preprocessing import OneHotEncoder
 
 from .sklearn_transformer import SkLearnTransformerProtocol
 from ..columngen import ColumnGenerator
-from ..util import flattenArguments
+from ..util import flattenArguments, countNotNone
 from ..util.pandas import DataFrameColumnChangeTracker
 from ..util.pickle import setstate
 from ..util.string import orRegexGroup, ToStringMixin
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..featuregen import FeatureGenerator
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +53,12 @@ class DataFrameTransformer(ABC, ToStringMixin):
         """
         return self._name
 
-    def setName(self, name):
+    def setName(self, name: str):
         self._name = name
+
+    def withName(self, name: str):
+        self.setName(name)
+        return self
 
     @abstractmethod
     def _fit(self, df: pd.DataFrame):
@@ -85,6 +94,30 @@ class DataFrameTransformer(ABC, ToStringMixin):
     def fitApply(self, df: pd.DataFrame) -> pd.DataFrame:
         self.fit(df)
         return self.apply(df)
+
+    def toFeatureGenerator(self, categoricalFeatureNames: Optional[Union[Sequence[str], str]] = None,
+            normalisationRules: Sequence['DFTNormalisation.Rule'] = (),
+            normalisationRuleTemplate: 'DFTNormalisation.RuleTemplate' = None,
+            addCategoricalDefaultRules=True):
+        # need to import here to prevent circular imports
+        from ..featuregen import FeatureGeneratorFromDFT
+        return FeatureGeneratorFromDFT(
+            self, categoricalFeatureNames=categoricalFeatureNames, normalisationRules=normalisationRules,
+            normalisationRuleTemplate=normalisationRuleTemplate, addCategoricalDefaultRules=addCategoricalDefaultRules
+        )
+
+
+class DFTFromFeatureGenerator(DataFrameTransformer):
+    def _fit(self, df: pd.DataFrame):
+        self.fgen.fit(df, ctx=None)
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.fgen.generate(df)
+
+    def __init__(self, fgen: "FeatureGenerator"):
+        super().__init__()
+        self.fgen = fgen
+        self.setName(f"{self.__class__.__name__}[{self.fgen.getName()}]")
 
 
 class InvertibleDataFrameTransformer(DataFrameTransformer, ABC):
@@ -437,13 +470,28 @@ class DFTNormalisation(DataFrameTransformer):
     """
     Applies normalisation/scaling to a data frame by applying a set of transformation rules, where each
     rule defines a set of columns to which it applies (learning a single transformer based on the values
-    of all applicable columns)
+    of all applicable columns).
+    DFTNormalisation ignores N/A values during fitting and application.
     """
 
     class RuleTemplate:
         def __init__(self, skip=False, unsupported=False, transformer: SkLearnTransformerProtocol = None,
                 transformerFactory: Callable[[], SkLearnTransformerProtocol] = None, independentColumns=False):
             """
+            Creates a rule template which applies to one or more features/columns (depending on context).
+            Use parameters as follows:
+
+                * If the relevant features are already normalised, pass ``skip=True``
+                * If the relevant features cannot be normalised (e.g. because they are categorical), pass ``unsupported=True``
+                * If the relevant features shall be normalised, the other parameters apply.
+                  No parameters, i.e. ``RuleTemplate()``, are an option if ...
+
+                    * a default transformer factory is specified in the :class:`DFTNormalisation` instance and its application
+                      is suitable for the relevant set of features.
+                      Otherwise, specify either ``transformerFactory`` or ``transformer``.
+                    * all relevant features are to be normalised in the same way.
+                      Otherwise, specify ``independentColumns=True``.
+
             :param skip: flag indicating whether no transformation shall be performed on all of the columns
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
@@ -453,12 +501,12 @@ class DFTNormalisation(DataFrameTransformer):
                 feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
             :param transformerFactory: a factory for the generation of the transformer instance, which will only be applied if `transformer`
                 is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default factory will
-                be used. See `SkLearnTransformerFactoryFactory` for convenient construction options.
+                be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
             :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
                 rule matches multiple columns.
             """
-            if skip and transformer is not None:
-                raise ValueError("skip==True while transformer is not None")
+            if (skip or unsupported) and countNotNone(transformer, transformerFactory) > 0:
+                raise ValueError("Passed transformer or transformerFactory while skip=True or unsupported=True")
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
@@ -496,7 +544,7 @@ class DFTNormalisation(DataFrameTransformer):
                 feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
             :param transformerFactory: a factory for the generation of the transformer instance, which will only be applied if `transformer`
                 is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default factory will
-                be used. See `SkLearnTransformerFactoryFactory` for convenient construction options.
+                be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
             :param arrayValued: whether the column values are not scalars but arrays (of arbitrary lengths).
                 It is assumed that all entries in such arrays are to be normalised in the same way.
                 If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
@@ -541,7 +589,9 @@ class DFTNormalisation(DataFrameTransformer):
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
         """
-        :param rules: the set of rules; rules are always fitted and applied in the given order
+        :param rules: the set of rules; rules are always fitted and applied in the given order.
+            A convenient way to obtain a set of rules in the :class:`sensai.vector_model.VectorModel` context is from a
+            :class:`sensai.featuregen.FeatureCollector` or :class:`sensai.featuregen.MultiFeatureGenerator`.
         :param defaultTransformerFactory: a factory for the creation of transformer instances (from sklearn.preprocessing, e.g. StandardScaler)
             that shall be used to create a transformer for all rules that don't specify a particular transformer.
             The default transformer will only be applied to columns matched by such rules, unmatched columns will
@@ -653,6 +703,9 @@ class DFTNormalisation(DataFrameTransformer):
 
 
 class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
+    """
+    Extends a data frame with columns generated from ColumnGenerator instances
+    """
     def __init__(self, columnGenerators: Sequence[ColumnGenerator], inplace=False):
         super().__init__()
         self.columnGenerators = columnGenerators
@@ -674,7 +727,9 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
 
 class DFTCountEntries(RuleBasedDataFrameTransformer):
     """
-    Adds a new column with counts of the values on a selected column
+    Transforms a data frame, based on one of its columns, into a new data frame containing two columns that indicate the counts
+    of unique values in the input column. It is the "DataFrame output version" of pd.Series.value_counts.
+    Each row of the output column holds a unique value of the input column and the number of times it appears in the input column.
     """
     def __init__(self, columnForEntryCount: str, columnNameForResultingCounts: str = "counts"):
         super().__init__()
@@ -799,3 +854,66 @@ class DFTSortColumns(RuleBasedDataFrameTransformer):
     """
     def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return df[sorted(df.columns)]
+
+
+class DFTFillNA(RuleBasedDataFrameTransformer):
+    """
+    Fills NA/NaN values with the given value
+    """
+    def __init__(self, fillValue, inplace: bool = False):
+        super().__init__()
+        self.fillValue = fillValue
+        self.inplace = inplace
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.inplace:
+            df.fillna(value=self.fillValue, inplace=True)
+            return df
+        else:
+            return df.fillna(value=self.fillValue)
+
+
+class DFTCastCategoricalColumns(RuleBasedDataFrameTransformer):
+    """
+    Casts columns with dtype category to the given type.
+    This can be useful in cases where categorical columns are not accepted by the model but the column values are actually numeric,
+    in which case the cast to a numeric value yields an acceptable label encoding.
+    """
+    def __init__(self, columns: Optional[List[str]] = None, dtype=float):
+        """
+        :param columns: the columns to convert; if None, convert all that have dtype category
+        :param dtype: the data type to which categorical columns are to be converted
+        """
+        super().__init__()
+        self.columns = columns
+        self.dtype = dtype
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        columns = self.columns if self.columns is not None else df.columns
+        for col in columns:
+            s = df[col]
+            if s.dtype.name == "category":
+                df[col] = s.astype(self.dtype)
+        return df
+    
+
+class DFTDropNA(RuleBasedDataFrameTransformer):
+    """
+    Drops rows or columns containing NA/NaN values
+    """
+    def __init__(self, axis=0, inplace=False):
+        """
+        :param axis: 0 to drop rows, 1 to drop columns containing an N/A value
+        :param inplace: whether to perform the operation in-place on the input data frame
+        """
+        super().__init__()
+        self.axis = axis
+        self.inplace = inplace
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.inplace:
+            df.dropna(axis=self.axis, inplace=True)
+            return df
+        else:
+            return df.dropna(axis=self.axis)

@@ -229,10 +229,10 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         return None if idx is None else (self.keys[idx], self.values[idx])
 
     def valueSliceInner(self, lowerBoundKey, upperBoundKey):
-        return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
+        return array_util.valueSliceInner(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
 
-    def valueSliceOuter(self, lowerBoundKey, upperBoundKey):
-        return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values)
+    def valueSliceOuter(self, lowerBoundKey, upperBoundKey, fallback=False):
+        return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values, fallbackBounds=fallback)
 
 
 class SortedKeyValuePairs(Generic[TKey, TValue]):

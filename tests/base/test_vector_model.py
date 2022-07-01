@@ -1,13 +1,16 @@
+import random
 from copy import copy
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from sensai import InputOutputData
 from sensai.data_transformation import DFTDRowFilterOnIndex, \
-    InvertibleDataFrameTransformer
+    InvertibleDataFrameTransformer, DFTDropNA
 from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureGenerator
-from sensai.vector_model import RuleBasedVectorRegressionModel, VectorRegressionModel
+from sensai.vector_model import RuleBasedVectorRegressionModel, VectorRegressionModel, VectorClassificationModel
 
 
 class FittableFgen(FeatureGenerator):
@@ -105,7 +108,7 @@ class TestIsFitted:
     @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedVectorModel, fittedVectorModel])
     def test_isFittedWithFittableProcessors(self, modelConstructor, fittableDFT, fittableFgen):
         # is fitted after fit with model
-        model = modelConstructor().withInputTransformers(fittableDFT)
+        model = modelConstructor().withRawInputTransformers(fittableDFT)
         assert not model.isFitted()
         model.fit(testX, testY)
         assert model.isFitted()
@@ -113,7 +116,7 @@ class TestIsFitted:
         # is fitted if DFT is fitted
         fittedDFT = copy(fittableDFT)
         fittedDFT.fit(testX)
-        model = modelConstructor().withInputTransformers(fittedDFT)
+        model = modelConstructor().withRawInputTransformers(fittedDFT)
         assert model.isFitted()
 
         # same for fgen
@@ -146,4 +149,30 @@ class TestIsFitted:
         assert vectorModel.getTargetTransformer().isFitted()
 
 
+def test_InputRowsRemovedByTransformer(irisClassificationTestCase):
+    """
+    Tests handling of case where the input generation process removes rows from the raw data
+    """
+    iodata = irisClassificationTestCase.data
 
+    # create some random N/A values in one of the columns
+    numNAValues = 20
+    inputs = iodata.inputs.copy()
+    rand = random.Random(42)
+    fullIndices = list(range(len(inputs)))
+    indices = rand.sample(fullIndices, numNAValues)
+    inputs.iloc[:, 0].iloc[indices] = np.nan
+    iodata = InputOutputData(inputs, iodata.outputs)
+    expectedLength = len(iodata) - numNAValues
+
+    class MyModel(VectorClassificationModel):
+        def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
+            assert len(X) == expectedLength
+            assert len(y) == expectedLength
+            assert all(X.index.values == y.index.values)
+
+        def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
+            pass
+
+    model = MyModel().withRawInputTransformers(DFTDropNA())
+    model.fit(iodata.inputs, iodata.outputs)

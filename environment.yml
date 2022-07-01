@@ -1,26 +1,46 @@
+# environment definition for development
+# NOTE: versions are mostly unpinned, because this facilitates conda dependency resolution. Also,
+# sensAI should be compatible to all (newer) versions of the dependencies. If it isn't, we need to specify 
+# an upper version bound in setup.py (where it matters the most) as well as here.
+# Compatibility with old (pinned) versions and the latest versions is tested in the tox build.
 name: sensai
 channels:
   - pytorch
-  - conda-forge
-  - anaconda
   - defaults
+  - conda-forge
 dependencies:
-  - python=3.7
-  - pytorch=1.4.0
-  - tensorflow=1.14.0
-  - pyqt=5.12
-  - psutil=5.6.7
-  - pytorch=1.4.0
-  - catboost=0.23
-  - xgboost=1.4.0
-  - pytest=5.4.1
-  - tox=3.14.6
-  - bump2version
-  - jupyter
-  - pyyaml=5.3
-  - lightgbm=3.1.1
-  - sphinx_rtd_theme
+  # basics
+  # we use Python 3.8 because it has better conda dependency support; the code must still be compatible to 3.7 (which is tested by the github build)
+  - python=3.8
   - pip
+  # optional sensai dependencies for development
+  # NOTE: catboost is disabled, because it causes conflicts
+  #- catboost
+  - pytorch
+  - pyqt
+  - psutil
+  - xgboost
+  - lightgbm
+  - utm=0.7.0
+  - geopandas
+  # for notebook support
+  - jupyter
+  # for tests
+  - pytest
+  # for docs build
+  - sphinx 
+  - sphinx_rtd_theme>=0.5.1
+  - nbsphinx
+  # for release process
+  - bump2version
   - pip:
-      - -r file:requirements.txt
-      - nbsphinx
+      # non-optional sensai dependencies
+      - -r requirements-relaxed.txt
+      # optional sensai pip dependencies
+      # clearml is only available through pip, and pulling tensorflow from conda causes dependency issues
+      - clearml
+      - tensorflow-cpu
+      - pytorch-lightning
+      # required for locally running the tox build (which will work on Linux only at this time)
+      - tox
+      - virtualenv

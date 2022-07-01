@@ -6,8 +6,7 @@ import sklearn.naive_bayes
 import sklearn.neural_network
 import sklearn.tree
 
-from .sklearn_base import AbstractSkLearnVectorClassificationModel
-
+from .sklearn_base import AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification
 
 log = logging.getLogger(__name__)
 
@@ -18,10 +17,12 @@ class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassifi
             min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
 
 
-class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    def __init__(self, min_samples_leaf=8, random_state=42, **modelArgs):
+class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
+    def __init__(self, min_samples_leaf=8, random_state=42, useComputedClassWeights=False, **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestClassifier,
-            random_state=random_state, min_samples_leaf=min_samples_leaf, **modelArgs)
+            random_state=random_state, min_samples_leaf=min_samples_leaf,
+            useComputedClassWeights=useComputedClassWeights,
+            **modelArgs)
 
 
 class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
@@ -51,3 +52,8 @@ class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassif
 class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, random_state=42, **modelArgs):
         super().__init__(sklearn.svm.SVC, random_state=random_state, **modelArgs)
+
+
+class SkLearnLogisticRegressionVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, random_state=42, **modelArgs):
+        super().__init__(sklearn.linear_model.LogisticRegression, random_state=random_state, **modelArgs)

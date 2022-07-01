@@ -1,10 +1,15 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Sequence, TypeVar, List, Generic
 
 import numpy as np
 import pandas as pd
 import scipy.stats
+from sklearn.model_selection import StratifiedShuffleSplit
 
+from sensai.util.string import ToStringMixin
+
+log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -47,10 +52,26 @@ class InputOutputArrays(BaseInputOutputData[np.ndarray]):
         return DataLoader(dataSet, batch_size=batchSize, shuffle=shuffle)
 
 
-# TODO: Rename to InputOutputDataFrames when the time for breaking changes has come
-class InputOutputData(BaseInputOutputData[pd.DataFrame]):
+class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
+    """
+    Holds input and output data for learning problems
+    """
     def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         super().__init__(inputs, outputs)
+
+    def _toStringObjectInfo(self) -> str:
+        return f"N={len(self.inputs)}, numInputColumns={len(self.inputs.columns)}, numOutputColumns={len(self.outputs.columns)}"
+
+    @classmethod
+    def fromDataFrame(cls, df: pd.DataFrame, *outputColumns: str) -> "InputOutputData":
+        """
+        :param df: a data frame containing both input and output columns
+        :param outputColumns: the output column name(s)
+        :return: an InputOutputData instance with inputs and outputs separated
+        """
+        inputs = df[[c for c in df.columns if c not in outputColumns]]
+        outputs = df[list(outputColumns)]
+        return cls(inputs, outputs)
 
     def filterIndices(self, indices: Sequence[int]) -> __qualname__:
         inputs = self.inputs.iloc[indices]
@@ -134,17 +155,40 @@ class DataSplitterFromDataFrameSplitter(DataSplitter[InputOutputData]):
         return A, B
 
 
+class DataSplitterFromSkLearnSplitter(DataSplitter):
+    def __init__(self, skLearnSplitter):
+        """
+        :param skLearnSplitter: an instance of one of the splitter classes from sklearn.model_selection,
+            see https://scikit-learn.org/stable/modules/classes.html#module-sklearn.model_selection
+        """
+        self.skLearnSplitter = skLearnSplitter
+
+    def split(self, data: TInputOutputData) -> Tuple[TInputOutputData, TInputOutputData]:
+        splitterResult = self.skLearnSplitter.split(data.inputs, data.outputs)
+        split = next(iter(splitterResult))
+        firstIndices, secondIndices = split
+        return data.filterIndices(firstIndices), data.filterIndices(secondIndices)
+
+
+class DataSplitterStratifiedShuffleSplit(DataSplitterFromSkLearnSplitter):
+    def __init__(self, fractionalSizeOfFirstSet: float, randomSeed=42):
+        super().__init__(StratifiedShuffleSplit(n_splits=1, train_size=fractionalSizeOfFirstSet, random_state=randomSeed))
+
+
 class DataFrameSplitter(ABC):
     @abstractmethod
     def computeSplitIndices(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[Sequence[int], Sequence[int]]:
         pass
 
     @staticmethod
-    def split(df: pd.DataFrame, indicesPair: Tuple[Sequence[int], Sequence[int]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def splitWithIndices(df: pd.DataFrame, indicesPair: Tuple[Sequence[int], Sequence[int]]) -> Tuple[pd.DataFrame, pd.DataFrame]:
         indicesA, indicesB = indicesPair
         A = df.iloc[indicesA]
         B = df.iloc[indicesB]
         return A, B
+
+    def split(self, df: pd.DataFrame, fractionalSizeOfFirstSet: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        return self.splitWithIndices(df, self.computeSplitIndices(df, fractionalSizeOfFirstSet))
 
 
 class DataFrameSplitterFractional(DataFrameSplitter):

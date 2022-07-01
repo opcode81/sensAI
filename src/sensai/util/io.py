@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Sequence, Optional, Tuple
+from typing import Sequence, Optional, Tuple, List
 
 import matplotlib.figure
 from matplotlib import pyplot as plt
@@ -64,6 +64,12 @@ class ResultWriter:
             f.write(content)
         return p
 
+    def writeTextFileLines(self, filenameSuffix, lines: List[str]):
+        p = self.path(filenameSuffix, extensionToAdd="txt")
+        self.log.info(f"Saving text file {p}")
+        writeTextFileLines(lines, p)
+        return p
+
     def writeDataFrameTextFile(self, filenameSuffix, df: pd.DataFrame):
         p = self.path(filenameSuffix, extensionToAdd="df.txt", validOtherExtensions="txt")
         self.log.info(f"Saving data frame text file {p}")
@@ -75,6 +81,7 @@ class ResultWriter:
         p = self.path(filenameSuffix, extensionToAdd="csv")
         self.log.info(f"Saving data frame CSV file {p}")
         df.to_csv(p)
+        return p
 
     def writeFigure(self, filenameSuffix, fig, closeFigure=False):
         """
@@ -98,3 +105,32 @@ class ResultWriter:
         p = self.path(filenameSuffix, extensionToAdd="pickle")
         self.log.info(f"Saving pickle {p}")
         dumpPickle(obj, p)
+        return p
+
+
+def writeTextFileLines(lines: List[str], path):
+    """
+    :param lines: the lines to write (without a trailing newline, which will be added)
+    :param path: the path of the text file to write to
+    """
+    with open(path, "w") as f:
+        for line in lines:
+            f.write(line)
+            f.write("\n")
+
+
+def readTextFileLines(path, strip=True, skipEmpty=True) -> List[str]:
+    """
+    :param path: the path of the text file to read from
+    :param strip: whether to strip each line, removing whitespace/newline characters
+    :param skipEmpty: whether to skip any lines that are empty (after stripping)
+    :return: the list of lines
+    """
+    lines = []
+    with open(path, "r") as f:
+        for line in f.readlines():
+            if strip:
+                line = line.strip()
+            if not skipEmpty or line != "":
+                lines.append(line)
+    return lines

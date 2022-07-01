@@ -1,13 +1,17 @@
 import logging
 from matplotlib.colors import LinearSegmentedColormap
-from typing import Sequence, Callable
+from typing import Sequence, Callable, TypeVar, Type, Tuple
 
+import matplotlib.ticker as plticker
 import matplotlib.figure
 from matplotlib import pyplot as plt
 import numpy as np
+import seaborn as sns
 
 
 log = logging.getLogger(__name__)
+
+MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
 
 
 def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
@@ -48,7 +52,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
         rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
-    fmt = '.2f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
+    fmt = '.4f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
     thresh = matrix.max() / 2.
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):
@@ -59,32 +63,85 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
     return fig
 
 
+TPlot = TypeVar("TPlot", bound="Plot")
+
+
 class Plot:
-    def __init__(self, draw: Callable[[], plt.Axes] = None, name=None):
+    def __init__(self, draw: Callable[[], None] = None, name=None):
         """
         :param draw: function which returns a matplotlib.Axes object to show
         :param name: name/number of the figure, which determines the window caption; it should be unique, as any plot
             with the same name will have its contents rendered in the same window. By default, figures are number
             sequentially.
         """
-        self.fig: matplotlib.figure.Figure = plt.figure(name)
-        self.ax = draw()
+        fig, ax = plt.subplots(num=name)
+        self.fig: plt.Figure = fig
+        self.ax: plt.Axes = ax
+        draw()
 
-    def xlabel(self, label):
-        plt.xlabel(label)
+    def xlabel(self: Type[TPlot], label):
+        self.ax.set_xlabel(label)
         return self
 
-    def ylabel(self, label):
-        plt.ylabel(label)
+    def ylabel(self: Type[TPlot], label) -> TPlot:
+        self.ax.set_ylabel(label)
+        return self
+
+    def title(self: Type[TPlot], title: str) -> TPlot:
+        self.ax.set_title(title)
+        return self
+
+    def xlim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+        self.ax.set_xlim(minValue, maxValue)
+        return self
+
+    def ylim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+        self.ax.set_ylim(minValue, maxValue)
         return self
 
     def save(self, path):
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
+    def xtickMajor(self, base):
+        self.ax.xaxis.set_major_locator(plticker.MultipleLocator(base=base))
+
+    def ytickMajor(self, base):
+        self.ax.yaxis.set_major_locator(plticker.MultipleLocator(base=base))
+
+
 
 class ScatterPlot(Plot):
-    def __init__(self, x, y, c=((0, 0, 1, 0.05),), x_label=None, y_label=None, **kwargs):
+    N_MAX_TRANSPARENCY = 1000
+    N_MIN_TRANSPARENCY = 100
+    MAX_OPACITY = 0.5
+    MIN_OPACITY = 0.05
+
+    def __init__(self, x, y, c=None, c_base: Tuple[float, float, float]=(0, 0, 1), c_opacity=None, x_label=None, y_label=None, **kwargs):
+        """
+        :param x: the x values; if has name (e.g. pd.Series), will be used as axis label
+        :param y: the y values; if has name (e.g. pd.Series), will be used as axis label
+        :param c: the colour specification; if None, compose from ``c_base`` and ``c_opacity``
+        :param c_base: the base colour as (R, G, B) floats
+        :param c_opacity: the opacity; if None, automatically determine from number of data points
+        :param x_label:
+        :param y_label:
+        :param kwargs:
+        """
+        if c is None:
+            if c_base is None:
+                c_base = (0, 0, 1)
+            if c_opacity is None:
+                n = len(x)
+                if n > self.N_MAX_TRANSPARENCY:
+                    transparency = 1
+                elif n < self.N_MIN_TRANSPARENCY:
+                    transparency = 0
+                else:
+                    transparency = (n - self.N_MIN_TRANSPARENCY) / (self.N_MAX_TRANSPARENCY - self.N_MIN_TRANSPARENCY)
+                c_opacity = self.MIN_OPACITY + (self.MAX_OPACITY - self.MIN_OPACITY) * (1-transparency)
+            c = ((*c_base, c_opacity),)
+
         assert len(x) == len(y)
         if x_label is None and hasattr(x, "name"):
             x_label = x.name
@@ -96,7 +153,7 @@ class ScatterPlot(Plot):
                 plt.xlabel(x_label)
             if x_label is not None:
                 plt.ylabel(y_label)
-            return plt.scatter(x, y, c=c, **kwargs)
+            plt.scatter(x, y, c=c, **kwargs)
 
         super().__init__(draw)
 
@@ -129,6 +186,35 @@ class HeatMapPlot(Plot):
                 plt.xlabel(xLabel)
             if yLabel is not None:
                 plt.ylabel(yLabel)
-            return plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation="none", cmap=cmap, zorder=1, aspect="auto", **kwargs)
+            plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation="none", cmap=cmap, zorder=1, aspect="auto", **kwargs)
 
         super().__init__(draw)
+
+
+class HistogramPlot(Plot):
+    def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, binwidth=None, stat="probability", xlabel=None,
+            **kwargs):
+        stat="proportion"
+        if stat == "probability":
+            stat = "proportion"  # same semantics but "probability" not understood by ecdfplot
+
+        def draw():
+            sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
+            if cdf:
+                if cdfComplementary or stat not in ("count", "proportion"):
+                    sns.ecdfplot(values, stat=stat, complementary=cdfComplementary, color="orange")
+                else:
+                    sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange")
+            if xlabel is not None:
+                plt.xlabel(xlabel)
+
+        super().__init__(draw)
+
+        if stat in ("proportion", "probability"):
+            yTick = 0.1
+        elif stat == "percent":
+            yTick = 10
+        else:
+            yTick = None
+        if yTick is not None:
+            self.ytickMajor((yTick))

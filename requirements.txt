@@ -1,6 +1,8 @@
+# sensAI main requirements
+# These are the pinned lowest versions we test; setup.py relaxes them, changing them to lower bounds
 pandas~=1.0.0
 scipy~=1.4
 numpy~=1.18.0
 scikit-learn~=0.22.0
-seaborn~=0.10.0
+seaborn~=0.11.0
 typing-extensions~=3.7

@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from ...torch_base import MCDropoutCapableNNModule
-from ....util.string import objectRepr
+from ....util.string import objectRepr, functionName
 
 
 class MultiLayerPerceptron(MCDropoutCapableNNModule):
@@ -31,8 +31,8 @@ class MultiLayerPerceptron(MCDropoutCapableNNModule):
 
     def __str__(self):
         return objectRepr(self, dict(inputDim=self.inputDim, outputDim=self.outputDim, hiddenDims=self.hiddenDims,
-            hidActivationFn=self.hidActivationFn.__name__ if self.hidActivationFn is not None else None,
-            outputActivationFn=self.outputActivationFn.__name__ if self.outputActivationFn is not None else None,
+            hidActivationFn=functionName(self.hidActivationFn) if self.hidActivationFn is not None else None,
+            outputActivationFn=functionName(self.outputActivationFn) if self.outputActivationFn is not None else None,
             pDropout=self.pDropout))
 
     def forward(self, x):

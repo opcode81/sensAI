@@ -1,12 +1,13 @@
 import logging
-import numpy as np
-import seaborn as sns
 from abc import abstractmethod, ABC
-from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from typing import List, Sequence, Optional
 
-from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot
+from ...util.plot import HistogramPlot
 
 log = logging.getLogger(__name__)
 
@@ -168,26 +169,25 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
             statsList.append(stats)
         return RegressionEvalStatsCollection(statsList)
 
-    def plotErrorDistribution(self, bins=None, figure=True, titleAdd=None) -> Optional[plt.Figure]:
+    def plotErrorDistribution(self, bins="auto", titleAdd=None) -> Optional[plt.Figure]:
         """
-        :param bins: if None, seaborns default binning will be used
+        :param bins: bin specification (see :class:`HistogramPlot`)
         :param figure: whether to plot in a separate figure and return that figure
         :param titleAdd: a string to add to the title (on a second line)
 
         :return: the resulting figure object or None
         """
         errors = np.array(self.y_predicted) - np.array(self.y_true)
-        fig = None
         title = "Prediction Error Distribution"
         if titleAdd is not None:
             title += "\n" + titleAdd
-        if figure:
-            fig = plt.figure(title.replace("\n", " "))
-        sns.distplot(errors, bins=bins)
-        plt.title(title)
-        plt.xlabel("error (prediction - ground truth)")
-        plt.ylabel("probability density")
-        return fig
+        if bins == "auto" and len(errors) < 100:
+            bins = 10  # seaborn can crash with low number of data points and bins="auto" (tries to allocate vast amounts of memory)
+        plot = HistogramPlot(errors, bins=bins, kde=True)
+        plot.title(title)
+        plot.xlabel("error (prediction - ground truth)")
+        plot.ylabel("probability density")
+        return plot.fig
 
     def plotScatterGroundTruthPredictions(self, figure=True, titleAdd=None, **kwargs) -> Optional[plt.Figure]:
         """
@@ -198,7 +198,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "Scatter Plot of Ground Truth vs. Predicted Values"
+        title = "Scatter Plot of Predicted Values vs. Ground Truth"
         if titleAdd is not None:
             title += "\n" + titleAdd
         if figure:
@@ -228,7 +228,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         :return:  the resulting figure object or None
         """
         fig = None
-        title = "Heat Map of Ground Truth vs. Predicted Values"
+        title = "Heat Map of Predicted Values vs. Ground Truth"
         if titleAdd:
             title += "\n" + titleAdd
         if figure:
@@ -260,17 +260,33 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         return fig
 
 
-class RegressionEvalStatsCollection(EvalStatsCollection):
+class RegressionEvalStatsCollection(EvalStatsCollection[RegressionEvalStats, RegressionMetric]):
     def __init__(self, evalStatsList: List[RegressionEvalStats]):
         super().__init__(evalStatsList)
         self.globalStats = None
 
     def getGlobalStats(self) -> RegressionEvalStats:
-        """
-        Gets an evaluation statistics object that combines the data from all contained eval stats objects
-        """
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
             self.globalStats = RegressionEvalStats(y_predicted, y_true)
         return self.globalStats
+
+
+class RegressionEvalStatsPlot(EvalStatsPlot[RegressionEvalStats], ABC):
+    pass
+
+
+class RegressionEvalStatsPlotErrorDistribution(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotErrorDistribution(titleAdd=subtitle)
+
+
+class RegressionEvalStatsPlotHeatmapGroundTruthPredictions(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotHeatmapGroundTruthPredictions(titleAdd=subtitle)
+
+
+class RegressionEvalStatsPlotScatterGroundTruthPredictions(RegressionEvalStatsPlot):
+    def createFigure(self, evalStats: RegressionEvalStats, subtitle: str) -> plt.Figure:
+        return evalStats.plotScatterGroundTruthPredictions(titleAdd=subtitle)

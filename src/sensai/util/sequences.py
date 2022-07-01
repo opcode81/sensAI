@@ -163,21 +163,22 @@ def valueSliceInner(keys, lowerBoundKey, upperBoundKey, values=None):
     return values[firstIdx:lastIdx+1]
 
 
-def valueSliceOuter(keys, lowerBoundKey, upperBoundKey, values=None, fallbackBounds=True):
+def valueSliceOuter(keys, lowerBoundKey, upperBoundKey, values=None, fallbackBounds=False):
     """
     For a sorted array of keys and an array of corresponding values,
     finds indices i, j such that i is the largest key where keys[i] <= lowerBoundKey and
     j is the lowest key where keys[j] <= upperBoundKey,
     and returns the corresponding slice of values values[i:j+1].
     If such indices do not exists and fallbackBounds==True, the array bounds are used (i.e. 0 or len-1).
-    Given the indices i and j, the function returns values[i:j+1].
-    This is an outer slice which is the smallest slice that definitely contains two given bounds
+    If such indices do not exists and fallbackBounds==False, an exception is raised.
+    This returned slice is an outer slice, which is the smallest slice that definitely contains two given bounds
     (for fallbackBounds==False).
 
     :param keys: the sorted array of key values
     :param lowerBoundKey: the key value defining the lower bound
     :param upperBoundKey: the key value defining the upper bound
     :param values: the sorted array of values; if None, use keys
+    :param fallbackBounds: whether to use the smallest/largest index (i.e. 0 or len-1) as a fallback in case no matching bounds exist
     :return: the corresponding slice of `values`
     """
     if values is None:

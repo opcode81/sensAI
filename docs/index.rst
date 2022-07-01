@@ -5,8 +5,17 @@ sensAI - the Python library for sensible AI
    :caption: Guides and Tutorials
    :glob:
 
-   *
+   intro.ipynb
+   intro_old.ipynb
+   neural_networks.ipynb
+   tensor_models_pytorch_lightning.ipynb
+   coordinate_clustering.ipynb
+   clustering_evaluation.ipynb
+   tracking_experiments.ipynb
 
+..
+  Above, we can include any notebooks from ../notebooks; Within the build process, they will be copied
+  here by test_notebooks if they are referenced in this file.
 
 .. toctree::
    :caption: Modules

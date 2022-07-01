@@ -1,9 +1,10 @@
 import xgboost
 
-from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel
+from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel, \
+    FeatureImportanceProviderSkLearnRegressionMultipleOneDim, FeatureImportanceProviderSkLearnClassification
 
 
-class XGBGradientBosstedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class XGBGradientBoostedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultipleOneDim):
     """
     XGBoost's regression model using gradient boosted trees
     """
@@ -14,7 +15,7 @@ class XGBGradientBosstedVectorRegressionModel(AbstractSkLearnMultipleOneDimVecto
         super().__init__(xgboost.XGBRegressor, random_state=random_state, **modelArgs)
 
 
-class XGBRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
+class XGBRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultipleOneDim):
     """
     XGBoost's random forest regression model
     """
@@ -25,7 +26,7 @@ class XGBRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRe
         super().__init__(xgboost.XGBRFRegressor, random_state=random_state, **modelArgs)
 
 
-class XGBGradientBoostedVectorClassifictionModel(AbstractSkLearnVectorClassificationModel):
+class XGBGradientBoostedVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     """
     XGBoost's classification model using gradient boosted trees
     """
@@ -36,7 +37,7 @@ class XGBGradientBoostedVectorClassifictionModel(AbstractSkLearnVectorClassifica
         super().__init__(xgboost.XGBClassifier, random_state=random_state, **modelArgs)
 
 
-class XGBRandomForestVectorClassifictionModel(AbstractSkLearnVectorClassificationModel):
+class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     """
     XGBoost's random forest classification model
     """
