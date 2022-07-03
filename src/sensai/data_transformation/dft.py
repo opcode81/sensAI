@@ -476,7 +476,7 @@ class DFTNormalisation(DataFrameTransformer):
 
     class RuleTemplate:
         def __init__(self, skip=False, unsupported=False, transformer: SkLearnTransformerProtocol = None,
-                transformerFactory: Callable[[], SkLearnTransformerProtocol] = None, independentColumns=False):
+                transformerFactory: Callable[[], SkLearnTransformerProtocol] = None, independentColumns: Optional[bool] = None):
             """
             Creates a rule template which applies to one or more features/columns (depending on context).
             Use parameters as follows:
@@ -492,7 +492,7 @@ class DFTNormalisation(DataFrameTransformer):
                     * all relevant features are to be normalised in the same way.
                       Otherwise, specify ``independentColumns=True``.
 
-            :param skip: flag indicating whether no transformation shall be performed on all of the columns
+            :param skip: flag indicating whether no transformation shall be performed on all of the columns (because they are already normalised)
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if attempted)
             :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either transformerFactory
@@ -502,8 +502,9 @@ class DFTNormalisation(DataFrameTransformer):
             :param transformerFactory: a factory for the generation of the transformer instance, which will only be applied if `transformer`
                 is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default factory will
                 be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
-            :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
-                rule matches multiple columns.
+            :param independentColumns: whether, for the case where the rule matches multiple columns, the columns are independent and a separate transformation
+                is to be learned for each of them (rather than using the same transformation for all columns and learning the transformation from the data
+                of all columns); must be specified for rules matching more than one column, None is acceptable only for a single column
             """
             if (skip or unsupported) and countNotNone(transformer, transformerFactory) > 0:
                 raise ValueError("Passed transformer or transformerFactory while skip=True or unsupported=True")
@@ -529,7 +530,7 @@ class DFTNormalisation(DataFrameTransformer):
     class Rule(ToStringMixin):
         def __init__(self, regex: Optional[str], skip=False, unsupported=False, transformer: SkLearnTransformerProtocol = None,
                 transformerFactory: Callable[[], SkLearnTransformerProtocol] = None,
-                arrayValued=False, fit=True, independentColumns=False):
+                arrayValued=False, fit=True, independentColumns: Optional[bool] = None):
             """
             :param regex: a regular expression defining the column(s) the rule applies to.
                 If it applies to multiple columns, these columns will be normalised in the same way (using the same normalisation
@@ -549,8 +550,9 @@ class DFTNormalisation(DataFrameTransformer):
                 It is assumed that all entries in such arrays are to be normalised in the same way.
                 If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
             :param fit: whether the rule's transformer shall be fitted
-            :param independentColumns: whether a separate transformation is to be learned for each of the columns for the case where the
-                rule matches multiple columns.
+            :param independentColumns: whether, for the case where the rule matches multiple columns, the columns are independent and a separate transformation
+                is to be learned for each of them (rather than using the same transformation for all columns and learning the transformation from the data
+                of all columns); must be specified for rules matching more than one column, None is acceptable only for single-column rules
             """
             if skip and (transformer is not None or transformerFactory is not None):
                 raise ValueError("skip==True while transformer/transformerFactory is not None")
@@ -577,14 +579,17 @@ class DFTNormalisation(DataFrameTransformer):
             return d
 
         def setRegex(self, regex: str):
-            self.regex = re.compile(regex)
+            try:
+                self.regex = re.compile(regex)
+            except Exception as e:
+                raise Exception(f"Could not compile regex '{regex}': {e}")
 
         def matches(self, column: str):
             if self.regex is None:
                 raise Exception("Attempted to apply a placeholder rule. Perhaps the feature generator from which the rule originated was never applied in order to have the rule instantiated.")
             return self.regex.fullmatch(column) is not None
 
-        def matchingColumns(self, columns: Sequence[str]):
+        def matchingColumns(self, columns: Sequence[str]) -> List[str]:
             return [col for col in columns if self.matches(col)]
 
     def __init__(self, rules: Sequence[Rule], defaultTransformerFactory=None, requireAllHandled=True, inplace=False):
@@ -654,11 +659,9 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            r = orRegexGroup(matchingColumns)
-            try:
-                specialisedRule.regex = re.compile(r)
-            except Exception as e:
-                raise Exception(f"Could not compile regex '{r}': {e}")
+            if specialisedRule.independentColumns is None and len(matchingColumns) > 1:
+                raise ValueError(f"Normalisation rule matching multiple columns {matchingColumns} must set `independentColumns` (got None)")
+            specialisedRule.setRegex(orRegexGroup(matchingColumns))
             self._rules.append(specialisedRule)
 
     def _checkUnhandledColumns(self, df, matchedRulesByColumn):
