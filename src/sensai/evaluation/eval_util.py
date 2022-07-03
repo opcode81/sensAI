@@ -319,7 +319,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
 
     def compareModels(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None, useCrossValidation=False,
             fitModels=True, writeIndividualResults=True, sortColumn: Optional[str] = None, sortAscending: bool = True,
-            alsoIncludeUnsortedResults: bool = False,
+            sortColumnMoveToLeft=True,
+            alsoIncludeUnsortedResults: bool = False, alsoIncludeCrossValGlobalStats: bool = False,
             visitors: Optional[Iterable["ModelComparisonVisitor"]] = None,
             writeVisitorResults=False) -> "ModelComparisonData":
         """
@@ -332,14 +333,20 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :param fitModels: whether to fit models before evaluating them; this can only be False if useCrossValidation=False
         :param writeIndividualResults: whether to write results files on each individual model (in addition to the comparison
             summary)
-        :param sortColumn: column/metric name by which to sort
-        :param sortAscending: whether to sort in ascending order
+        :param sortColumn: column/metric name by which to sort; the fact that the column names change when using cross-validation
+            (aggregation function names being added) should be ignored, simply pass the (unmodified) metric name
+        :param sortAscending: whether to sort using `sortColumn` in ascending order
+        :param sortColumnMoveToLeft: whether to move the `sortColumn` (if any) to the very left
         :param alsoIncludeUnsortedResults: whether to also include, for the case where the results are sorted, the unsorted table of
             results in the results text
+        :param alsoIncludeCrossValGlobalStats: whether to also include, when using cross-validation, the evaluation metrics obtained
+            when combining the predictions from all folds into a single collection. Note that for classification models,
+            this may not always be possible (if the set of classes know to the model differs across folds)
         :param visitors: visitors which may process individual results
         :param writeVisitorResults: whether to collect results from visitors (if any) after the comparison
         :return: the comparison results
         """
+        # collect model evaluation results
         statsList = []
         resultByModelName = {}
         for i, model in enumerate(models, start=1):
@@ -347,7 +354,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             log.info(f"Evaluating model {i}/{len(models)} named '{modelName}' ...")
             if useCrossValidation:
                 if not fitModels:
-                    raise ValueError("Cross-validation necessitates that models be retrained; got fitModels=False")
+                    raise ValueError("Cross-validation necessitates that models be trained several times; got fitModels=False")
                 crossValData = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
                 modelResult = ModelComparisonData.Result(crossValData=crossValData)
                 resultByModelName[modelName] = modelResult
@@ -366,29 +373,57 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                 for visitor in visitors:
                     visitor.visit(modelName, modelResult)
         resultsDF = pd.DataFrame(statsList).set_index("modelName")
-        unsortedResultsDF = resultsDF
-        if sortColumn is not None:
-            if sortColumn not in resultsDF.columns:
-                altSortColumn = f"mean[{sortColumn}]"
-                if altSortColumn in resultsDF.columns:
-                    sortColumn = altSortColumn
-                else:
-                    sortColumn = None
-                    log.warning(f"Requested sort column '{sortColumn}' (or '{altSortColumn}') not in list of columns {list(resultsDF.columns)}")
-            if sortColumn is not None:
-                resultsDF = resultsDF.sort_values(sortColumn, ascending=sortAscending, inplace=False)
-        strResults = f"Model comparison results:\n{resultsDF.to_string()}"
+
+        # compute results data frame with combined set of data points (for cross-validation only)
+        crossValCombinedResultsDF = None
+        if useCrossValidation and alsoIncludeCrossValGlobalStats:
+            try:
+                rows = []
+                for modelName, result in resultByModelName.items():
+                    statsDict = result.crossValData.getEvalStatsCollection().getGlobalStats().metricsDict()
+                    statsDict["modelName"] = modelName
+                    rows.append(statsDict)
+                crossValCombinedResultsDF = pd.DataFrame(rows).set_index("modelName")
+            except Exception as e:
+                log.error(f"Creation of global stats data frame from cross-validation folds failed: {e}")
+
+        def sortedDF(df, sortCol):
+            if sortCol is not None:
+                if sortCol not in df.columns:
+                    altSortCol = f"mean[{sortCol}]"
+                    if altSortCol in df.columns:
+                        sortCol = altSortCol
+                    else:
+                        sortCol = None
+                        log.warning(f"Requested sort column '{sortCol}' (or '{altSortCol}') not in list of columns {list(df.columns)}")
+                if sortCol is not None:
+                    df = df.sort_values(sortCol, ascending=sortAscending, inplace=False)
+                    if sortColumnMoveToLeft:
+                        df = df[[sortCol] + [c for c in df.columns if c != sortCol]]
+            return df
+
+        # write comparison results text file
+        title = "Model comparison results"
+        if useCrossValidation:
+            title += ", aggregated across folds"
+        strResults = f"{title}:\n{sortedDF(resultsDF, sortColumn).to_string()}"
         if alsoIncludeUnsortedResults and sortColumn is not None:
-            strResults += f"\n\nModel comparison results (unsorted):\n{unsortedResultsDF.to_string()}"
+            strResults += f"\n\n{title} (unsorted):\n{resultsDF.to_string()}"
+        if crossValCombinedResultsDF is not None:
+            strResults += f"\n\nModel comparison results based on combined set of data points from all folds:\n" \
+                f"{sortedDF(crossValCombinedResultsDF, sortColumn).to_string()}"
         log.info(strResults)
         if resultWriter is not None:
             suffix = "crossval" if useCrossValidation else "simple-eval"
             strResults += "\n\n" + "\n\n".join([f"{model.getName()} = {model.pprints()}" for model in models])
             resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
+
+        # write visitor results
         if visitors is not None and writeVisitorResults:
             resultCollector = EvaluationResultCollector(showPlots=False, resultWriter=resultWriter)
             for visitor in visitors:
                 visitor.collectResults(resultCollector)
+
         return ModelComparisonData(resultsDF, resultByModelName)
 
     def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> "ModelComparisonData":
@@ -570,7 +605,7 @@ class MultiDataEvaluationUtil:
             df["modelName"] = df.index
             df = df.reset_index(drop=True)
 
-            # collect eval stats objects by model name and remove from data frame
+            # collect eval stats objects by model name
             for modelName, result in comparisonData.resultByModelName.items():
                 if useCrossValidation:
                     evalStats = result.crossValData.getEvalStatsCollection().getGlobalStats()
