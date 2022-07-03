@@ -659,7 +659,7 @@ class DFTNormalisation(DataFrameTransformer):
 
             # collect specialised rule for application
             specialisedRule = copy.copy(rule)
-            if specialisedRule.independentColumns is None and len(matchingColumns) > 1:
+            if not specialisedRule.skip and specialisedRule.independentColumns is None and len(matchingColumns) > 1:
                 raise ValueError(f"Normalisation rule matching multiple columns {matchingColumns} must set `independentColumns` (got None)")
             specialisedRule.setRegex(orRegexGroup(matchingColumns))
             self._rules.append(specialisedRule)
