@@ -322,7 +322,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             sortColumnMoveToLeft=True,
             alsoIncludeUnsortedResults: bool = False, alsoIncludeCrossValGlobalStats: bool = False,
             visitors: Optional[Iterable["ModelComparisonVisitor"]] = None,
-            writeVisitorResults=False) -> "ModelComparisonData":
+            writeVisitorResults=False, writeCSV=False) -> "ModelComparisonData":
         """
         Compares several models via simple evaluation or cross-validation
 
@@ -344,6 +344,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             this may not always be possible (if the set of classes know to the model differs across folds)
         :param visitors: visitors which may process individual results
         :param writeVisitorResults: whether to collect results from visitors (if any) after the comparison
+        :param writeCSV: whether to write metrics table to CSV files
         :return: the comparison results
         """
         # collect model evaluation results
@@ -402,21 +403,28 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
                         df = df[[sortCol] + [c for c in df.columns if c != sortCol]]
             return df
 
-        # write comparison results text file
+        # write comparison results
         title = "Model comparison results"
         if useCrossValidation:
             title += ", aggregated across folds"
-        strResults = f"{title}:\n{sortedDF(resultsDF, sortColumn).to_string()}"
+        sortedResultsDF = sortedDF(resultsDF, sortColumn)
+        strResults = f"{title}:\n{sortedResultsDF.to_string()}"
         if alsoIncludeUnsortedResults and sortColumn is not None:
             strResults += f"\n\n{title} (unsorted):\n{resultsDF.to_string()}"
+        sortedCrossValCombinedResultsDF = None
         if crossValCombinedResultsDF is not None:
+            sortedCrossValCombinedResultsDF = sortedDF(crossValCombinedResultsDF, sortColumn)
             strResults += f"\n\nModel comparison results based on combined set of data points from all folds:\n" \
-                f"{sortedDF(crossValCombinedResultsDF, sortColumn).to_string()}"
+                f"{sortedCrossValCombinedResultsDF.to_string()}"
         log.info(strResults)
         if resultWriter is not None:
             suffix = "crossval" if useCrossValidation else "simple-eval"
             strResults += "\n\n" + "\n\n".join([f"{model.getName()} = {model.pprints()}" for model in models])
             resultWriter.writeTextFile(f"model-comparison-results-{suffix}", strResults)
+            if writeCSV:
+                resultWriter.writeDataFrameCsvFile(f"model-comparison-metrics-{suffix}", sortedResultsDF)
+                if sortedCrossValCombinedResultsDF is not None:
+                    resultWriter.writeDataFrameCsvFile(f"model-comparison-metrics-{suffix}-combined", sortedCrossValCombinedResultsDF)
 
         # write visitor results
         if visitors is not None and writeVisitorResults:
