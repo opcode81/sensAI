@@ -501,7 +501,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return self
 
     def _createTorchModel(self) -> TorchModel:
-        return self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel = self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel.setNormalisationCheckThreshold(self._normalisationCheckThreshold)
+        return torchModel
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         factory = self.torchDataSetProviderFactory

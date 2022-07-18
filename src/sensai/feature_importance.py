@@ -55,8 +55,8 @@ class FeatureImportance:
         tuples.sort(key=lambda t: t[1], reverse=reverse)
         return tuples
 
-    def plot(self, predictedVarName=None) -> plt.Figure:
-        return plotFeatureImportance(self.getFeatureImportanceDict(predictedVarName=predictedVarName))
+    def plot(self, predictedVarName=None, sort=True) -> plt.Figure:
+        return plotFeatureImportance(self.getFeatureImportanceDict(predictedVarName=predictedVarName), sort=sort)
 
     def getDataFrame(self, predictedVarName=None) -> pd.DataFrame:
         """
@@ -89,7 +89,9 @@ class FeatureImportanceProvider(ABC):
         return self.getFeatureImportanceDict()
 
 
-def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None) -> plt.Figure:
+def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None, sort=True) -> plt.Figure:
+    if sort:
+        featureImportanceDict = {k: v for k, v in sorted(featureImportanceDict.items(), key=lambda x: x[1], reverse=True)}
     numFeatures = len(featureImportanceDict)
     defaultWidth, defaultHeight = MATPLOTLIB_DEFAULT_FIGURE_SIZE
     height = max(defaultHeight, defaultHeight * numFeatures / 20)
