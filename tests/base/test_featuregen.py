@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from sensai import InputOutputData
-from sensai.data_transformation import DFTNormalisation, DFTFillNA
+from sensai.data_transformation import DFTNormalisation, DFTFillNA, DataFrameTransformer
 from sensai.data_transformation.sklearn_transformer import SkLearnTransformerFactoryFactory
 from sensai.evaluation import VectorClassificationModelEvaluator
 from sensai.featuregen import FeatureGeneratorFlattenColumns, FeatureGeneratorTakeColumns, flattenedFeatureGenerator, \
@@ -57,18 +57,24 @@ class TestFgen(FeatureGenerator):
         return df
 
 
+class TestDFT(DataFrameTransformer):
+    def _fit(self, df: pd.DataFrame):
+        pass
+
+    def _apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df
+
+
 class RuleBasedTestFgen(RuleBasedFeatureGenerator):
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
         return df
 
 
 class TestFgenBasics:
-    def __init__(self):
-        self.testdf = pd.DataFrame({"foo": [1, 2], "bar": [1, 2]})
+    testdf = pd.DataFrame({"foo": [1, 2], "bar": [1, 2]})
 
-    def test_basicProperties(self):
-        testfgen = TestFgen()
-
+    @pytest.mark.parametrize("testfgen", [TestFgen(), TestDFT().toFeatureGenerator()])
+    def test_basicProperties(self, testfgen):
         assert not testfgen.isFitted()
         assert testfgen.getGeneratedColumnNames() is None
         testfgen.fit(self.testdf)
@@ -76,7 +82,7 @@ class TestFgenBasics:
         testfgen.generate(self.testdf)
         assert set(testfgen.getGeneratedColumnNames()) == {"foo", "bar"}
     
-    @pytest.mark.parametrize("fgen", [TestFgen(), RuleBasedTestFgen(), MultiFeatureGenerator(TestFgen()),
+    @pytest.mark.parametrize("fgen", [TestFgen(), TestDFT().toFeatureGenerator(), RuleBasedTestFgen(), MultiFeatureGenerator(TestFgen()),
         ChainedFeatureGenerator(TestFgen())])
     def test_Naming(self, fgen):
         assert isinstance(fgen.getName(), str)

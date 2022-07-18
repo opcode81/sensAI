@@ -116,6 +116,7 @@ def extractArray(df: pd.DataFrame, dtype=None):
             arr = np.stack(arr[:, 0])
         # For the case where there is only one row, the old implementation above removed the first dimension,
         # so we do the same, even though it seems odd to do so (potential problem for batch size 1)
+        # TODO: remove this behavior
         if arr.shape[0] == 1:
             arr = arr[0]
     except ValueError:

@@ -1,13 +1,12 @@
 import logging
-from typing import Union, Optional, Dict
+from typing import Union, Optional
 
 import sklearn.ensemble
 import sklearn.naive_bayes
 import sklearn.neural_network
 import sklearn.tree
 
-from .sklearn_base import AbstractSkLearnVectorClassificationModel
-from ..feature_importance import FeatureImportanceProvider
+from .sklearn_base import AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification
 
 log = logging.getLogger(__name__)
 
@@ -18,15 +17,12 @@ class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassifi
             min_samples_leaf=min_samples_leaf, random_state=random_state, **modelArgs)
 
 
-class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProvider):
+class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     def __init__(self, min_samples_leaf=8, random_state=42, useComputedClassWeights=False, **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestClassifier,
             random_state=random_state, min_samples_leaf=min_samples_leaf,
             useComputedClassWeights=useComputedClassWeights,
             **modelArgs)
-
-    def getFeatureImportanceDict(self) -> Dict[str, float]:
-        return dict(zip(self._modelInputVariableNames, self.model.feature_importances_))
 
 
 class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationModel):

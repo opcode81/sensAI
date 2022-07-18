@@ -215,15 +215,15 @@ class HeatMapPlot(Plot):
 class HistogramPlot(Plot):
     def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, binwidth=None, stat="probability", xlabel=None,
             **kwargs):
-        stat="proportion"
-        if stat == "probability":
-            stat = "proportion"  # same semantics but "probability" not understood by ecdfplot
 
         def draw():
             sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
             if cdf:
-                if cdfComplementary or stat not in ("count", "proportion"):
-                    sns.ecdfplot(values, stat=stat, complementary=cdfComplementary, color="orange")
+                if cdfComplementary or stat in ("count", "proportion", "probability"):
+                    ecdfStat = "proportion" if stat == "probability" else stat  # same semantics but "probability" not understood by ecdfplot
+                    if ecdfStat not in ("count", "proportion"):
+                        raise ValueError(f"Complementary cdf (cdfComplementary=True) is only supported for stats 'count', 'proportion' and 'probability, got '{stat}'")
+                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange")
                 else:
                     sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange")
             if xlabel is not None:

@@ -108,7 +108,7 @@ class TestIsFitted:
     @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedVectorModel, fittedVectorModel])
     def test_isFittedWithFittableProcessors(self, modelConstructor, fittableDFT, fittableFgen):
         # is fitted after fit with model
-        model = modelConstructor().withInputTransformers(fittableDFT)
+        model = modelConstructor().withRawInputTransformers(fittableDFT)
         assert not model.isFitted()
         model.fit(testX, testY)
         assert model.isFitted()
@@ -116,7 +116,7 @@ class TestIsFitted:
         # is fitted if DFT is fitted
         fittedDFT = copy(fittableDFT)
         fittedDFT.fit(testX)
-        model = modelConstructor().withInputTransformers(fittedDFT)
+        model = modelConstructor().withRawInputTransformers(fittedDFT)
         assert model.isFitted()
 
         # same for fgen
@@ -151,7 +151,7 @@ class TestIsFitted:
 
 def test_InputRowsRemovedByTransformer(irisClassificationTestCase):
     """
-    Tests handling of case where the input generation process removes rows from the data
+    Tests handling of case where the input generation process removes rows from the raw data
     """
     iodata = irisClassificationTestCase.data
 
@@ -174,5 +174,5 @@ def test_InputRowsRemovedByTransformer(irisClassificationTestCase):
         def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
             pass
 
-    model = MyModel().withInputTransformers(DFTDropNA())
+    model = MyModel().withRawInputTransformers(DFTDropNA())
     model.fit(iodata.inputs, iodata.outputs)

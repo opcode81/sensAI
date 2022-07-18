@@ -41,7 +41,7 @@ sensAI may be integrated into your project in several ways:
 
 ## Contributors
 
-sensAI is being developed by the artificial intelligence group at [jambit GmbH](http://www.jambit.com) and by members of [appliedAI](www.appliedai.de).
+sensAI is being developed by the artificial intelligence group at [jambit GmbH](http://www.jambit.com) and by members of [appliedAI](http://www.appliedai.de).
 
 The main contributors are Dominik Jain, Michael Panchenko, Kristof Schröder and Magnus Winter.
 

@@ -113,6 +113,7 @@ def functionName(x: Callable) -> str:
         return str(x)
 
 
+# TODO: allow returning json string for easier parsing/printing
 class ToStringMixin:
     """
     Provides implementations for ``__str__`` and ``__repr__`` which are based on the format ``"<class name>[<object info>]"`` and
@@ -360,7 +361,7 @@ class ToStringMixin:
 
             def __getattr__(self, attr: str):
                 if attr.startswith("_toString"):  # ToStringMixin method which we bind to use this proxy
-                    method = getattr(ToStringMixin, attr)
+                    method = getattr(self.x.__class__, attr)
                     return lambda *args, **kwargs: method(self, *args, **kwargs)
                 else:
                     return getattr(self.x, attr)
@@ -420,7 +421,8 @@ def prettyStringRepr(s: Any, initialIndentationLevel=0, indentationString="    "
             takeFullMatchWithoutBreak = False
             if iMatch is not None:
                 k = iMatch + 1
-                takeFullMatchWithoutBreak = not isBracket or (k-i <= 60 and not("=" in s[i:k] and "," in s[i:k]))
+                fullMatch = s[i:k]
+                takeFullMatchWithoutBreak = isQuote or not("=" in fullMatch and "," in fullMatch)
                 if takeFullMatchWithoutBreak:
                     take(k-i)
             if not takeFullMatchWithoutBreak:

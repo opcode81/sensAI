@@ -1,7 +1,7 @@
 import functools
 import logging
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable, Iterator
+from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable
 
 import pandas as pd
 
@@ -9,8 +9,8 @@ from .eval_stats import GUESS
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
-from ..data_transformation import DataFrameTransformer
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
+from ..data_transformation import DataFrameTransformer
 from ..tracking import TrackingMixin, TrackedExperiment
 from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
@@ -60,13 +60,13 @@ class MetricsDictProviderFromFunction(MetricsDictProvider):
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
-    def __init__(self, statsDict: Dict[str, TEvalStats], inputData: pd.DataFrame, model: VectorModelBase):
+    def __init__(self, statsDict: Dict[str, TEvalStats], ioData: InputOutputData, model: VectorModelBase):
         """
         :param statsDict: a dictionary mapping from output variable name to the evaluation statistics object
-        :param inputData: the input data that was used to produce the results
+        :param ioData: the input/output data that was used to produce the results
         :param model: the model that was used to produce predictions
         """
-        self.inputData = inputData
+        self.ioData = ioData
         self.evalStatsByVarName = statsDict
         self.predictedVarNames = list(self.evalStatsByVarName.keys())
         self.model = model
@@ -74,6 +74,10 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
     @property
     def modelName(self):
         return self.model.getName()
+
+    @property
+    def inputData(self):  # for backward compatibility
+        return self.ioData.inputs
 
     def getEvalStats(self, predictedVarName=None) -> TEvalStats:
         if predictedVarName is None:
@@ -234,7 +238,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
 
 class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
     def __init__(self, dataSplitter: DataSplitter = None, fractionalSplitTestFraction: float = None, fractionalSplitRandomSeed=42,
-            fractionalSplitShuffle=True, additionalMetrics: Sequence[RegressionMetric] = None,
+            fractionalSplitShuffle=True, metrics: Sequence[RegressionMetric] = None, additionalMetrics: Sequence[RegressionMetric] = None,
             outputDataFrameTransformer: DataFrameTransformer = None):
         """
         :param dataSplitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
@@ -243,12 +247,14 @@ class VectorRegressionModelEvaluatorParams(VectorModelEvaluatorParams):
         :param fractionalSplitRandomSeed: [if dataSplitter is none, test data must be obtained via split] the random seed to use for the fractional split of the data
         :param fractionalSplitShuffle: [if dataSplitter is None, test data must be obtained via split] whether to randomly (based on randomSeed) shuffle the dataset before
             splitting it
+
         :param additionalMetrics: additional regression metrics to apply
         :param outputDataFrameTransformer: a data frame transformer to apply to all output data frames (both model outputs and ground truth),
             such that evaluation metrics are computed on the transformed data frame
         """
         super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,
             fractionalSplitShuffle=fractionalSplitShuffle)
+        self.metrics = metrics
         self.additionalMetrics = additionalMetrics
         self.outputDataFrameTransformer = outputDataFrameTransformer
 
@@ -301,9 +307,10 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         predictions, groundTruth = self._computeOutputs(model, data)
         for predictedVarName in predictions.columns:
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
+                metrics=self.params.metrics,
                 additionalMetrics=self.params.additionalMetrics)
             evalStatsByVarName[predictedVarName] = evalStats
-        return VectorRegressionModelEvaluationData(evalStatsByVarName, data.inputs, model)
+        return VectorRegressionModelEvaluationData(evalStatsByVarName, data, model)
 
     def computeTestDataOutputs(self, model: VectorModelBase) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -414,7 +421,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
         evalStats = ClassificationEvalStats(y_predictedClassProbabilities=predictions_proba, y_predicted=predictions, y_true=groundTruth,
             labels=model.getClassLabels(), additionalMetrics=self.params.additionalMetrics, binaryPositiveLabel=self.params.binaryPositiveLabel)
         predictedVarName = model.getPredictedVariableNames()[0]
-        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data.inputs, model)
+        return VectorClassificationModelEvaluationData({predictedVarName: evalStats}, data, model)
 
     def computeTestDataOutputs(self, model) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
