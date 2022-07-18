@@ -30,6 +30,9 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
             for idxFeature in range(X.shape[1]):
                 value = X.iloc[idxRow, idxFeature]
                 self.conditionals[cls][idxFeature][value] += increment
+        # get rid of defaultdicts, which are not picklable
+        self.prior = dict(self.prior)
+        self.conditionals = {k: [dict(d) for d in l] for k, l in self.conditionals.items()}
 
     def _predictClassProbabilities(self, X: pd.DataFrame):
         results = []

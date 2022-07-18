@@ -9,19 +9,31 @@ import sqlite3
 import threading
 import time
 from abc import abstractmethod, ABC
-from typing import Any, Callable, Iterator, List, Optional, TypeVar
+from typing import Any, Callable, Iterator, List, Optional, TypeVar, Generic
 
 from .hash import pickleHash
-from .pickle import loadPickle, dumpPickle
+from .pickle import loadPickle, dumpPickle, setstate
 
 log = logging.getLogger(__name__)
 
 T = TypeVar("T")
+TKey = TypeVar("TKey")
+TValue = TypeVar("TValue")
+TData = TypeVar("TData")
 
 
-class PersistentKeyValueCache(ABC):
+class BoxedValue(Generic[TValue]):
+    """
+    Container for a value, which can be used in caches where values may be None (to differentiate the value not being present in the cache
+    from the cached value being None)
+    """
+    def __init__(self, value: TValue):
+        self.value = value
+
+
+class PersistentKeyValueCache(Generic[TKey, TValue], ABC):
     @abstractmethod
-    def set(self, key, value):
+    def set(self, key: TKey, value: TValue):
         """
         Sets a cached value
 
@@ -32,7 +44,7 @@ class PersistentKeyValueCache(ABC):
         pass
 
     @abstractmethod
-    def get(self, key):
+    def get(self, key: TKey) -> Optional[TValue]:
         """
         Retrieves a cached value
 
@@ -42,9 +54,9 @@ class PersistentKeyValueCache(ABC):
         pass
 
 
-class PersistentList(ABC):
+class PersistentList(Generic[TValue], ABC):
     @abstractmethod
-    def append(self, item):
+    def append(self, item: TValue):
         """
         Adds an item to the cache
 
@@ -53,7 +65,7 @@ class PersistentList(ABC):
         pass
 
     @abstractmethod
-    def iterItems(self):
+    def iterItems(self) -> Iterator[TValue]:
         """
         Iterates over the items in the persisted list
 
@@ -169,14 +181,14 @@ class PeriodicUpdateHook:
             self._threadLock.release()
 
 
-class PicklePersistentKeyValueCache(PersistentKeyValueCache):
+class PicklePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
     """
     Represents a key-value cache as a dictionary which is persisted in a file using pickle
     """
     def __init__(self, picklePath, version=1, saveOnUpdate=True, deferredSaveDelaySecs=1.0):
         """
         :param picklePath: the path of the file where the cache values are to be persisted
-        :param version: the version of cache entries. If a persisted cache with a non-matching version is found, it
+        :param version: the version of cache entries. If a persisted cache with a non-matching version is found,
             it is discarded
         :param saveOnUpdate: whether to persist the cache after an update; the cache is saved in a deferred
             manner and will be saved after deferredSaveDelaySecs if no new updates have arrived in the meantime,
@@ -208,10 +220,10 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache):
         log.info(f"Saving cache to {self.picklePath}")
         dumpPickle((self.version, self.cache), self.picklePath)
 
-    def get(self, key) -> Optional[Any]:
+    def get(self, key: TKey) -> Optional[TValue]:
         return self.cache.get(key)
 
-    def set(self, key, value):
+    def set(self, key: TKey, value: TValue):
         self.cache[key] = value
         if self.saveOnUpdate:
             self._updateHook.handleUpdate()
@@ -382,7 +394,7 @@ class SqliteConnectionManager:
         cls._connections = []
 
 
-class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
+class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
     class KeyType(enum.Enum):
         STRING = ("VARCHAR(%d)", )
         INTEGER = ("LONG", )
@@ -435,7 +447,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
         finally:
             self._connMutex.release()
 
-    def set(self, key, value):
+    def set(self, key: TKey, value: TValue):
         self._connMutex.acquire()
         try:
             cursor = self.conn.cursor()
@@ -459,7 +471,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache):
         except sqlite3.DatabaseError as e:
             raise Exception(f"Error executing query for {self.path}: {e}")
 
-    def get(self, key):
+    def get(self, key: TKey) -> Optional[TValue]:
         self._connMutex.acquire()
         try:
             cursor = self.conn.cursor()
@@ -513,30 +525,40 @@ class SqlitePersistentList(PersistentList):
             yield item[1]
 
 
-class CachedValueProviderMixin(ABC):
+class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
     """
     Represents a value provider that can provide values associated with (hashable) keys via a cache or, if
     cached values are not yet present, by computing them.
     """
-    def __init__(self, cache: Optional[PersistentKeyValueCache], persistCache=False):
+    def __init__(self, cache: Optional[PersistentKeyValueCache[TKey, TValue]] = None,
+            cacheFactory: Optional[Callable[[], PersistentKeyValueCache[TKey, TValue]]] = None, persistCache=False, boxValues=False):
         """
-
-
-        Args:
-            cache: The cache to use or None. Important: when None, caching will be disabled
-            persistCache: Whether to persist the cache when pickling
+        :param cache: the cache to use or None. If None, caching will be disabled
+        :param cacheFactory: a factory with which to create the cache (or recreate it after unpickling if `persistCache`=False, in which
+            case this factory must be picklable)
+        :param persistCache: whether to persist the cache when pickling
+        :param boxValues: whether to box values, such that None is admissible as a value
         """
-        self.persistCache = persistCache
+        self._persistCache = persistCache
+        self._boxValues = boxValues
         self._cache = cache
+        self._cacheFactory = cacheFactory
+        if self._cache is None and cacheFactory is not None:
+            self._cache = cacheFactory()
 
     def __getstate__(self):
-        if not self.persistCache:
+        if not self._persistCache:
             d = self.__dict__.copy()
             d["_cache"] = None
             return d
         return self.__dict__
 
-    def _provideValue(self, key, data=None):
+    def __setstate__(self, state):
+        setstate(CachedValueProviderMixin, self, state, renamedProperties={"persistCache": "_persistCache"})
+        if not self._persistCache and self._cacheFactory is not None:
+            self._cache = self._cacheFactory()
+
+    def _provideValue(self, key, data: Optional[TData] = None):
         """
         Provides the value for the key by retrieving the associated value from the cache or, if no entry in the
         cache is found, by computing the value via _computeValue
@@ -550,11 +572,15 @@ class CachedValueProviderMixin(ABC):
         value = self._cache.get(key)
         if value is None:
             value = self._computeValue(key, data)
-            self._cache.set(key, value)
+            self._cache.set(key, value if not self._boxValues else BoxedValue(value))
+        else:
+            if self._boxValues:
+                value: BoxedValue[TValue]
+                value = value.value
         return value
 
     @abstractmethod
-    def _computeValue(self, key, data):
+    def _computeValue(self, key: TKey, data: Optional[TData]) -> TValue:
         """
         Computes the value for the given key
 

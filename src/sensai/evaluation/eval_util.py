@@ -8,7 +8,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set, Iterable, List
+from typing import Dict, Any, Union, Generic, TypeVar, Optional, Sequence, Callable, Set, Iterable, List, Iterator, Tuple
 
 import matplotlib.figure
 import matplotlib.pyplot as plt
@@ -476,9 +476,10 @@ class MultiDataEvaluationUtil:
     def compareModels(self, modelFactories: Sequence[Callable[[], Union[VectorRegressionModel, VectorClassificationModel]]],
             useCrossValidation=False,
             resultWriter: Optional[ResultWriter] = None,
-            writePerDatasetResults=True,
             evaluatorParams: Optional[Union[VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, Dict[str, Any]]] = None,
             crossValidatorParams: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
+            writePerDatasetResults=True,
+            writeCSVs=False,
             columnNameForModelRanking: str = None,
             rankMax=True,
             createMetricDistributionPlots=True,
@@ -508,6 +509,7 @@ class MultiDataEvaluationUtil:
         """
         allResultsDF = pd.DataFrame()
         evalStatsByModelName = defaultdict(list)
+        resultsByModelName: Dict[str, List[ModelComparisonData.Result]] = defaultdict(list)
         isRegression = None
         plotCollector: Optional[EvalStatsPlotCollector] = None
         modelNames = None
@@ -555,6 +557,7 @@ class MultiDataEvaluationUtil:
                 else:
                     evalStats = result.evalData.getEvalStats()
                 evalStatsByModelName[modelName].append(evalStats)
+                resultsByModelName[modelName].append(result)
 
             allResultsDF = pd.concat((allResultsDF, df))
 
@@ -596,6 +599,9 @@ class MultiDataEvaluationUtil:
             comparisonContent += "\n\nModels [example instance]:\n\n"
             comparisonContent += "\n\n".join(f"{name} = {s}" for name, s in modelName2StringRepr.items())
             resultWriter.writeTextFile("model-comparison-results", comparisonContent)
+            if writeCSVs:
+                resultWriter.writeDataFrameCsvFile("all-results", allResultsDF)
+                resultWriter.writeDataFrameCsvFile("mean-results", meanResultsDF)
 
         # create plots from combined data for each model
         if createCombinedEvalStatsPlots:
@@ -615,10 +621,13 @@ class MultiDataEvaluationUtil:
                 visitor.collectPlots(resultCollector)
 
         # create result
+        dataSetNames = list(self.inputOutputDataDict.keys())
         if isRegression:
-            mdmcData = RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+            mdmcData = RegressionMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName,
+                resultsByModelName, dataSetNames)
         else:
-            mdmcData = ClassificationMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName)
+            mdmcData = ClassificationMultiDataModelComparisonData(allResultsDF, meanResultsDF, furtherAggsDF, evalStatsByModelName,
+                resultsByModelName, dataSetNames)
 
         # plot distributions
         if createMetricDistributionPlots and resultWriter is not None:
@@ -704,11 +713,14 @@ class ModelComparisonVisitorAggregatedFeatureImportance(ModelComparisonVisitor):
 
 class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], ABC):
     def __init__(self, allResultsDF: pd.DataFrame, meanResultsDF: pd.DataFrame, aggResultsDF: pd.DataFrame,
-            evalStatsByModelName: Dict[str, List[TEvalStats]]):
+            evalStatsByModelName: Dict[str, List[TEvalStats]], resultsByModelName: Dict[str, List[ModelComparisonData.Result]],
+            dataSetNames: List[str]):
         self.allResultsDF = allResultsDF
         self.meanResultsDF = meanResultsDF
         self.aggResultsDF = aggResultsDF
         self.evalStatsByModelName = evalStatsByModelName
+        self.resultsByModelName = resultsByModelName
+        self.dataSetNames = dataSetNames
 
     def getModelNames(self) -> List[str]:
         return list(self.evalStatsByModelName.keys())
@@ -719,6 +731,10 @@ class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], AB
     @abstractmethod
     def getEvalStatsCollection(self, modelName: str) -> TEvalStatsCollection:
         pass
+
+    def iterModelResults(self, modelName: str) -> Iterator[Tuple[str, ModelComparisonData.Result]]:
+        results = self.resultsByModelName[modelName]
+        yield from zip(self.dataSetNames, results)
 
     def createDistributionPlots(self, resultWriter: ResultWriter, cdf=True, cdfComplementary=False):
         """

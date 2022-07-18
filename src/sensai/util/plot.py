@@ -1,6 +1,6 @@
 import logging
 from matplotlib.colors import LinearSegmentedColormap
-from typing import Sequence, Callable, TypeVar, Type, Tuple
+from typing import Sequence, Callable, TypeVar, Type, Tuple, Optional
 
 import matplotlib.ticker as plticker
 import matplotlib.figure
@@ -103,11 +103,32 @@ class Plot:
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
+    def xtick(self, major=None, minor=None):
+        """
+        Sets a tick on every integer multiple of the given base values.
+        The major ticks are labelled, the minor ticks are not.
+
+        :param major: the major tick base value
+        :param minor: the minor tick base value
+        :return: self
+        """
+        if major is not None:
+            self.xtickMajor(major)
+        if minor is not None:
+            self.xtickMinor(minor)
+        return self
+
     def xtickMajor(self, base):
         self.ax.xaxis.set_major_locator(plticker.MultipleLocator(base=base))
+        return self
+
+    def xtickMinor(self, base):
+        self.ax.xaxis.set_minor_locator(plticker.MultipleLocator(base=base))
+        return self
 
     def ytickMajor(self, base):
         self.ax.yaxis.set_major_locator(plticker.MultipleLocator(base=base))
+        return self
 
 
 

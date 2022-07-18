@@ -152,6 +152,9 @@ class VectorModelEvaluatorParams(ToStringMixin, ABC):
                 randomSeed=self._fractionalSplitRandomSeed)
         return self._dataSplitter
 
+    def setDataSplitter(self, splitter: DataSplitter):
+        self._dataSplitter = splitter
+
 
 class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def __init__(self, data: Optional[InputOutputData], testData: InputOutputData = None, params: VectorModelEvaluatorParams = None):

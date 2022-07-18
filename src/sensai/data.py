@@ -169,6 +169,11 @@ class DataSplitterStratifiedShuffleSplit(DataSplitterFromSkLearnSplitter):
     def __init__(self, fractionalSizeOfFirstSet: float, randomSeed=42):
         super().__init__(StratifiedShuffleSplit(n_splits=1, train_size=fractionalSizeOfFirstSet, random_state=randomSeed))
 
+    @staticmethod
+    def isApplicable(ioData: InputOutputData):
+        classCounts = ioData.outputs.value_counts()
+        return all(classCounts >= 2)
+
 
 class DataFrameSplitter(ABC):
     @abstractmethod

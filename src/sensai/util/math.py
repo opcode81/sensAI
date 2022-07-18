@@ -26,8 +26,12 @@ class NormalDistribution:
         return objectRepr(self, ["mean", "std", "unitMax"])
 
 
-def sigmoid(x: float):
-    return math.exp(x) / (1 + math.exp(x))
+def sigmoid(x: float, minValue=0, maxValue=1, k=1, x0=0):
+    return minValue + (maxValue - minValue) / (1 + math.exp(-k * (x - x0)))
+
+
+def reverseSigmoid(x: float, maxValue=1, minValue=0, k=1, x0=0):
+    return maxValue - sigmoid(x, minValue=0, maxValue=maxValue-minValue, k=k, x0=x0)
 
 
 def reduceFloatPrecisionDecimals(f: float, decimals: int) -> float:
