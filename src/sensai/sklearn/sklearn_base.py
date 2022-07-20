@@ -161,6 +161,13 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             results[varName] = self.models[varName].predict(inputs)
         return pd.DataFrame(results)
 
+    def getSkLearnModel(self, predictedVarName=None):
+        if predictedVarName is None:
+            if len(self.models) > 1:
+                raise ValueError(f"Must provide predicted variable name (one of {self.models.keys()})")
+            return next(iter(self.models.values()))
+        return self.models[predictedVarName]
+
 
 class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressionModel, ABC):
     """
