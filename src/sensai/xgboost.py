@@ -30,19 +30,19 @@ class XGBGradientBoostedVectorClassificationModel(AbstractSkLearnVectorClassific
     """
     XGBoost's classification model using gradient boosted trees
     """
-    def __init__(self, random_state=42, **modelArgs):
+    def __init__(self, random_state=42, useBalancedClassWeights=False, **modelArgs):
         """
         :param modelArgs: See https://xgboost.readthedocs.io/en/latest/python/python_api.html#xgboost.XGBClassifier
         """
-        super().__init__(xgboost.XGBClassifier, random_state=random_state, **modelArgs)
+        super().__init__(xgboost.XGBClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights, **modelArgs)
 
 
 class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     """
     XGBoost's random forest classification model
     """
-    def __init__(self, random_state=42, **modelArgs):
+    def __init__(self, random_state=42, useBalancedClassWeights=False, **modelArgs):
         """
         :param modelArgs: See https://xgboost.readthedocs.io/en/latest/python/python_api.html#xgboost.XGBRFClassifier
         """
-        super().__init__(xgboost.XGBRFClassifier, random_state=random_state, **modelArgs)
+        super().__init__(xgboost.XGBRFClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights, **modelArgs)

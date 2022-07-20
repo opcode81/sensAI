@@ -265,7 +265,7 @@ class RegressionEvalStatsCollection(EvalStatsCollection[RegressionEvalStats, Reg
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    def getGlobalStats(self) -> RegressionEvalStats:
+    def getCombinedEvalStats(self) -> RegressionEvalStats:
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
