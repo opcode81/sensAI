@@ -121,7 +121,7 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         """
 
         if metrics is None:
-            metrics = [RegressionMetricRRSE(), RegressionMetricR2(), RegressionMetricPCC(),
+            metrics = [RegressionMetricRRSE(), RegressionMetricR2(),
                        RegressionMetricMAE(), RegressionMetricMSE(), RegressionMetricRMSE(),
                        RegressionMetricStdDevAE()]
         metrics = list(metrics)
@@ -265,11 +265,12 @@ class RegressionEvalStatsCollection(EvalStatsCollection[RegressionEvalStats, Reg
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    def getGlobalStats(self) -> RegressionEvalStats:
+    def getCombinedEvalStats(self) -> RegressionEvalStats:
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
-            self.globalStats = RegressionEvalStats(y_predicted, y_true)
+            es0 = self.statsList[0]
+            self.globalStats = RegressionEvalStats(y_predicted, y_true, metrics=es0.metrics)
         return self.globalStats
 
 

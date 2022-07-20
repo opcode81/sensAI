@@ -161,6 +161,13 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             results[varName] = self.models[varName].predict(inputs)
         return pd.DataFrame(results)
 
+    def getSkLearnModel(self, predictedVarName=None):
+        if predictedVarName is None:
+            if len(self.models) > 1:
+                raise ValueError(f"Must provide predicted variable name (one of {self.models.keys()})")
+            return next(iter(self.models.values()))
+        return self.models[predictedVarName]
+
 
 class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressionModel, ABC):
     """
@@ -196,12 +203,15 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor, useComputedClassWeights=False, **modelArgs):
+    def __init__(self, modelConstructor, useBalancedClassWeights=False, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
         :param modelArgs: arguments to be passed to the sklearn model constructor
-        :param useComputedClassWeights: whether to compute class weights from the training data that is given and pass it on to the
-            classifier's fit method; weighted data points may not be supported for all types of models
+        :param useBalancedClassWeights: whether to compute class weights from the training data and apply the corresponding weight to
+            each data point such that the sum of weights for all classes is equal. This is achieved by applying a weight proportional
+            to the reciprocal frequency of the class in the (training) data. We scale weights such that the smallest weight (of the
+            largest class) is 1, ensuring that weight counts still reasonably correspond to data point counts.
+            Note that weighted data points may not be supported for all types of models.
         """
         super().__init__()
         self.modelConstructor = modelConstructor
@@ -209,11 +219,12 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         self.sklearnOutputTransformer = None
         self.modelArgs = modelArgs
         self.fitArgs = {}
-        self.useComputedClassWeights = useComputedClassWeights
+        self.useBalancedClassWeights = useBalancedClassWeights
         self.model = None
 
     def __setstate__(self, state):
-        setstate(AbstractSkLearnVectorClassificationModel, self, state, newDefaultProperties={"useComputedClassWeights": False})
+        setstate(AbstractSkLearnVectorClassificationModel, self, state, newDefaultProperties={"useComputedClassWeights": False},
+            renamedProperties={"useComputedClassWeights": "useBalancedClassWeights"})
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["modelConstructor", "sklearnInputTransformer", "sklearnOutputTransformer",
@@ -229,7 +240,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
 
     def withSkLearnInputTransformer(self, sklearnInputTransformer) -> __qualname__:
         """
-        :param sklearnInputTransformer: an optional sklearn preprocessor for normalising/scaling inputs
+        :param sklearnInputTransformer: an optional sklearn preprocessor for transforming inputs
         :return: self
         """
         self.sklearnInputTransformer = sklearnInputTransformer
@@ -237,9 +248,10 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
 
     def withSkLearnOutputTransformer(self, sklearnOutputTransformer):
         """
-        :param sklearnOutputTransformer: an optional sklearn preprocessor for normalising/scaling outputs
+        :param sklearnOutputTransformer: an optional sklearn preprocessor for transforming the target labels
         :return: self
         """
+        raise Exception("This is currently not supported for classifiers")  # TODO add support
         self.sklearnOutputTransformer = sklearnOutputTransformer
         return self
 
@@ -269,11 +281,12 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         kwargs = dict(self.fitArgs)
-        if self.useComputedClassWeights:
+        if self.useBalancedClassWeights:
             class2weight = self._computeClassWeights(outputs)
             classes = outputs.iloc[:, 0]
-            weights = [class2weight[cls] for cls in classes]
-            kwargs["sample_weight"] = np.array(weights)
+            weights = np.array([class2weight[cls] for cls in classes])
+            weights = weights / np.min(weights)
+            kwargs["sample_weight"] = weights
         outputValues = np.ravel(outputs.values)
         self.model.fit(inputs, outputValues, **kwargs)
 

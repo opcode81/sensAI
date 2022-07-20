@@ -78,6 +78,11 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
         outputs = self.outputs.iloc[indices]
         return InputOutputData(inputs, outputs)
 
+    def filterIndex(self, indexElements: Sequence[any]) -> __qualname__:
+        inputs = self.inputs.loc[indexElements]
+        outputs = self.outputs.loc[indexElements]
+        return InputOutputData(inputs, outputs)
+
     @property
     def inputDim(self):
         return self.inputs.shape[1]
@@ -173,6 +178,11 @@ class DataSplitterFromSkLearnSplitter(DataSplitter):
 class DataSplitterStratifiedShuffleSplit(DataSplitterFromSkLearnSplitter):
     def __init__(self, fractionalSizeOfFirstSet: float, randomSeed=42):
         super().__init__(StratifiedShuffleSplit(n_splits=1, train_size=fractionalSizeOfFirstSet, random_state=randomSeed))
+
+    @staticmethod
+    def isApplicable(ioData: InputOutputData):
+        classCounts = ioData.outputs.value_counts()
+        return all(classCounts >= 2)
 
 
 class DataFrameSplitter(ABC):

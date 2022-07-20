@@ -1,6 +1,6 @@
 import logging
 from matplotlib.colors import LinearSegmentedColormap
-from typing import Sequence, Callable, TypeVar, Type, Tuple
+from typing import Sequence, Callable, TypeVar, Type, Tuple, Optional
 
 import matplotlib.ticker as plticker
 import matplotlib.figure
@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
 
 
-def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
-        titleAdd: str = None) -> matplotlib.figure.Figure:
+def plotMatrix(matrix: np.ndarray, title: str, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str,
+        ylabel: str, normalize=True, figsize: Tuple[int, int] = (9, 9), titleAdd: str = None) -> matplotlib.figure.Figure:
     """
     :param matrix: matrix whose data to plot, where matrix[i, j] will be rendered at x=i, y=j
     :param title: the plot's title
@@ -24,6 +24,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
     :param xlabel: the label for the x-axis
     :param ylabel: the label for the y-axis
     :param normalize: whether to normalise the matrix before plotting it (dividing each entry by the sum of all entries)
+    :param figsize: an optional size of the figure to be created
     :param titleAdd: an optional second line to add to the title
     :return: the figure object
     """
@@ -52,7 +53,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
         rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
-    fmt = '.4f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
+    fmt = '.4f' if normalize else ('.2f' if matrix.dtype.kind == 'f' else 'd')
     thresh = matrix.max() / 2.
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):
@@ -103,11 +104,32 @@ class Plot:
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
+    def xtick(self, major=None, minor=None):
+        """
+        Sets a tick on every integer multiple of the given base values.
+        The major ticks are labelled, the minor ticks are not.
+
+        :param major: the major tick base value
+        :param minor: the minor tick base value
+        :return: self
+        """
+        if major is not None:
+            self.xtickMajor(major)
+        if minor is not None:
+            self.xtickMinor(minor)
+        return self
+
     def xtickMajor(self, base):
         self.ax.xaxis.set_major_locator(plticker.MultipleLocator(base=base))
+        return self
+
+    def xtickMinor(self, base):
+        self.ax.xaxis.set_minor_locator(plticker.MultipleLocator(base=base))
+        return self
 
     def ytickMajor(self, base):
         self.ax.yaxis.set_major_locator(plticker.MultipleLocator(base=base))
+        return self
 
 
 
@@ -194,15 +216,15 @@ class HeatMapPlot(Plot):
 class HistogramPlot(Plot):
     def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, binwidth=None, stat="probability", xlabel=None,
             **kwargs):
-        stat="proportion"
-        if stat == "probability":
-            stat = "proportion"  # same semantics but "probability" not understood by ecdfplot
 
         def draw():
             sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
             if cdf:
-                if cdfComplementary or stat not in ("count", "proportion"):
-                    sns.ecdfplot(values, stat=stat, complementary=cdfComplementary, color="orange")
+                if cdfComplementary or stat in ("count", "proportion", "probability"):
+                    ecdfStat = "proportion" if stat == "probability" else stat  # same semantics but "probability" not understood by ecdfplot
+                    if ecdfStat not in ("count", "proportion"):
+                        raise ValueError(f"Complementary cdf (cdfComplementary=True) is only supported for stats 'count', 'proportion' and 'probability, got '{stat}'")
+                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange")
                 else:
                     sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange")
             if xlabel is not None:

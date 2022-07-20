@@ -421,7 +421,8 @@ def prettyStringRepr(s: Any, initialIndentationLevel=0, indentationString="    "
             takeFullMatchWithoutBreak = False
             if iMatch is not None:
                 k = iMatch + 1
-                takeFullMatchWithoutBreak = not isBracket or (k-i <= 60 and not("=" in s[i:k] and "," in s[i:k]))
+                fullMatch = s[i:k]
+                takeFullMatchWithoutBreak = isQuote or not("=" in fullMatch and "," in fullMatch)
                 if takeFullMatchWithoutBreak:
                     take(k-i)
             if not takeFullMatchWithoutBreak:

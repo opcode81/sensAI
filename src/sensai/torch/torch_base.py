@@ -99,8 +99,6 @@ class TorchModel(ABC, ToStringMixin):
     """
     log: logging.Logger = log.getChild(__qualname__)
 
-    NORMALISATION_CHECK_THRESHOLD = 5
-
     def __init__(self, cuda=True) -> None:
         self.cuda: bool = cuda
         self.module: Optional[torch.nn.Module] = None
@@ -108,12 +106,16 @@ class TorchModel(ABC, ToStringMixin):
         self.inputScaler: Optional[TensorScaler] = None
         self.trainingInfo: Optional[TrainingInfo] = None
         self._gpu: Optional[int] = None
+        self._normalisationCheckThreshold: Optional[int] = 5
 
     def _toStringExcludePrivate(self) -> bool:
         return True
 
     def setTorchModule(self, module: torch.nn.Module) -> None:
         self.module = module
+
+    def setNormalisationCheckThreshold(self, threshold: Optional[float]):
+        self._normalisationCheckThreshold = threshold
 
     def getModuleBytes(self) -> bytes:
         bytesIO = io.BytesIO()
@@ -177,12 +179,13 @@ class TorchModel(ABC, ToStringMixin):
         if "bestEpoch" in d:
             d["trainingInfo"] = TrainingInfo(bestEpoch=d["bestEpoch"])
             del d["bestEpoch"]
+        newDefaultProperties = {"_normalisationCheckThreshold": 5}
 
         modelBytes = None
         if "modelBytes" in d:
             modelBytes = d["modelBytes"]
             del d["modelBytes"]
-        self.__dict__ = d
+        setstate(TorchModel, self, d, newDefaultProperties=newDefaultProperties)
         if modelBytes is not None:
             self.setModuleBytes(modelBytes)
 
@@ -238,11 +241,11 @@ class TorchModel(ABC, ToStringMixin):
             inputs = [t.view(1, *X.size()) for t in inputs]
 
         # check input normalisation
-        if self.NORMALISATION_CHECK_THRESHOLD is not None:
+        if self._normalisationCheckThreshold is not None:
             for i, t in enumerate(inputs):
                 if t.is_floating_point() and t.numel() > 0:  # skip any integer tensors (which typically contain lengths) and empty tensors
                     maxValue = t.abs().max().item()
-                    if maxValue > self.NORMALISATION_CHECK_THRESHOLD:
+                    if maxValue > self._normalisationCheckThreshold:
                         log.warning(f"Received value in input tensor {i} which is likely to not be correctly normalised: maximum abs. value in tensor is %f" % maxValue)
         if mcDropoutSamples is None:
             y = model(*inputs)
@@ -368,7 +371,7 @@ class VectorTorchModel(TorchModel, ABC):
         :param inputDim: the number of input dimensions as reported by the data set provider (number of columns
             in input data frame for default providers)
         :param outputDim: the number of output dimensions as reported by the data set provider (for default providers,
-            this will be the nnumber of columns in the output data frame or, for classification, the number of classes)
+            this will be the number of columns in the output data frame or, for classification, the number of classes)
         :return: the torch module
         """
         pass
@@ -412,12 +415,14 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.outputTensorToArrayConverter: Optional[OutputTensorToArrayConverter] = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
+        self._normalisationCheckThreshold = 5
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
             "outputTensorToArrayConverter"]
-        setstate(TorchVectorRegressionModel, self, state, newOptionalProperties=newOptionalMembers)
+        newDefaultProperties = {"_normalisationCheckThreshold": 5}
+        setstate(TorchVectorRegressionModel, self, state, newOptionalProperties=newOptionalMembers, newDefaultProperties=newDefaultProperties)
 
     @classmethod
     def fromModule(cls, module: torch.nn.Module, cuda=True, normalisationMode: NormalisationMode = NormalisationMode.NONE,
@@ -484,8 +489,21 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.dataFrameSplitter = dataFrameSplitter
         return self
 
+    def withNormalisationCheckThreshold(self, threshold: Optional[float]):
+        """
+        Defines a threshold with which to check inputs that are passed to the underlying neural network.
+        Whenever an (absolute) input value exceeds the threshold, a warning is triggered.
+
+        :param threshold: the threshold
+        :return: self
+        """
+        self._normalisationCheckThreshold = threshold
+        return self
+
     def _createTorchModel(self) -> TorchModel:
-        return self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel = self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel.setNormalisationCheckThreshold(self._normalisationCheckThreshold)
+        return torchModel
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         factory = self.torchDataSetProviderFactory
@@ -559,7 +577,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
         self.outputMode = outputMode
         self.normalisationMode = normalisationMode
-        self.nnOptimiserParams = nnOptimiserParams
+        self.nnOptimiserParams: NNOptimiserParams = nnOptimiserParams
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
@@ -568,11 +586,12 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.outputTensoriser: Optional[Tensoriser] = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
+        self._normalisationCheckThreshold = 5
 
     def __setstate__(self, state) -> None:
         state["nnOptimiserParams"] = NNOptimiserParams.fromDictOrInstance(state["nnOptimiserParams"])
         newOptionalMembers = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser"]
-        newDefaultProperties = {"outputMode": ClassificationOutputMode.PROBABILITIES}
+        newDefaultProperties = {"outputMode": ClassificationOutputMode.PROBABILITIES, "_normalisationCheckThreshold": 5}
         setstate(TorchVectorClassificationModel, self, state, newOptionalProperties=newOptionalMembers,
             newDefaultProperties=newDefaultProperties)
 
@@ -627,8 +646,21 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.dataFrameSplitter = dataFrameSplitter
         return self
 
+    def withNormalisationCheckThreshold(self, threshold: Optional[float]):
+        """
+        Defines a threshold with which to check inputs that are passed to the underlying neural network.
+        Whenever an (absolute) input value exceeds the threshold, a warning is triggered.
+
+        :param threshold: the threshold
+        :return: self
+        """
+        self._normalisationCheckThreshold = threshold
+        return self
+
     def _createTorchModel(self) -> VectorTorchModel:
-        return self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel = self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torchModel.setNormalisationCheckThreshold(self._normalisationCheckThreshold)
+        return torchModel
 
     def _createDataSetProvider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProvider:
         factory = self.torchDataSetProviderFactory

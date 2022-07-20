@@ -847,7 +847,7 @@ class NNOptimiser:
                 gpuIndex = self.params.gpu
             torchcuda.set_device(gpuIndex)
         elif torchcuda.is_available():
-            self.log.warning("You have a CUDA device, so you should probably run with cuda=True")
+            self.log.info("NOTE: You have a CUDA device; consider running with cuda=True")
 
 
 class TrainingInfo:

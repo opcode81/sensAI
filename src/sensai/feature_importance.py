@@ -3,7 +3,7 @@ import copy
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, Union, Sequence, List, Tuple
+from typing import Dict, Union, Sequence, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -55,8 +55,8 @@ class FeatureImportance:
         tuples.sort(key=lambda t: t[1], reverse=reverse)
         return tuples
 
-    def plot(self, predictedVarName=None) -> plt.Figure:
-        return plotFeatureImportance(self.getFeatureImportanceDict(predictedVarName=predictedVarName))
+    def plot(self, predictedVarName=None, sort=True) -> plt.Figure:
+        return plotFeatureImportance(self.getFeatureImportanceDict(predictedVarName=predictedVarName), sort=sort)
 
     def getDataFrame(self, predictedVarName=None) -> pd.DataFrame:
         """
@@ -89,7 +89,9 @@ class FeatureImportanceProvider(ABC):
         return self.getFeatureImportanceDict()
 
 
-def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None) -> plt.Figure:
+def plotFeatureImportance(featureImportanceDict: Dict[str, float], subtitle: str = None, sort=True) -> plt.Figure:
+    if sort:
+        featureImportanceDict = {k: v for k, v in sorted(featureImportanceDict.items(), key=lambda x: x[1], reverse=True)}
     numFeatures = len(featureImportanceDict)
     defaultWidth, defaultHeight = MATPLOTLIB_DEFAULT_FIGURE_SIZE
     height = max(defaultHeight, defaultHeight * numFeatures / 20)
@@ -166,7 +168,7 @@ class AggregatedFeatureImportance:
             return {k: self._aggFn(l) for k, l in d.items()}
 
         if self._isNested:
-            return {k: aggregate(d) for k, d in self._aggDict}
+            return {k: aggregate(d) for k, d in self._aggDict.items()}
         else:
             return aggregate(self._aggDict)
 
@@ -175,7 +177,7 @@ class AggregatedFeatureImportance:
 
 
 def computePermutationFeatureImportanceDict(model, ioData: InputOutputData, scoring, numRepeats: int, randomState,
-        excludeInputPreprocessors=False):
+        excludeInputPreprocessors=False, numJobs=None):
     if excludeInputPreprocessors:
         inputs = model.computeModelInputs(ioData.inputs)
         model = copy.copy(model)
@@ -183,7 +185,8 @@ def computePermutationFeatureImportanceDict(model, ioData: InputOutputData, scor
     else:
         inputs = ioData.inputs
     featureNames = inputs.columns
-    pi = permutation_importance(model, inputs, ioData.outputs, n_repeats=numRepeats, random_state=randomState, scoring=scoring)
+    pi = permutation_importance(model, inputs, ioData.outputs, n_repeats=numRepeats, random_state=randomState, scoring=scoring,
+        n_jobs=numJobs)
     importanceValues = pi.importances_mean
     assert len(importanceValues) == len(featureNames)
     featureImportanceDict = dict(zip(featureNames, importanceValues))
@@ -192,7 +195,7 @@ def computePermutationFeatureImportanceDict(model, ioData: InputOutputData, scor
 
 class AggregatedPermutationFeatureImportance(ToStringMixin):
     def __init__(self, aggregatedFeatureImportance: AggregatedFeatureImportance, scoring, numRepeats=5, randomSeed=42,
-            excludeModelInputPreprocessors=False):
+            excludeModelInputPreprocessors=False, numJobs: Optional[int] = None):
         """
         :param aggregatedFeatureImportance: the object in which to aggregate the feature importance (to which no feature importance
             values should have yet been added)
@@ -205,16 +208,21 @@ class AggregatedPermutationFeatureImportance(ToStringMixin):
             inputs.
             Enabling this can, for example, help save time in cases where the input preprocessors discard many of the raw input
             columns, but it may not be a good idea of the preprocessors generate multiple columns from the original input columns.
+        :param numJobs:
+            Number of jobs to run in parallel. Each separate model-data permutation feature importance computation is parallelised over
+            the columns. `None` means 1 unless in a :obj:`joblib.parallel_backend` context.
+            `-1` means using all processors.
         """
         self._agg = aggregatedFeatureImportance
         self.scoring = scoring
         self.numRepeats = numRepeats
         self.randomSeed = randomSeed
         self.excludeModelInputPreprocessors = excludeModelInputPreprocessors
+        self.numJobs = numJobs
 
     def add(self, model: VectorModel, ioData: InputOutputData):
         featureImportanceDict = computePermutationFeatureImportanceDict(model, ioData, self.scoring, numRepeats=self.numRepeats,
-            randomState=self.randomSeed, excludeInputPreprocessors=self.excludeModelInputPreprocessors)
+            randomState=self.randomSeed, excludeInputPreprocessors=self.excludeModelInputPreprocessors, numJobs=self.numJobs)
         self._agg.add(featureImportanceDict)
 
     def addCrossValidationData(self, crossValData: VectorModelCrossValidationData):

@@ -73,12 +73,26 @@ class TestDFTNormalisation:
         df2 = dft.fitApply(df)
         assert np.all(df2.foo == arr/10) and np.all(df2.bar == arr/10)
 
-    def test_multiColumnSingleRule(self):
+    def test_multiColumnSingleRuleNotIndependent(self):
         arr = np.array([1, 5, 10])
         df = pd.DataFrame({"foo": arr, "bar": arr*100})
         dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", transformer=sklearn.preprocessing.MaxAbsScaler(), independentColumns=False)])
         df2 = dft.fitApply(df)
         assert np.all(df2.foo == arr/1000) and np.all(df2.bar == arr/10)
+
+    @pytest.mark.parametrize("kwArgsAndException", [({}, True), ({"skip": True}, False)])
+    def test_multiColumnSingleRuleUnspecified(self, kwArgsAndException):
+        arr = np.array([1, 5, 10])
+        df = pd.DataFrame({"foo": arr, "bar": arr*100})
+        kwargs, mustThrowException = kwArgsAndException
+        dft = DFTNormalisation([DFTNormalisation.Rule(r"foo|bar", **kwargs)])
+        exceptionThrown = False
+        try:
+            dft.fitApply(df)
+        except Exception as e:
+            log.info(f"Got exception: {e}")
+            exceptionThrown = True
+        assert exceptionThrown == mustThrowException
 
     def test_arrayValued(self):
         arr = np.array([1, 5, 10])
