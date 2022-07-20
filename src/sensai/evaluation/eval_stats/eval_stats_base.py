@@ -214,8 +214,14 @@ class EvalStatsCollection(Generic[TEvalStats, TMetric], ABC):
             index = None
         return pd.DataFrame(data, index=index)
 
-    @abstractmethod
     def getGlobalStats(self) -> TEvalStats:
+        """
+        Alias for `getCombinedEvalStats`
+        """
+        return self.getCombinedEvalStats()
+
+    @abstractmethod
+    def getCombinedEvalStats(self) -> TEvalStats:
         """
         :return: an EvalStats object that combines the data from all contained EvalStats objects
         """

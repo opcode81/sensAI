@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
 
 
-def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str, ylabel: str, normalize=True, figsize=(9,9),
-        titleAdd: str = None) -> matplotlib.figure.Figure:
+def plotMatrix(matrix: np.ndarray, title: str, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str,
+        ylabel: str, normalize=True, figsize: Tuple[int, int] = (9, 9), titleAdd: str = None) -> matplotlib.figure.Figure:
     """
     :param matrix: matrix whose data to plot, where matrix[i, j] will be rendered at x=i, y=j
     :param title: the plot's title
@@ -24,6 +24,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
     :param xlabel: the label for the x-axis
     :param ylabel: the label for the y-axis
     :param normalize: whether to normalise the matrix before plotting it (dividing each entry by the sum of all entries)
+    :param figsize: an optional size of the figure to be created
     :param titleAdd: an optional second line to add to the title
     :return: the figure object
     """
@@ -52,7 +53,7 @@ def plotMatrix(matrix, title, xticklabels: Sequence[str], yticklabels: Sequence[
         rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
-    fmt = '.4f' if normalize else ('.2f' if matrix.dtype == np.float else 'd')
+    fmt = '.4f' if normalize else ('.2f' if matrix.dtype.kind == 'f' else 'd')
     thresh = matrix.max() / 2.
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):

@@ -78,6 +78,11 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
         outputs = self.outputs.iloc[indices]
         return InputOutputData(inputs, outputs)
 
+    def filterIndex(self, indexElements: Sequence[any]) -> __qualname__:
+        inputs = self.inputs.loc[indexElements]
+        outputs = self.outputs.loc[indexElements]
+        return InputOutputData(inputs, outputs)
+
     @property
     def inputDim(self):
         return self.inputs.shape[1]

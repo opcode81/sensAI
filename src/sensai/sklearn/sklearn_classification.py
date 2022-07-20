@@ -18,10 +18,10 @@ class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassifi
 
 
 class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
-    def __init__(self, min_samples_leaf=8, random_state=42, useComputedClassWeights=False, **modelArgs):
+    def __init__(self, min_samples_leaf=8, random_state=42, useBalancedClassWeights=False, **modelArgs):
         super().__init__(sklearn.ensemble.RandomForestClassifier,
             random_state=random_state, min_samples_leaf=min_samples_leaf,
-            useComputedClassWeights=useComputedClassWeights,
+            useBalancedClassWeights=useBalancedClassWeights,
             **modelArgs)
 
 

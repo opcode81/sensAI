@@ -447,7 +447,13 @@ class ClassificationEvalStatsCollection(EvalStatsCollection[ClassificationEvalSt
         super().__init__(evalStatsList)
         self.globalStats = None
 
-    def getGlobalStats(self) -> ClassificationEvalStats:
+    def getCombinedEvalStats(self) -> ClassificationEvalStats:
+        """
+        Combines the data from all contained EvalStats objects into a single object.
+        Note that this is only possible if all EvalStats objects use the same set of class labels.
+
+        :return: an EvalStats object that combines the data from all contained EvalStats objects
+        """
         if self.globalStats is None:
             y_true = np.concatenate([evalStats.y_true for evalStats in self.statsList])
             y_predicted = np.concatenate([evalStats.y_predicted for evalStats in self.statsList])
