@@ -152,7 +152,7 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
 
 
 def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProperties: Iterable[str] = None,
-        overrideProperties: Dict[str, Any] = None) -> Dict[str, Any]:
+             overrideProperties: Dict[str, Any] = None, excludedDefaultProperties: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
     a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually
@@ -165,6 +165,8 @@ def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProper
     :param excludedProperties: properties which shall be completely removed from serialisations
     :param overrideProperties: a mapping from property names to values specifying (new or existing) properties which are to be set;
         use this to set a fixed value for an existing property or to add a completely new property
+    :param excludedDefaultProperties: properties which shall be completely removed from serialisations, if they are set
+        to the given default value
     :return: the state dictionary, which may be modified by the receiver
     """
     s = super(cls, obj)
@@ -183,4 +185,8 @@ def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProper
     if overrideProperties is not None:
         for k, v in overrideProperties.items():
             d[k] = v
+    if excludedDefaultProperties is not None:
+        for p, v in excludedDefaultProperties.items():
+            if p in d and d[p] == v:
+                del d[p]
     return d

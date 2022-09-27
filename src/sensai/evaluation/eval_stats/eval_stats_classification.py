@@ -156,7 +156,7 @@ class ClassificationMetricAccuracyMaxProbabilityBeyondThreshold(ClassificationMe
             classIdx_predicted = np.argmax(probabilities)
             prob_predicted = probabilities[classIdx_predicted]
             if prob_predicted >= self.threshold:
-                classIdx_true = labelToColIdx[y_true[i]]
+                classIdx_true = labelToColIdx.get(y_true[i], -1)  # -1 if true class is unknown to model (did not appear in training data)
                 relFreq.count(classIdx_predicted == classIdx_true)
         if relFreq.numTotal == 0:
             return self.zeroValue
