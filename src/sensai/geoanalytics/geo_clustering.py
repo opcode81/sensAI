@@ -23,8 +23,8 @@ class GeoCoordClusterer(ABC):
     @abstractmethod
     def clustersIndices(self) -> Tuple[List[List[int]], List[int]]:
         """
-        :return: a tuple (clusters, outliers), where clusters is a dictionary mapping from cluster index to
-            the list of original point indices within the cluster and outliers is the list of indices of points not within
+        :return: a tuple (clusters, outliers), where clusters is a list of point indices, one list for each
+            cluster containing the indices of points within the cluster, and outliers is the list of indices of points not within
             clusters
         """
         pass

@@ -36,7 +36,7 @@ def plotMatrix(matrix: np.ndarray, title: str, xticklabels: Sequence[str], ytick
     if normalize:
         matrix = matrix.astype('float') / matrix.sum()
     fig, ax = plt.subplots(figsize=figsize)
-    fig.canvas.set_window_title(title.replace("\n", " "))
+    fig.canvas.manager.set_window_title(title.replace("\n", " "))
     # We want to show all ticks...
     ax.set(xticks=np.arange(matrix.shape[1]),
         yticks=np.arange(matrix.shape[0]),

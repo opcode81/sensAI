@@ -146,7 +146,7 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         :param values: a sequence of corresponding values
         """
         if len(keys) != len(values):
-            raise ValueError("Lengths of keys and values do not match")
+            raise ValueError(f"Lengths of keys ({len(keys)}) and values ({len(values)}) do not match")
         self.keys = keys
         self.values = values
 
