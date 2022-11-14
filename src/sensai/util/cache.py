@@ -534,7 +534,7 @@ class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
             cacheFactory: Optional[Callable[[], PersistentKeyValueCache[TKey, TValue]]] = None, persistCache=False, boxValues=False):
         """
         :param cache: the cache to use or None. If None, caching will be disabled
-        :param cacheFactory: a factory with which to create the cache (or recreate it after unpickling if `persistCache`=False, in which
+        :param cacheFactory: a factory with which to create the cache (or recreate it after unpickling if `persistCache` is False, in which
             case this factory must be picklable)
         :param persistCache: whether to persist the cache when pickling
         :param boxValues: whether to box values, such that None is admissible as a value

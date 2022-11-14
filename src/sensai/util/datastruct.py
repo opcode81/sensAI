@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any
 
@@ -139,7 +140,105 @@ class SortedValues(Generic[TValue]):
         return self._valueSlice(self.ceilIndex(lowestKey), self.floorIndex(highestKey))
 
 
-class SortedKeysAndValues(Generic[TKey, TValue]):
+class SortedKeyValueStructure(Generic[TKey, TValue], ABC):
+    @abstractmethod
+    def floorIndex(self, key: TKey) -> Optional[int]:
+        """
+        Finds the rightmost index where the key value is less than or equal to the given value
+
+        :param key: the value to search for
+        :return: the index or None if there is no such index
+        """
+        pass
+
+    @abstractmethod
+    def ceilIndex(self, key: TKey) -> Optional[int]:
+        """
+        Finds the leftmost index where the key value is greater than or equal to the given value
+
+        :param key: the value to search for
+        :return: the index or None if there is no such index
+        """
+        pass
+
+    @abstractmethod
+    def closestIndex(self, key: TKey) -> Optional[int]:
+        """
+        Finds the index where the key is closest to the given value.
+        If two subsequent keys have the same distance, the smaller index is returned.
+
+        :param key: the value to search for
+        :return: the index or None if this object is empty.
+        """
+        pass
+
+    @abstractmethod
+    def floorValue(self, key: TKey) -> Optional[TValue]:
+        """
+        Returns the value for the largest index where the corresponding key is less than or equal to the given value
+
+        :param key: the key to search for
+        :return: the value or None if there is no such value
+        """
+        pass
+
+    @abstractmethod
+    def ceilValue(self, key: TKey) -> Optional[TValue]:
+        """
+        Returns the value for the smallest index where the corresponding key is greater than or equal to the given value
+
+        :param key: the key to search for
+        :return: the value or None if there is no such value
+        """
+        pass
+
+    @abstractmethod
+    def closestValue(self, key: TKey) -> Optional[TValue]:
+        """
+        Finds the value that is closest to the given value.
+        If two subsequent values have the same distance, the smaller value is returned.
+
+        :param key: the key to search for
+        :return: the value or None if this object is empty
+        """
+        pass
+
+    @abstractmethod
+    def floorKeyAndValue(self, key: TKey) -> Optional[Tuple[TKey, TValue]]:
+        pass
+
+    @abstractmethod
+    def ceilKeyAndValue(self, key: TKey) -> Optional[Tuple[TKey, TValue]]:
+        pass
+
+    @abstractmethod
+    def closestKeyAndValue(self, key: TKey) -> Optional[Tuple[TKey, TValue]]:
+        pass
+
+    def interpolatedValue(self, key: TKey) -> Optional[TValue]:
+        """
+        Computes a linearly interpolated value for the given key - based on the two closest key-value pairs found in the data structure.
+        If the key is found in the data structure, the corresponding value is directly returned.
+
+        NOTE: This operation is supported only for value types that support the required arithmetic operations.
+
+        :param key: the key for which the interpolated value is to be computed.
+        :return: the interpolated value or None if the data structure does not contain floor/ceil entries for the given key
+        """
+        fkv = self.floorKeyAndValue(key)
+        ckv = self.ceilKeyAndValue(key)
+        if fkv is None or ckv is None:
+            return None
+        floorKey, floorValue = fkv
+        ceilKey, ceilValue = ckv
+        if ceilKey == floorKey:
+            return floorValue
+        else:
+            frac = (key - floorKey) / (ceilKey - floorKey)
+            return floorValue + (ceilValue - floorValue) * frac
+
+
+class SortedKeysAndValues(Generic[TKey, TValue], SortedKeyValueStructure[TKey, TValue]):
     def __init__(self, keys: Sequence[TKey], values: Sequence[TValue]):
         """
         :param keys: a sorted sequence of keys
@@ -158,62 +257,25 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         :param s: the series
         :return: an instance
         """
+        # noinspection PyTypeChecker
         return cls(s.index, s.values)
 
     def floorIndex(self, key) -> Optional[int]:
-        """
-        Finds the rightmost index where the key value is less than or equal to the given value
-
-        :param key: the value to search for
-        :return: the index or None if there is no such index
-        """
         return array_util.floorIndex(self.keys, key)
 
     def ceilIndex(self, key) -> Optional[int]:
-        """
-        Finds the leftmost index where the key value is greater than or equal to the given value
-
-        :param key: the value to search for
-        :return: the index or None if there is no such index
-        """
         return array_util.ceilIndex(self.keys, key)
 
     def closestIndex(self, key) -> Optional[int]:
-        """
-        Finds the index where the key is closest to the given value.
-        If two subsequent keys have the same distance, the smaller index is returned.
-
-        :param key: the value to search for
-        :return: the index or None if this object is empty.
-        """
         return array_util.closestIndex(self.keys, key)
 
     def floorValue(self, key) -> Optional[TValue]:
-        """
-        Returns the value for the largest index where the corresponding key is less than or equal to the given value
-
-        :param value: the value to search for
-        :return: the value or None if there is no such value
-        """
         return array_util.floorValue(self.keys, key, values=self.values)
 
     def ceilValue(self, key) -> Optional[TValue]:
-        """
-        Returns the value for the smallest index where the corresponding key is greater than or equal to the given value
-
-        :param value: the value to search for
-        :return: the value or None if there is no such value
-        """
         return array_util.ceilValue(self.keys, key, values=self.values)
 
     def closestValue(self, key) -> Optional[TValue]:
-        """
-        Finds the value that is closest to the given value.
-        If two subsequent values have the same distance, the smaller value is returned.
-
-        :param value: the value to search for
-        :return: the value or None if this object is empty
-        """
         return array_util.closestValue(self.keys, key, values=self.values)
 
     def floorKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
@@ -235,7 +297,7 @@ class SortedKeysAndValues(Generic[TKey, TValue]):
         return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values, fallbackBounds=fallback)
 
 
-class SortedKeyValuePairs(Generic[TKey, TValue]):
+class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, TValue]):
     @classmethod
     def fromUnsortedKeyValuePairs(cls, unsortedKeyValuePairs: Sequence[Tuple[TKey, TValue]]):
         return cls(sorted(unsortedKeyValuePairs, key=lambda x: x[0]))
@@ -248,6 +310,12 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
         if idx is None:
             return None
         return self.entries[idx][1]
+
+    def valueForIndex(self, idx: int) -> TValue:
+        return self.entries[idx][1]
+
+    def keyForIndex(self, idx: int) -> TKey:
+        return self.entries[idx][0]
 
     def floorIndex(self, key) -> Optional[int]:
         """Finds the rightmost index where the key is less than or equal to the given key"""
@@ -277,7 +345,7 @@ class SortedKeyValuePairs(Generic[TKey, TValue]):
     def closestValue(self, key) -> Optional[TValue]:
         return self._value(self.closestIndex(key))
 
-    def closestKeyAndValue(self, key):
+    def closestKeyAndValue(self, key) -> Optional[Tuple[TKey, TValue]]:
         idx = self.closestIndex(key)
         return None if idx is None else self.entries[idx]
 

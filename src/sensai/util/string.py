@@ -222,6 +222,8 @@ class ToStringMixin:
         As soon as this method is overridden, any property-based exclusions, inclusions, etc. will have no effect
         (unless the implementation is specifically designed to make use of them - as is the default
         implementation).
+        NOTE: Overrides must not internally use super() because of a technical limitation in the proxy
+        object that is used for nested object structures.
 
         :return: a string containing the string to use for ``<object info>``
         """
@@ -349,6 +351,10 @@ class ToStringMixin:
             (rather than the original object), such that the transitive call to _toStringProperties will call the new
             implementation.
             """
+
+            # methods where we assume that they could transitively call _toStringProperties (others are assumed not to)
+            TOSTRING_METHODS_TRANSITIVELY_CALLING_TOSTRINGPROPERTIES = set("_toStringObjectInfo")
+
             def __init__(self, x: "ToStringMixin", converter):
                 self.x = x
                 self.converter = converter
@@ -360,9 +366,10 @@ class ToStringMixin:
                 return self.x._toStringClassName()
 
             def __getattr__(self, attr: str):
-                if attr.startswith("_toString"):  # ToStringMixin method which we bind to use this proxy
+                if attr.startswith("_toString"):  # ToStringMixin method which we may bind to use this proxy to ensure correct transitive call
                     method = getattr(self.x.__class__, attr)
-                    return lambda *args, **kwargs: method(self, *args, **kwargs)
+                    obj = self if attr in self.TOSTRING_METHODS_TRANSITIVELY_CALLING_TOSTRINGPROPERTIES else self.x
+                    return lambda *args, **kwargs: method(obj, *args, **kwargs)
                 else:
                     return getattr(self.x, attr)
 

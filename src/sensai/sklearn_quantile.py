@@ -29,7 +29,7 @@ class RandomForestQuantileRegressorVectorRegressionModel(AbstractSkLearnMultiple
         :return: an array of shape [2, N], where the first dimension contains the confidence interval's lower bounds and the second
             its upper bounds
         """
-        model = self.getModelForVarName(varName)
+        model = self.getSkLearnModel(varName)
         model: RandomForestQuantileRegressor
         outputs = self._predictQuantiles(model, self.computeModelInputs(X))
         return outputs[1:]
