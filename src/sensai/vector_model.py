@@ -11,7 +11,7 @@ from typing import List, Any, Optional, Union, Type, Dict
 import numpy as np
 import pandas as pd
 
-from sensai.util.deprecation import deprecated
+from .util.deprecation import deprecated
 from .data import InputOutputData
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector

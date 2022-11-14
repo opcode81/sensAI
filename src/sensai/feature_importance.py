@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.inspection import permutation_importance
 
 from .data import InputOutputData
 from .evaluation.crossval import VectorModelCrossValidationData
@@ -178,6 +177,7 @@ class AggregatedFeatureImportance:
 
 def computePermutationFeatureImportanceDict(model, ioData: InputOutputData, scoring, numRepeats: int, randomState,
         excludeInputPreprocessors=False, numJobs=None):
+    from sklearn.inspection import permutation_importance
     if excludeInputPreprocessors:
         inputs = model.computeModelInputs(ioData.inputs)
         model = copy.copy(model)
