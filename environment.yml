@@ -13,7 +13,7 @@ dependencies:
   # we use Python 3.8 because it has better conda dependency support; the code must still be compatible to 3.7 (which is tested by the github build)
   - python=3.8
   - pip
-  # optional sensai dependencies for development
+  # optional sensai conda dependencies for development
   # NOTE: catboost is disabled, because it causes conflicts
   #- catboost
   - pytorch
@@ -23,6 +23,7 @@ dependencies:
   - lightgbm
   - utm=0.7.0
   - geopandas
+  - sklearn-quantile
   # for notebook support
   - jupyter
   # for tests
