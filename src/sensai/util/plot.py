@@ -214,29 +214,51 @@ class HeatMapPlot(Plot):
 
 
 class HistogramPlot(Plot):
-    def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, binwidth=None, stat="probability", xlabel=None,
+    def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, cdfSecondaryAxis=True,
+            binwidth=None, stat="probability", xlabel=None,
             **kwargs):
+        """
+        :param values: the values to plot
+        :param bins: a bin specification as understood by sns.histplot
+        :param kde: whether to add a kernel density estimator
+        :param cdf: whether to add a plot of the cumulative distribution function (cdf)
+        :param cdfComplementary: whether to plot, if cdf is enabled, the complementary values
+        :param cdfSecondaryAxis: whether to use, if cdf is enabled, a secondary
+        :param binwidth: the bin width; if None, inferred
+        :param stat: the statistic to plot (as understood by sns.histplot)
+        :param xlabel: the label for the x-axis
+        :param kwargs: arguments to pass on to sns.histplot
+        """
 
         def draw():
+            nonlocal cdfSecondaryAxis
             sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
+            plt.ylabel(stat)
             if cdf:
-                if cdfComplementary or stat in ("count", "proportion", "probability"):
+                ecdfStat = stat
+                if ecdfStat not in ("count", "proportion", "probability"):
+                    ecdfStat = "proportion"
+                    cdfSecondaryAxis = True
+                cdfAx: Optional[plt.Axes] = None
+                cdfAxLabel = f"{ecdfStat} (cdf)"
+                if cdfSecondaryAxis:
+                    cdfAx: plt.Axes = plt.twinx()
+                    if stat in ("proportion", "probability"):
+                        yTick = 0.1
+                    elif stat == "percent":
+                        yTick = 10
+                    else:
+                        yTick = None
+                    if yTick is not None:
+                        cdfAx.yaxis.set_major_locator(plticker.MultipleLocator(base=yTick))
+                if cdfComplementary or ecdfStat in ("count", "proportion", "probability"):
                     ecdfStat = "proportion" if stat == "probability" else stat  # same semantics but "probability" not understood by ecdfplot
-                    if ecdfStat not in ("count", "proportion"):
-                        raise ValueError(f"Complementary cdf (cdfComplementary=True) is only supported for stats 'count', 'proportion' and 'probability, got '{stat}'")
-                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange")
+                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange", ax=cdfAx)
                 else:
-                    sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange")
+                    sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange", ax=cdfAx)
+                if cdfAx is not None:
+                    cdfAx.set_ylabel(cdfAxLabel)
             if xlabel is not None:
-                plt.xlabel(xlabel)
+                self.xlabel(xlabel)
 
         super().__init__(draw)
-
-        if stat in ("proportion", "probability"):
-            yTick = 0.1
-        elif stat == "percent":
-            yTick = 10
-        else:
-            yTick = None
-        if yTick is not None:
-            self.ytickMajor((yTick))

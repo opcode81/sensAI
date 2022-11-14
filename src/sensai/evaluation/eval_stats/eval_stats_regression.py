@@ -7,18 +7,19 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot
+from ...vector_model import VectorRegressionModel, InputOutputData
 from ...util.plot import HistogramPlot
 
 log = logging.getLogger(__name__)
 
 
 class RegressionMetric(Metric["RegressionEvalStats"], ABC):
-    def computeValueForEvalStats(self, evalStats: "RegressionEvalStats"):
-        return self.computeValue(np.array(evalStats.y_true), np.array(evalStats.y_predicted))
+    def computeValueForEvalStats(self, evalStats: "RegressionEvalStats", model: VectorRegressionModel = None, ioData: InputOutputData = None):
+        return self.computeValue(np.array(evalStats.y_true), np.array(evalStats.y_predicted), model=model, ioData=ioData)
 
     @classmethod
     @abstractmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         pass
 
     @classmethod
@@ -34,7 +35,7 @@ class RegressionMetricMAE(RegressionMetric):
     name = "MAE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         return np.mean(cls.computeAbsErrors(y_true, y_predicted))
 
 
@@ -42,7 +43,7 @@ class RegressionMetricMSE(RegressionMetric):
     name = "MSE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         residuals = y_predicted - y_true
         return np.sum(residuals * residuals) / len(residuals)
 
@@ -51,7 +52,7 @@ class RegressionMetricRMSE(RegressionMetric):
     name = "RMSE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         errors = cls.computeErrors(y_true, y_predicted)
         return np.sqrt(np.mean(errors * errors))
 
@@ -60,7 +61,7 @@ class RegressionMetricRRSE(RegressionMetric):
     name = "RRSE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         mean_y = np.mean(y_true)
         residuals = y_predicted - y_true
         mean_deviation = y_true - mean_y
@@ -70,7 +71,7 @@ class RegressionMetricRRSE(RegressionMetric):
 class RegressionMetricR2(RegressionMetric):
     name = "R2"
 
-    def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         rrse = RegressionMetricRRSE.computeValue(y_true, y_predicted)
         return 1.0 - rrse*rrse
 
@@ -78,7 +79,7 @@ class RegressionMetricR2(RegressionMetric):
 class RegressionMetricPCC(RegressionMetric):
     name = "PCC"
 
-    def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         cov = np.cov([y_true, y_predicted])
         return cov[0][1] / np.sqrt(cov[0][0] * cov[1][1])
 
@@ -87,7 +88,7 @@ class RegressionMetricStdDevAE(RegressionMetric):
     name = "StdDevAE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         return np.std(cls.computeAbsErrors(y_true, y_predicted))
 
 
@@ -95,7 +96,7 @@ class RegressionMetricMedianAE(RegressionMetric):
     name = "MedianAE"
 
     @classmethod
-    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray):
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
         return np.median(cls.computeAbsErrors(y_true, y_predicted))
 
 
@@ -112,13 +113,16 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     SCATTER_PLOT_POINT_COLOR = (0, 0, 1, 0.05)
 
     def __init__(self, y_predicted: Optional[PredictionArray] = None, y_true: Optional[PredictionArray] = None,
-            metrics: Sequence["RegressionMetric"] = None, additionalMetrics: Sequence["RegressionMetric"] = None):
+            metrics: Sequence["RegressionMetric"] = None, additionalMetrics: Sequence["RegressionMetric"] = None,
+            model: VectorRegressionModel = None, ioData: InputOutputData = None):
         """
         :param y_predicted: the predicted values
         :param y_true: the true values
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
         :param additionalMetrics: the metrics to additionally compute
         """
+        self.model = model
+        self.ioData = ioData
 
         if metrics is None:
             metrics = [RegressionMetricRRSE(), RegressionMetricR2(),
@@ -127,6 +131,9 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
         metrics = list(metrics)
 
         super().__init__(y_predicted, y_true, metrics, additionalMetrics=additionalMetrics)
+
+    def computeMetricValue(self, metric: RegressionMetric) -> float:
+        return metric.computeValueForEvalStats(self, model=self.model, ioData=self.ioData)
 
     def getMSE(self):
         return self.computeMetricValue(RegressionMetricMSE())

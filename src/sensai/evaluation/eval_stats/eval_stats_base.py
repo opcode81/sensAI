@@ -168,6 +168,8 @@ class EvalStatsCollection(Generic[TEvalStats, TMetric], ABC):
                 else:
                     numBins = bins
                 bins = np.linspace(0, 1, numBins+1)
+            else:
+                bins = "auto"
 
         values = self._valuesByMetricName[metricName]
         title = metricName
