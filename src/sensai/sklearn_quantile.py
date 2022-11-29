@@ -52,7 +52,7 @@ class QuantileRegressionMetric(RegressionMetric, ABC):
         return intervals
 
 
-class RegressionMetricAccuracyInConfidenceInterval(QuantileRegressionMetric):
+class QuantileRegressionMetricAccuracyInConfidenceInterval(QuantileRegressionMetric):
     """
     Metric reflecting the accuracy of the confidence interval, i.e. the relative frequency of predictions where the confidence interval
     contains the ground true value
@@ -68,7 +68,7 @@ class RegressionMetricAccuracyInConfidenceInterval(QuantileRegressionMetric):
         return rf.getRelativeFrequency()
 
 
-class RegressionMetricConfidenceIntervalMeanSize(QuantileRegressionMetric):
+class QuantileRegressionMetricConfidenceIntervalMeanSize(QuantileRegressionMetric):
     """
     Metric for the mean size of the confidence interval
     """
@@ -81,3 +81,35 @@ class RegressionMetricConfidenceIntervalMeanSize(QuantileRegressionMetric):
         for lower, upper in intervals.transpose():
             values.append(upper-lower)
         return np.mean(values)
+
+
+class QuantileRegressionMetricConfidenceIntervalMedianSize(QuantileRegressionMetric):
+    """
+    Metric for the median size of the confidence interval
+    """
+    name = "MedianSizeCI"
+
+    @classmethod
+    def computeValue(cls, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
+        intervals = cls.computeConfidenceIntervals(model, ioData)
+        values = []
+        for lower, upper in intervals.transpose():
+            values.append(upper-lower)
+        return np.median(values)
+
+
+class QuantileRegressionMetricRelFreqMaxSizeConfidenceInterval(QuantileRegressionMetric):
+    """
+    Relative frequency of confidence interval having the given maximum size
+    """
+    def __init__(self, maxSize: float):
+        super().__init__(f"RelFreqMaxSizeCI[{maxSize}]")
+        self.maxSize = maxSize
+
+    def computeValue(self, y_true: np.ndarray, y_predicted: np.ndarray, model: VectorRegressionModel = None, ioData: InputOutputData = None):
+        intervals = self.computeConfidenceIntervals(model, ioData)
+        counter = RelativeFrequencyCounter()
+        for lower, upper in intervals.transpose():
+            size = upper-lower
+            counter.count(size <= self.maxSize)
+        return counter.getRelativeFrequency()
