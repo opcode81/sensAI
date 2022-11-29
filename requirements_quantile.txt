@@ -1,3 +1,4 @@
 # Requirements for extra 'quantile'
 # These are the pinned lowest versions we test; setup.py relaxes them, changing them to lower bounds
+cython
 sklearn-quantile==0.0.19
