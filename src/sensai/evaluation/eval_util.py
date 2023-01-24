@@ -845,7 +845,7 @@ class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], AB
             evalStatsCollection = self.getEvalStatsCollection(modelName)
             for metricName in evalStatsCollection.getMetricNames():
                 # plot distribution
-                fig = evalStatsCollection.plotDistribution(metricName, cdf=cdf, cdfComplementary=cdfComplementary)
+                fig = evalStatsCollection.plotDistribution(metricName, subtitle=modelName, cdf=cdf, cdfComplementary=cdfComplementary)
                 resultWriter.writeFigure(f"{modelName}_dist-{metricName}", fig)
                 # scatter plot with paired metrics
                 metric = evalStatsCollection.getMetricByName(metricName)

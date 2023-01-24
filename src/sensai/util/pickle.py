@@ -5,11 +5,13 @@ from typing import List, Dict, Any, Iterable
 
 import joblib
 
+from .io import isS3Path, S3Object
+
 log = logging.getLogger(__name__)
 
 
 def loadPickle(path, backend="pickle"):
-    with open(path, "rb") as f:
+    def readFile(f):
         if backend == "pickle":
             return pickle.load(f)
         elif backend == "joblib":
@@ -17,12 +19,23 @@ def loadPickle(path, backend="pickle"):
         else:
             raise ValueError(f"Unknown backend '{backend}'")
 
+    if isS3Path(path):
+        return readFile(S3Object(path).openFile("rb"))
+    with open(path, "rb") as f:
+        return readFile(f)
+
 
 def dumpPickle(obj, picklePath, backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
+    def openFile():
+        if isS3Path(picklePath):
+            return S3Object(picklePath).openFile("wb")
+        else:
+            return open(picklePath, "wb")
+
     dirName = os.path.dirname(picklePath)
     if dirName != "":
         os.makedirs(dirName, exist_ok=True)
-    with open(picklePath, "wb") as f:
+    with openFile() as f:
         if backend == "pickle":
             try:
                 pickle.dump(obj, f, protocol=protocol)
