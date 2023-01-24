@@ -1,12 +1,11 @@
+import io
 import logging
 import os
-from typing import Sequence, Optional, Tuple, List
+from typing import Sequence, Optional, Tuple, List, Literal
 
 import matplotlib.figure
 from matplotlib import pyplot as plt
 import pandas as pd
-
-from .pickle import dumpPickle
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +101,7 @@ class ResultWriter:
             self.writeFigure(name, fig, closeFigure=closeFigures)
 
     def writePickle(self, filenameSuffix, obj):
+        from .pickle import dumpPickle
         p = self.path(filenameSuffix, extensionToAdd="pickle")
         self.log.info(f"Saving pickle {p}")
         dumpPickle(obj, p)
@@ -134,3 +134,53 @@ def readTextFileLines(path, strip=True, skipEmpty=True) -> List[str]:
             if not skipEmpty or line != "":
                 lines.append(line)
     return lines
+
+
+def isS3Path(path: str):
+    return path.startswith("s3://")
+
+
+class S3Object:
+    def __init__(self, path):
+        assert isS3Path(path)
+        self.path = path
+        self.bucket, self.object = self.path[5:].split("/", 1)
+
+    class OutputFile:
+        def __init__(self, s3Object: "S3Object"):
+            self.s3Object = s3Object
+            self.buffer = io.BytesIO()
+
+        def write(self, obj: bytes):
+            self.buffer.write(obj)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.s3Object.put(self.buffer.getvalue())
+
+    def getFileContent(self):
+        return self._getS3Object().get()['Body'].read()
+
+    def openFile(self, mode):
+        assert mode in ("wb", "rb")
+        if mode == "rb":
+            content = self.getFileContent()
+            return io.BytesIO(content)
+
+        elif mode == "wb":
+            return self.OutputFile(self)
+
+        else:
+            raise ValueError(mode)
+
+    def put(self, obj: bytes):
+        self._getS3Object().put(Body=obj)
+
+    def _getS3Object(self):
+        import boto3
+        session = boto3.session.Session(profile_name=os.getenv("AWS_PROFILE"))
+        s3 = session.resource("s3")
+        return s3.Bucket(self.bucket).Object(self.object)
+
