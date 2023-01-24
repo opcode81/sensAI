@@ -122,7 +122,8 @@ autodoc_mock_imports = [
     "geopandas",
     "shapely",
     "networkx",
-    "utm"
+    "utm",
+    "sklearn_quantile"
 ]
 
 # Render docu of __init__ methods

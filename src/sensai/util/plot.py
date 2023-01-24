@@ -78,25 +78,26 @@ class Plot:
         fig, ax = plt.subplots(num=name)
         self.fig: plt.Figure = fig
         self.ax: plt.Axes = ax
-        draw()
+        if draw is not None:
+            draw()
 
-    def xlabel(self: Type[TPlot], label):
+    def xlabel(self: TPlot, label) -> TPlot:
         self.ax.set_xlabel(label)
         return self
 
-    def ylabel(self: Type[TPlot], label) -> TPlot:
+    def ylabel(self: TPlot, label) -> TPlot:
         self.ax.set_ylabel(label)
         return self
 
-    def title(self: Type[TPlot], title: str) -> TPlot:
+    def title(self: TPlot, title: str) -> TPlot:
         self.ax.set_title(title)
         return self
 
-    def xlim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+    def xlim(self: TPlot, minValue, maxValue) -> TPlot:
         self.ax.set_xlim(minValue, maxValue)
         return self
 
-    def ylim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+    def ylim(self: TPlot, minValue, maxValue) -> TPlot:
         self.ax.set_ylim(minValue, maxValue)
         return self
 
@@ -104,7 +105,7 @@ class Plot:
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
-    def xtick(self, major=None, minor=None):
+    def xtick(self: TPlot, major=None, minor=None) -> TPlot:
         """
         Sets a tick on every integer multiple of the given base values.
         The major ticks are labelled, the minor ticks are not.
@@ -119,15 +120,15 @@ class Plot:
             self.xtickMinor(minor)
         return self
 
-    def xtickMajor(self, base):
+    def xtickMajor(self: TPlot, base) -> TPlot:
         self.ax.xaxis.set_major_locator(plticker.MultipleLocator(base=base))
         return self
 
-    def xtickMinor(self, base):
+    def xtickMinor(self: TPlot, base) -> TPlot:
         self.ax.xaxis.set_minor_locator(plticker.MultipleLocator(base=base))
         return self
 
-    def ytickMajor(self, base):
+    def ytickMajor(self: TPlot, base) -> TPlot:
         self.ax.yaxis.set_major_locator(plticker.MultipleLocator(base=base))
         return self
 

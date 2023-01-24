@@ -27,6 +27,11 @@ class Trivalent(Enum):
         return self == Trivalent.FALSE
 
 
+class Maybe(Generic[TValue]):
+    def __init__(self, value: Optional[TValue]):
+        self.value = value
+
+
 class DeferredParams(ToStringMixin):
     """
     Represents a dictionary of parameters that is specifically designed to hold parameters that can only defined late within

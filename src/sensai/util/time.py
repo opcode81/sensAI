@@ -1,3 +1,5 @@
+from datetime import time
+
 import pandas as pd
 
 
@@ -24,6 +26,16 @@ class TimeInterval:
 
     def contains(self, t: pd.Timestamp):
         return self.start <= t <= self.end
+
+    def containsTime(self, t: time):
+        """
+        :param t: a time of day
+        :return: True iff the time interval contains the given time of day at least once, False otherwise
+        """
+        if (self.end - self.start).total_seconds() >= (60 * 60 * 24):
+            return True
+        return self.contains(self.start.replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=t.microsecond)) or \
+            self.contains(self.end.replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=t.microsecond))
 
     def overlapsWith(self, other: "TimeInterval") -> bool:
         otherEndsBefore = other.end <= self.start
