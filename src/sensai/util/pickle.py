@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Iterable
 
 import joblib
 
-from sensai.util.io import isS3Path, S3Object
+from .io import isS3Path, S3Object
 
 log = logging.getLogger(__name__)
 
