@@ -1,4 +1,5 @@
 import atexit
+from datetime import datetime
 import logging as lg
 from logging import *
 import sys
@@ -32,6 +33,13 @@ def configureLogging(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     getLogger("urllib3").setLevel(lg.INFO)
     getLogger("msal").setLevel(lg.INFO)
     pd.set_option('display.max_colwidth', 255)
+
+
+def datetimeTag() -> str:
+    """
+    :return: a string tag for use in log file names which contains the current date and time (compact but readable)
+    """
+    return datetime.now().strftime('%Y%m%d-%H%M%S')
 
 
 _fileLoggerPaths: List[str] = []
