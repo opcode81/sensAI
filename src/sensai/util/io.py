@@ -1,7 +1,7 @@
 import io
 import logging
 import os
-from typing import Sequence, Optional, Tuple, List, Literal
+from typing import Sequence, Optional, Tuple, List
 
 import matplotlib.figure
 from matplotlib import pyplot as plt

@@ -13,7 +13,11 @@ log = logging.getLogger(__name__)
 def loadPickle(path, backend="pickle"):
     def readFile(f):
         if backend == "pickle":
-            return pickle.load(f)
+            try:
+                return pickle.load(f)
+            except:
+                log.error(f"Error loading {path}")
+                raise
         elif backend == "joblib":
             return joblib.load(f)
         else:
