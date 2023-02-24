@@ -1,7 +1,21 @@
+from typing import Optional
+
 import xgboost
 
 from .sklearn.sklearn_base import AbstractSkLearnMultipleOneDimVectorRegressionModel, AbstractSkLearnVectorClassificationModel, \
     FeatureImportanceProviderSkLearnRegressionMultipleOneDim, FeatureImportanceProviderSkLearnClassification
+
+
+def isXGBoostVersionAtLeast(major: int, minor: Optional[int] = None, patch: Optional[int] = None):
+    components = xgboost.__version__.split(".")
+    for i, version in enumerate((major, minor, patch)):
+        if version is not None:
+            installedVersion = int(components[i])
+            if installedVersion > version:
+                return True
+            if installedVersion < version:
+                return False
+    return True
 
 
 class XGBGradientBoostedVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel, FeatureImportanceProviderSkLearnRegressionMultipleOneDim):
@@ -34,7 +48,9 @@ class XGBGradientBoostedVectorClassificationModel(AbstractSkLearnVectorClassific
         """
         :param modelArgs: See https://xgboost.readthedocs.io/en/latest/python/python_api.html#xgboost.XGBClassifier
         """
-        super().__init__(xgboost.XGBClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights, **modelArgs)
+        useLabelEncoding = isXGBoostVersionAtLeast(1, 6)
+        super().__init__(xgboost.XGBClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights,
+            useLabelEncoding=useLabelEncoding, **modelArgs)
 
 
 class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
@@ -45,4 +61,6 @@ class XGBRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificati
         """
         :param modelArgs: See https://xgboost.readthedocs.io/en/latest/python/python_api.html#xgboost.XGBRFClassifier
         """
-        super().__init__(xgboost.XGBRFClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights, **modelArgs)
+        useLabelEncoding = isXGBoostVersionAtLeast(1, 6)
+        super().__init__(xgboost.XGBRFClassifier, random_state=random_state, useBalancedClassWeights=useBalancedClassWeights,
+            useLabelEncoding=useLabelEncoding, **modelArgs)
