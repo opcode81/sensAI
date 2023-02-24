@@ -161,6 +161,9 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             results[varName] = self._predictSkLearnSingleModel(self.models[varName], inputs)
         return pd.DataFrame(results)
 
+    def _predictSkLearnSingleModel(self, model, inputs: pd.DataFrame) -> np.ndarray:
+        return model.predict(inputs)
+
     def getSkLearnModel(self, predictedVarName=None):
         if predictedVarName is None:
             if len(self.models) > 1:
@@ -203,7 +206,7 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
 
 
 class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
-    def __init__(self, modelConstructor, useBalancedClassWeights=False, **modelArgs):
+    def __init__(self, modelConstructor, useBalancedClassWeights=False, useLabelEncoding=False, **modelArgs):
         """
         :param modelConstructor: the sklearn model constructor
         :param modelArgs: arguments to be passed to the sklearn model constructor
@@ -212,19 +215,23 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
             to the reciprocal frequency of the class in the (training) data. We scale weights such that the smallest weight (of the
             largest class) is 1, ensuring that weight counts still reasonably correspond to data point counts.
             Note that weighted data points may not be supported for all types of models.
+        :param useLabelEncoding: whether to replace original class labels with 0-based index in sorted list of labels (a.k.a. label
+            encoding), which is required by some sklearn-compatible implementations (particularly xgboost)
         """
         super().__init__()
         self.modelConstructor = modelConstructor
         self.sklearnInputTransformer = None
-        self.sklearnOutputTransformer = None
         self.modelArgs = modelArgs
         self.fitArgs = {}
         self.useBalancedClassWeights = useBalancedClassWeights
+        self.useLabelEncoding = useLabelEncoding
         self.model = None
 
     def __setstate__(self, state):
-        setstate(AbstractSkLearnVectorClassificationModel, self, state, newDefaultProperties={"useComputedClassWeights": False},
-            renamedProperties={"useComputedClassWeights": "useBalancedClassWeights"})
+        setstate(AbstractSkLearnVectorClassificationModel, self, state, newOptionalProperties=["labelEncoder"],
+            newDefaultProperties={"useComputedClassWeights": False, "useLabelEncoder": False},
+            renamedProperties={"useComputedClassWeights": "useBalancedClassWeights"},
+            removedProperties=["sklearnOutputTransformer"])
 
     def _toStringExcludes(self) -> List[str]:
         return super()._toStringExcludes() + ["modelConstructor", "sklearnInputTransformer", "sklearnOutputTransformer",
@@ -244,15 +251,6 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         :return: self
         """
         self.sklearnInputTransformer = sklearnInputTransformer
-        return self
-
-    def withSkLearnOutputTransformer(self, sklearnOutputTransformer):
-        """
-        :param sklearnOutputTransformer: an optional sklearn preprocessor for transforming the target labels
-        :return: self
-        """
-        raise Exception("This is currently not supported for classifiers")  # TODO add support
-        self.sklearnOutputTransformer = sklearnOutputTransformer
         return self
 
     def _updateModelArgs(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
@@ -278,7 +276,7 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         inputs = self._transformInput(inputs, fit=True)
         self._updateModelArgs(inputs, outputs)
         self._updateFitArgs(inputs, outputs)
-        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs, self.sklearnOutputTransformer)
+        self.model = createSkLearnModel(self.modelConstructor, self.modelArgs)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         kwargs = dict(self.fitArgs)
         if self.useBalancedClassWeights:
@@ -287,15 +285,30 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
             weights = np.array([class2weight[cls] for cls in classes])
             weights = weights / np.min(weights)
             kwargs["sample_weight"] = weights
+
         outputValues = np.ravel(outputs.values)
+        if self.useLabelEncoding:
+            outputValues = self._encodeLabels(outputValues)
         self.model.fit(inputs, outputValues, **kwargs)
 
     def _transformInput(self, inputs: pd.DataFrame, fit=False) -> pd.DataFrame:
         return _applySkLearnInputTransformer(inputs, self.sklearnInputTransformer, fit)
 
+    def _encodeLabels(self, y: np.ndarray):
+        d = {l: i for i, l in enumerate(self._labels)}
+        vfn = np.vectorize(lambda x: d[x])
+        return vfn(y)
+
+    def _decodeLabels(self, y: np.ndarray):
+        d = dict(enumerate(self._labels))
+        vfn = np.vectorize(lambda x: d[x])
+        return vfn(y)
+
     def _predict(self, x: pd.DataFrame):
         inputValues = self._transformInput(x)
         Y = self.model.predict(inputValues)
+        if self.useLabelEncoding:
+            Y = self._decodeLabels(Y)
         return pd.DataFrame(Y, columns=self._predictedVariableNames)
 
     def _predictClassProbabilities(self, x: pd.DataFrame):
