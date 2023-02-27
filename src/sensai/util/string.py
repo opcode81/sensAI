@@ -353,7 +353,7 @@ class ToStringMixin:
             """
 
             # methods where we assume that they could transitively call _toStringProperties (others are assumed not to)
-            TOSTRING_METHODS_TRANSITIVELY_CALLING_TOSTRINGPROPERTIES = set("_toStringObjectInfo")
+            TOSTRING_METHODS_TRANSITIVELY_CALLING_TOSTRINGPROPERTIES = set(["_toStringObjectInfo"])
 
             def __init__(self, x: "ToStringMixin", converter):
                 self.x = x
