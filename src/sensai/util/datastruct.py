@@ -254,6 +254,9 @@ class SortedKeysAndValues(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
         self.keys = keys
         self.values = values
 
+    def __len__(self):
+        return len(self.keys)
+
     @classmethod
     def fromSeries(cls, s: pd.Series):
         """
@@ -310,6 +313,9 @@ class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
     def __init__(self, sortedKeyValuePairs: Sequence[Tuple[TKey, TValue]]):
         self.entries = sortedKeyValuePairs
         self._sortedKeys = SortedValues([t[0] for t in sortedKeyValuePairs])
+
+    def __len__(self):
+        return len(self.entries)
 
     def _value(self, idx: Optional[int]) -> Optional[TValue]:
         if idx is None:
