@@ -72,7 +72,7 @@ def closestIndex(arr, value) -> Optional[int]:
     if ceilIdx >= length:
         return floorIdx
     floorValue = arr[floorIdx]
-    ceilValue = arr[floorIdx]
+    ceilValue = arr[ceilIdx]
     floorDist = abs(floorValue - value)
     ceilDist = abs(ceilValue - value)
     if floorDist <= ceilDist:
