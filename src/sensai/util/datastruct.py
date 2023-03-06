@@ -374,10 +374,11 @@ class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
             if None, the first included entry will be the very first entry
         :param upperBoundKey: the key defining the end of the slice (depending on inner);
             if None, the last included entry will be the very last entry
-        :param inner: if True, the returned slice will be within the bounds; if False, the the returned
+        :param inner: if True, the returned slice will be within the bounds; if False, the returned
             slice is extended by one entry in both directions such that it contains the bounds (where possible)
         :return:
         """
+        assert upperBoundKey >= lowerBoundKey
         if lowerBoundKey is not None:
             fromIndex = self.ceilIndex(lowerBoundKey) if inner else self.floorIndex(lowerBoundKey)
             if fromIndex is None:
@@ -385,9 +386,14 @@ class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
         else:
             fromIndex = 0
         if upperBoundKey is not None:
-            toIndex = self.floorIndex(upperBoundKey) if inner else self.ceilIndex(upperBoundKey)
-            if toIndex is None:
-                toIndex = len(self.entries)
+            if inner:
+                toIndex = self.floorIndex(upperBoundKey)
+                if toIndex is None:
+                    toIndex = -1  # shall return empty slice
+            else:
+                toIndex = self.ceilIndex(upperBoundKey)
+                if toIndex is None:
+                    toIndex = len(self.entries) - 1
         else:
-            toIndex = len(self.entries)
-        return SortedKeyValuePairs(self.entries[fromIndex:toIndex])
+            toIndex = len(self.entries) - 1
+        return SortedKeyValuePairs(self.entries[fromIndex:toIndex+1])
