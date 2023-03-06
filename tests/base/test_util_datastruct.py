@@ -24,11 +24,18 @@ def test_sorted_structures():
         assert s.closestValue(1.1) == "1"
         assert s.closestKeyAndValue(1.1) == (1, "1")
         assert s.closestIndex(1.1) == 0
+        assert len(sortedPairs.slice(3, 5, inner=True)) == 2
+        assert len(sortedPairs.slice(3, 5, inner=False)) == 2
+        assert len(sortedPairs.slice(2, 8, inner=True)) == 3
+        assert len(sortedPairs.slice(2, 8, inner=False)) == 5
+        assert len(sortedPairs.slice(0, 12, inner=False)) == len(keys)
+        assert len(sortedPairs.slice(12, 14, inner=False)) == 1
+        assert len(sortedPairs.slice(12, 14, inner=True)) == 0
+        assert len(sortedPairs.slice(-1, 0, inner=True)) == 0
+        assert len(sortedPairs.slice(-1, 0, inner=False)) == 1
 
     assert len(sortedKV.valueSliceInner(2, 8)) == 3
 
-    assert len(sortedPairs.slice(2, 8, inner=True)) == 3
-    assert len(sortedPairs.slice(2, 8, inner=False)) == 5
     assert len(sortedPairs.valueSlice(2, 8)) == 3
     assert sortedPairs.keyForIndex(3) == 7
 

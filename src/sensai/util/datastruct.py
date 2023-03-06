@@ -7,6 +7,7 @@ import pandas as pd
 from . import sequences as array_util
 from .string import ToStringMixin, dictString
 
+T = TypeVar("T")
 TKey = TypeVar("TKey")
 TValue = TypeVar("TValue")
 
@@ -147,6 +148,10 @@ class SortedValues(Generic[TValue]):
 
 class SortedKeyValueStructure(Generic[TKey, TValue], ABC):
     @abstractmethod
+    def __len__(self):
+        pass
+
+    @abstractmethod
     def floorIndex(self, key: TKey) -> Optional[int]:
         """
         Finds the rightmost index where the key value is less than or equal to the given value
@@ -242,6 +247,45 @@ class SortedKeyValueStructure(Generic[TKey, TValue], ABC):
             frac = (key - floorKey) / (ceilKey - floorKey)
             return floorValue + (ceilValue - floorValue) * frac
 
+    def slice(self: T, lowerBoundKey=None, upperBoundKey=None, inner=True) -> T:
+        """
+        :param lowerBoundKey: the key defining the start of the slice (depending on inner);
+            if None, the first included entry will be the very first entry
+        :param upperBoundKey: the key defining the end of the slice (depending on inner);
+            if None, the last included entry will be the very last entry
+        :param inner: if True, the returned slice will be within the bounds; if False, the returned
+            slice is extended by one entry in both directions such that it contains the bounds (where possible)
+        :return:
+        """
+        assert upperBoundKey >= lowerBoundKey
+        if lowerBoundKey is not None:
+            if inner:
+                fromIndex = self.ceilIndex(lowerBoundKey)
+                if fromIndex is None:
+                    fromIndex = len(self)  # shall return empty slice
+            else:
+                fromIndex = self.floorIndex(lowerBoundKey)
+                if fromIndex is None:
+                    fromIndex = 0
+        else:
+            fromIndex = 0
+        if upperBoundKey is not None:
+            if inner:
+                toIndex = self.floorIndex(upperBoundKey)
+                if toIndex is None:
+                    toIndex = -1  # shall return empty slice
+            else:
+                toIndex = self.ceilIndex(upperBoundKey)
+                if toIndex is None:
+                    toIndex = len(self) - 1
+        else:
+            toIndex = len(self) - 1
+        return self._createSlice(fromIndex, toIndex)
+
+    @abstractmethod
+    def _createSlice(self: T, fromIndex: int, toIndex: int) -> T:
+        pass
+
 
 class SortedKeysAndValues(Generic[TKey, TValue], SortedKeyValueStructure[TKey, TValue]):
     def __init__(self, keys: Sequence[TKey], values: Sequence[TValue]):
@@ -303,6 +347,9 @@ class SortedKeysAndValues(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
 
     def valueSliceOuter(self, lowerBoundKey, upperBoundKey, fallback=False):
         return array_util.valueSliceOuter(self.keys, lowerBoundKey, upperBoundKey, values=self.values, fallbackBounds=fallback)
+
+    def _createSlice(self, fromIndex: int, toIndex: int) -> "SortedKeysAndValues":
+        return SortedKeysAndValues(self.keys[fromIndex:toIndex+1], self.values[fromIndex:toIndex+1])
 
 
 class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, TValue]):
@@ -368,32 +415,5 @@ class SortedKeyValuePairs(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
     def valueSlice(self, lowestKey, highestKey) -> Optional[Sequence[TValue]]:
         return self._valueSlice(self.ceilIndex(lowestKey), self.floorIndex(highestKey))
 
-    def slice(self, lowerBoundKey=None, upperBoundKey=None, inner=True) -> "SortedKeyValuePairs":
-        """
-        :param lowerBoundKey: the key defining the start of the slice (depending on inner);
-            if None, the first included entry will be the very first entry
-        :param upperBoundKey: the key defining the end of the slice (depending on inner);
-            if None, the last included entry will be the very last entry
-        :param inner: if True, the returned slice will be within the bounds; if False, the returned
-            slice is extended by one entry in both directions such that it contains the bounds (where possible)
-        :return:
-        """
-        assert upperBoundKey >= lowerBoundKey
-        if lowerBoundKey is not None:
-            fromIndex = self.ceilIndex(lowerBoundKey) if inner else self.floorIndex(lowerBoundKey)
-            if fromIndex is None:
-                fromIndex = 0
-        else:
-            fromIndex = 0
-        if upperBoundKey is not None:
-            if inner:
-                toIndex = self.floorIndex(upperBoundKey)
-                if toIndex is None:
-                    toIndex = -1  # shall return empty slice
-            else:
-                toIndex = self.ceilIndex(upperBoundKey)
-                if toIndex is None:
-                    toIndex = len(self.entries) - 1
-        else:
-            toIndex = len(self.entries) - 1
+    def _createSlice(self, fromIndex: int, toIndex: int) -> "SortedKeyValuePairs":
         return SortedKeyValuePairs(self.entries[fromIndex:toIndex+1])
