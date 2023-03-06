@@ -17,8 +17,20 @@ class B(ToStringMixin):
         self.a = a
 
 
+class Parent(ToStringMixin):
+    def __init__(self, foo=10):
+        self.foo = foo
+        self.model = self.Child(self)
+
+    class Child(ToStringMixin):
+        def __init__(self, parent):
+            self.parent = parent
+
+
 def test_ToStringMixin_recursion():
     s = str(A("foo"))
     assert s == "A[p1=foo, p3=A[<<], p5=[foo, A[<<]]]"
     s = str(B(A("foo")))
     assert s == "B[a=A[p1=foo, p3=A[<<], p5=[foo, A[<<]]]]"
+    s = str(Parent())
+    assert s == "Parent[foo=10, model=Parent.Child[parent=Parent[<<]]]"
