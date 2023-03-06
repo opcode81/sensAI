@@ -577,7 +577,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
 
         self.outputMode = outputMode
         self.normalisationMode = normalisationMode
-        self.nnOptimiserParams: NNOptimiserParams = nnOptimiserParams
+        self.nnOptimiserParams: NNOptimiserParams = nnOptimiserParamsInstance
         self.modelClass = modelClass
         self.modelArgs = modelArgs
         self.modelKwArgs = modelKwArgs
