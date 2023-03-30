@@ -1,10 +1,12 @@
 import math
+from typing import List
+
 import scipy.stats
 
-from .string import objectRepr
+from .string import objectRepr, ToStringMixin
 
 
-class NormalDistribution:
+class NormalDistribution(ToStringMixin):
     def __init__(self, mean=0, std=1, unitMax=False):
         """
         :param mean: the mean
@@ -15,6 +17,9 @@ class NormalDistribution:
         self.mean = mean
         self.std = std
         self.norm = scipy.stats.norm(loc=mean, scale=std)
+
+    def _toStringIncludes(self) -> List[str]:
+        return ["mean", "std", "unitMax"]
 
     def pdf(self, x):
         v = self.norm.pdf(x)
