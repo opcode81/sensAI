@@ -53,8 +53,12 @@ class DistributionCounter(ToStringMixin):
     Supports the counting of the frequencies with which (mutually exclusive) events occur
     """
     def __init__(self):
-        self.counts = collections.defaultdict(lambda: 0)
+        self.counts = collections.defaultdict(self._zero)
         self.totalCount = 0
+
+    @staticmethod
+    def _zero():
+        return 0
 
     def count(self, event: Hashable) -> None:
         """
