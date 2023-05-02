@@ -8,7 +8,6 @@ from typing import List, Tuple
 
 import pandas as pd
 
-from sensai.util.deprecation import deprecated
 
 log = getLogger(__name__)
 
