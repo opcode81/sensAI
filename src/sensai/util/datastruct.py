@@ -257,7 +257,8 @@ class SortedKeyValueStructure(Generic[TKey, TValue], ABC):
             slice is extended by one entry in both directions such that it contains the bounds (where possible)
         :return:
         """
-        assert upperBoundKey >= lowerBoundKey
+        if lowerBoundKey is not None and upperBoundKey is not None:
+            assert upperBoundKey >= lowerBoundKey
         if lowerBoundKey is not None:
             if inner:
                 fromIndex = self.ceilIndex(lowerBoundKey)
