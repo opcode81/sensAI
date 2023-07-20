@@ -14,7 +14,7 @@ from ..data_transformation import DataFrameTransformer
 from ..tracking import TrackingMixin, TrackedExperiment
 from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase
+from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase, VectorRegressionModel
 
 log = logging.getLogger(__name__)
 
@@ -300,7 +300,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         else:
             return VectorRegressionModelEvaluatorParams()
 
-    def _evalModel(self, model: VectorModelBase, data: InputOutputData) -> VectorRegressionModelEvaluationData:
+    def _evalModel(self, model: VectorRegressionModel, data: InputOutputData) -> VectorRegressionModelEvaluationData:
         if not model.isRegressionModel():
             raise ValueError(f"Expected a regression model, got {model}")
         evalStatsByVarName = {}
@@ -308,7 +308,9 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         for predictedVarName in predictions.columns:
             evalStats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=groundTruth[predictedVarName],
                 metrics=self.params.metrics,
-                additionalMetrics=self.params.additionalMetrics)
+                additionalMetrics=self.params.additionalMetrics,
+                model=model,
+                ioData=data)
             evalStatsByVarName[predictedVarName] = evalStats
         return VectorRegressionModelEvaluationData(evalStatsByVarName, data, model)
 
@@ -363,7 +365,7 @@ class VectorClassificationModelEvaluatorParams(VectorModelEvaluatorParams):
             splitting it
         :param additionalMetrics: additional metrics to apply
         :param computeProbabilities: whether to compute class probabilities
-        :param binaryPositiveLabel: the positive class label for binary classification; if GUESS, true to detect from labels;
+        :param binaryPositiveLabel: the positive class label for binary classification; if GUESS, try to detect from labels;
             if None, no detection (non-binary classification)
         """
         super().__init__(dataSplitter, fractionalSplitTestFraction=fractionalSplitTestFraction, fractionalSplitRandomSeed=fractionalSplitRandomSeed,

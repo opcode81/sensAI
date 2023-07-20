@@ -1,17 +1,85 @@
 import logging
-from matplotlib.colors import LinearSegmentedColormap
-from typing import Sequence, Callable, TypeVar, Type, Tuple, Optional
+from typing import Sequence, Callable, TypeVar, Tuple, Optional, List, Any
 
-import matplotlib.ticker as plticker
 import matplotlib.figure
-from matplotlib import pyplot as plt
+import matplotlib.ticker as plticker
 import numpy as np
 import seaborn as sns
-
+from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 log = logging.getLogger(__name__)
 
 MATPLOTLIB_DEFAULT_FIGURE_SIZE = (6.4, 4.8)
+
+
+class Color:
+    def __init__(self, c: Any):
+        """
+        :param c: any color specification that is understood by matplotlib
+        """
+        self.rgba = matplotlib.colors.to_rgba(c)
+
+    def darken(self, amount: float):
+        """
+        :param amount: amount to darken in [0,1], where 1 results in black and 0 leaves the color unchanged
+        :return: the darkened color
+        """
+        import colorsys
+        rgb = matplotlib.colors.to_rgb(self.rgba)
+        h, l, s = colorsys.rgb_to_hls(*rgb)
+        l *= amount
+        rgb = colorsys.hls_to_rgb(h, l, s)
+        return Color((*rgb, self.rgba[3]))
+
+    def lighten(self, amount: float):
+        """
+        :param amount: amount to lighten in [0,1], where 1 results in white and 0 leaves the color unchanged
+        :return: the lightened color
+        """
+        import colorsys
+        rgb = matplotlib.colors.to_rgb(self.rgba)
+        h, l, s = colorsys.rgb_to_hls(*rgb)
+        l += (1-l) * amount
+        rgb = colorsys.hls_to_rgb(h, l, s)
+        return Color((*rgb, self.rgba[3]))
+
+    def alpha(self, opacity: float) -> "Color":
+        """
+        Returns a new color with modified alpha channel (opacity)
+        :param opacity: the opacity between 0 (transparent) and 1 (fully opaque)
+        :return: the modified color
+        """
+        if not (0 <= opacity <= 1):
+            raise ValueError(f"Opacity must be between 0 and 1, got {opacity}")
+        return Color((*self.rgba[:3], opacity))
+
+    def toHex(self, keepAlpha=True) -> str:
+        return matplotlib.colors.to_hex(self.rgba, keepAlpha)
+
+
+class LinearColorMap:
+    """
+    Facilitates usage of linear segmented colour maps by combining a colour map (member `cmap`), which transforms normalised values in [0,1]
+    into colours, with a normaliser that transforms the original values. The member `scalarMapper`
+    """
+    def __init__(self, normMin, normMax, cmapPoints: List[Tuple[float, Any]], cmapPointsNormalised=False):
+        """
+        :param normMin: the value that shall be mapped to 0 in the normalised representation (any smaller values are also clipped to 0)
+        :param normMax: the value that shall be mapped to 1 in the normalised representation (any larger values are also clipped to 1)
+        :param cmapPoints: a list (of at least two) tuples (v, c) where v is the value and c is the colour associated with the value;
+            any colour specification supported by matplotlib is admissible
+        :param cmapPointsNormalised: whether the values in `cmapPoints` are already normalised
+        """
+        self.norm = matplotlib.colors.Normalize(vmin=normMin, vmax=normMax, clip=True)
+        if not cmapPointsNormalised:
+            cmapPoints = [(self.norm(v), c) for v, c in cmapPoints]
+        self.cmap = LinearSegmentedColormap.from_list(f"cmap{id(self)}", cmapPoints)
+        self.scalarMapper = matplotlib.cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
+
+    def getColor(self, value):
+        rgba = self.scalarMapper.to_rgba(value)
+        return '#%02x%02x%02x%02x' % tuple(int(v * 255) for v in rgba)
 
 
 def plotMatrix(matrix: np.ndarray, title: str, xticklabels: Sequence[str], yticklabels: Sequence[str], xlabel: str,
@@ -36,7 +104,7 @@ def plotMatrix(matrix: np.ndarray, title: str, xticklabels: Sequence[str], ytick
     if normalize:
         matrix = matrix.astype('float') / matrix.sum()
     fig, ax = plt.subplots(figsize=figsize)
-    fig.canvas.set_window_title(title.replace("\n", " "))
+    fig.canvas.manager.set_window_title(title.replace("\n", " "))
     # We want to show all ticks...
     ax.set(xticks=np.arange(matrix.shape[1]),
         yticks=np.arange(matrix.shape[0]),
@@ -78,25 +146,26 @@ class Plot:
         fig, ax = plt.subplots(num=name)
         self.fig: plt.Figure = fig
         self.ax: plt.Axes = ax
-        draw()
+        if draw is not None:
+            draw()
 
-    def xlabel(self: Type[TPlot], label):
+    def xlabel(self: TPlot, label) -> TPlot:
         self.ax.set_xlabel(label)
         return self
 
-    def ylabel(self: Type[TPlot], label) -> TPlot:
+    def ylabel(self: TPlot, label) -> TPlot:
         self.ax.set_ylabel(label)
         return self
 
-    def title(self: Type[TPlot], title: str) -> TPlot:
+    def title(self: TPlot, title: str) -> TPlot:
         self.ax.set_title(title)
         return self
 
-    def xlim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+    def xlim(self: TPlot, minValue, maxValue) -> TPlot:
         self.ax.set_xlim(minValue, maxValue)
         return self
 
-    def ylim(self: Type[TPlot], minValue, maxValue) -> TPlot:
+    def ylim(self: TPlot, minValue, maxValue) -> TPlot:
         self.ax.set_ylim(minValue, maxValue)
         return self
 
@@ -104,7 +173,7 @@ class Plot:
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
-    def xtick(self, major=None, minor=None):
+    def xtick(self: TPlot, major=None, minor=None) -> TPlot:
         """
         Sets a tick on every integer multiple of the given base values.
         The major ticks are labelled, the minor ticks are not.
@@ -119,15 +188,15 @@ class Plot:
             self.xtickMinor(minor)
         return self
 
-    def xtickMajor(self, base):
+    def xtickMajor(self: TPlot, base) -> TPlot:
         self.ax.xaxis.set_major_locator(plticker.MultipleLocator(base=base))
         return self
 
-    def xtickMinor(self, base):
+    def xtickMinor(self: TPlot, base) -> TPlot:
         self.ax.xaxis.set_minor_locator(plticker.MultipleLocator(base=base))
         return self
 
-    def ytickMajor(self, base):
+    def ytickMajor(self: TPlot, base) -> TPlot:
         self.ax.yaxis.set_major_locator(plticker.MultipleLocator(base=base))
         return self
 
@@ -185,6 +254,19 @@ class HeatMapPlot(Plot):
 
     def __init__(self, x, y, xLabel=None, yLabel=None, bins=60, cmap=None, commonRange=True, diagonal=False,
             diagonalColor="green", **kwargs):
+        """
+        :param x: the x values
+        :param y: the y values
+        :param xLabel: the x-axis label
+        :param yLabel: the y-axis label
+        :param bins: the number of bins to use in each dimension
+        :param cmap: the colour map to use for heat values (if None, use default)
+        :param commonRange: whether the heat map is to use a common range for the x- and y-axes (set to False if x and y are completely
+            different quantities; set to True use cases such as the evaluation of regression model quality)
+        :param diagonal: whether to draw the diagonal line (useful for regression evaluation)
+        :param diagonalColor: the colour to use for the diagonal line
+        :param kwargs: parameters to pass on to plt.imshow
+        """
         assert len(x) == len(y)
         if xLabel is None and hasattr(x, "name"):
             xLabel = x.name
@@ -214,29 +296,51 @@ class HeatMapPlot(Plot):
 
 
 class HistogramPlot(Plot):
-    def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, binwidth=None, stat="probability", xlabel=None,
+    def __init__(self, values, bins="auto", kde=False, cdf=False, cdfComplementary=False, cdfSecondaryAxis=True,
+            binwidth=None, stat="probability", xlabel=None,
             **kwargs):
+        """
+        :param values: the values to plot
+        :param bins: a bin specification as understood by sns.histplot
+        :param kde: whether to add a kernel density estimator
+        :param cdf: whether to add a plot of the cumulative distribution function (cdf)
+        :param cdfComplementary: whether to plot, if cdf is enabled, the complementary values
+        :param cdfSecondaryAxis: whether to use, if cdf is enabled, a secondary
+        :param binwidth: the bin width; if None, inferred
+        :param stat: the statistic to plot (as understood by sns.histplot)
+        :param xlabel: the label for the x-axis
+        :param kwargs: arguments to pass on to sns.histplot
+        """
 
         def draw():
+            nonlocal cdfSecondaryAxis
             sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
+            plt.ylabel(stat)
             if cdf:
-                if cdfComplementary or stat in ("count", "proportion", "probability"):
+                ecdfStat = stat
+                if ecdfStat not in ("count", "proportion", "probability"):
+                    ecdfStat = "proportion"
+                    cdfSecondaryAxis = True
+                cdfAx: Optional[plt.Axes] = None
+                cdfAxLabel = f"{ecdfStat} (cdf)"
+                if cdfSecondaryAxis:
+                    cdfAx: plt.Axes = plt.twinx()
+                    if stat in ("proportion", "probability"):
+                        yTick = 0.1
+                    elif stat == "percent":
+                        yTick = 10
+                    else:
+                        yTick = None
+                    if yTick is not None:
+                        cdfAx.yaxis.set_major_locator(plticker.MultipleLocator(base=yTick))
+                if cdfComplementary or ecdfStat in ("count", "proportion", "probability"):
                     ecdfStat = "proportion" if stat == "probability" else stat  # same semantics but "probability" not understood by ecdfplot
-                    if ecdfStat not in ("count", "proportion"):
-                        raise ValueError(f"Complementary cdf (cdfComplementary=True) is only supported for stats 'count', 'proportion' and 'probability, got '{stat}'")
-                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange")
+                    sns.ecdfplot(values, stat=ecdfStat, complementary=cdfComplementary, color="orange", ax=cdfAx)
                 else:
-                    sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange")
+                    sns.histplot(values, bins=100, stat=stat, element="poly", fill=False, cumulative=True, color="orange", ax=cdfAx)
+                if cdfAx is not None:
+                    cdfAx.set_ylabel(cdfAxLabel)
             if xlabel is not None:
-                plt.xlabel(xlabel)
+                self.xlabel(xlabel)
 
         super().__init__(draw)
-
-        if stat in ("proportion", "probability"):
-            yTick = 0.1
-        elif stat == "percent":
-            yTick = 10
-        else:
-            yTick = None
-        if yTick is not None:
-            self.ytickMajor((yTick))

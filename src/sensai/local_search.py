@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from sensai.util.aggregation import RelativeFrequencyCounter
+from .util.aggregation import RelativeFrequencyCounter
 
 log = logging.getLogger(__name__)
 

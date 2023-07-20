@@ -246,11 +246,12 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
 
     def performSimpleEvaluation(self, model: TModel, createPlots=True, showPlots=False, logResults=True, resultWriter: ResultWriter = None,
             additionalEvaluationOnTrainingData=False, fitModel=True, writeEvalStats=False,
-            trackedExperiment: TrackedExperiment = None) -> TEvalData:
+            trackedExperiment: TrackedExperiment = None, evaluator: Optional[TEvaluator] = None) -> TEvalData:
         if showPlots and not createPlots:
             raise ValueError("showPlots=True requires createPlots=True")
         resultWriter = self._resultWriterForModel(resultWriter, model)
-        evaluator = self.createEvaluator(model)
+        if evaluator is None:
+            evaluator = self.createEvaluator(model)
         if trackedExperiment is not None:
             evaluator.setTrackedExperiment(trackedExperiment)
         log.info(f"Evaluating {model} via {evaluator}")
@@ -289,7 +290,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         return resultWriter.childWithAddedPrefix(model.getName() + "_")
 
     def performCrossValidation(self, model: TModel, showPlots=False, logResults=True, resultWriter: Optional[ResultWriter] = None,
-            trackedExperiment: TrackedExperiment = None) -> TCrossValData:
+            trackedExperiment: TrackedExperiment = None, crossValidator: Optional[TCrossValidator] = None) -> TCrossValData:
         """
         Evaluates the given model via cross-validation
 
@@ -302,7 +303,8 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         :return: cross-validation result data
         """
         resultWriter = self._resultWriterForModel(resultWriter, model)
-        crossValidator = self.createCrossValidator(model)
+        if crossValidator is None:
+            crossValidator = self.createCrossValidator(model)
         if trackedExperiment is not None:
             crossValidator.setTrackedExperiment(trackedExperiment)
         crossValidationData = crossValidator.evalModel(model)
@@ -350,20 +352,27 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
         # collect model evaluation results
         statsList = []
         resultByModelName = {}
+        evaluator = None
+        crossValidator = None
         for i, model in enumerate(models, start=1):
             modelName = model.getName()
             log.info(f"Evaluating model {i}/{len(models)} named '{modelName}' ...")
             if useCrossValidation:
                 if not fitModels:
                     raise ValueError("Cross-validation necessitates that models be trained several times; got fitModels=False")
-                crossValData = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None)
+                if crossValidator is None:
+                    crossValidator = self.createCrossValidator(model)
+                crossValData = self.performCrossValidation(model, resultWriter=resultWriter if writeIndividualResults else None,
+                    crossValidator=crossValidator)
                 modelResult = ModelComparisonData.Result(crossValData=crossValData)
                 resultByModelName[modelName] = modelResult
                 evalStatsCollection = crossValData.getEvalStatsCollection()
                 statsDict = evalStatsCollection.aggMetricsDict()
             else:
+                if evaluator is None:
+                    evaluator = self.createEvaluator(model)
                 evalData = self.performSimpleEvaluation(model, resultWriter=resultWriter if writeIndividualResults else None,
-                    fitModel=fitModels)
+                    fitModel=fitModels, evaluator=evaluator)
                 modelResult = ModelComparisonData.Result(evalData=evalData)
                 resultByModelName[modelName] = modelResult
                 evalStats = evalData.getEvalStats()
@@ -432,7 +441,7 @@ class EvaluationUtil(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidator
             for visitor in visitors:
                 visitor.collectResults(resultCollector)
 
-        return ModelComparisonData(resultsDF, resultByModelName)
+        return ModelComparisonData(resultsDF, resultByModelName, evaluator=evaluator, crossValidator=crossValidator)
 
     def compareModelsCrossValidation(self, models: Sequence[TModel], resultWriter: Optional[ResultWriter] = None) -> "ModelComparisonData":
         """
@@ -727,9 +736,12 @@ class ModelComparisonData:
         evalData: Union[VectorClassificationModelEvaluationData, VectorRegressionModelEvaluationData] = None
         crossValData: Union[VectorClassificationModelCrossValidationData, VectorRegressionModelCrossValidationData] = None
 
-    def __init__(self, resultsDF: pd.DataFrame, resultsByModelName: Dict[str, Result]):
+    def __init__(self, resultsDF: pd.DataFrame, resultsByModelName: Dict[str, Result], evaluator: Optional[VectorModelEvaluator] = None,
+            crossValidator: Optional[VectorModelCrossValidator] = None):
         self.resultsDF = resultsDF
         self.resultByModelName = resultsByModelName
+        self.evaluator = evaluator
+        self.crossValidator = crossValidator
 
     def getBestModelName(self, metricName: str) -> str:
         idx = np.argmax(self.resultsDF[metricName])
@@ -845,7 +857,7 @@ class MultiDataModelComparisonData(Generic[TEvalStats, TEvalStatsCollection], AB
             evalStatsCollection = self.getEvalStatsCollection(modelName)
             for metricName in evalStatsCollection.getMetricNames():
                 # plot distribution
-                fig = evalStatsCollection.plotDistribution(metricName, cdf=cdf, cdfComplementary=cdfComplementary)
+                fig = evalStatsCollection.plotDistribution(metricName, subtitle=modelName, cdf=cdf, cdfComplementary=cdfComplementary)
                 resultWriter.writeFigure(f"{modelName}_dist-{metricName}", fig)
                 # scatter plot with paired metrics
                 metric = evalStatsCollection.getMetricByName(metricName)

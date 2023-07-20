@@ -125,3 +125,18 @@ def extractArray(df: pd.DataFrame, dtype=None):
     if dtype is not None:
         arr = arr.astype(dtype, copy=False)
     return arr
+
+
+def removeDuplicateIndexEntries(df: pd.DataFrame):
+    """
+    Removes successive duplicate index entries by keeping only the first occurrence for every duplicate index element.
+
+    :param df: the data frame, which is assumed to have a sorted index
+    :return: the (modified) data frame with duplicate index entries removed
+    """
+    keep = [True]
+    prevItem = df.index[0]
+    for item in df.index[1:]:
+        keep.append(item != prevItem)
+        prevItem = item
+    return df[keep]

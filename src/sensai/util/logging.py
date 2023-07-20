@@ -1,4 +1,5 @@
 import atexit
+from datetime import datetime
 import logging as lg
 from logging import *
 import sys
@@ -6,6 +7,7 @@ import time
 from typing import List, Tuple
 
 import pandas as pd
+
 
 log = getLogger(__name__)
 
@@ -34,6 +36,13 @@ def configureLogging(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     pd.set_option('display.max_colwidth', 255)
 
 
+def datetimeTag() -> str:
+    """
+    :return: a string tag for use in log file names which contains the current date and time (compact but readable)
+    """
+    return datetime.now().strftime('%Y%m%d-%H%M%S')
+
+
 _fileLoggerPaths: List[str] = []
 _isAtExitReportFileLoggerRegistered = False
 
@@ -59,19 +68,69 @@ class StopWatch:
     """
     Represents a stop watch for timing an execution. Constructing an instance starts the stopwatch.
     """
-    def __init__(self):
+    def __init__(self, start=True):
         self.startTime = time.time()
+        self._elapsedSecs = 0.0
+        self.isRunning = start
+
+    def reset(self, start=True):
+        """
+        Resets the stopwatch, setting the elapsed time to zero.
+
+        :param start: whether to start the stopwatch immediately
+        """
+        self.startTime = time.time()
+        self._elapsedSecs = 0.0
+        self.isRunning = start
 
     def restart(self):
-        self.startTime = time.time()
+        """
+        Resets the stopwatch (setting the elapsed time to zero) and restarts it immediately
+        """
+        self.reset(start=True)
+
+    def _getElapsedTimeSinceLastStart(self):
+        if self.isRunning:
+            return time.time() - self.startTime
+        else:
+            return 0
+
+    def pause(self):
+        """
+        Pauses the stopwatch. It can be resumed via method 'resume'.
+        """
+        self._elapsedSecs += self._getElapsedTimeSinceLastStart()
+        self.isRunning = False
+
+    def resume(self):
+        """
+        Resumes the stopwatch (assuming that it is currently paused). If the stopwatch is not paused,
+        the method has no effect (and a warning is logged).
+        """
+        if not self.isRunning:
+            self.startTime = time.time()
+            self.isRunning = True
+        else:
+            log.warning("Stopwatch is already running (resume has not effect)")
 
     def getElapsedTimeSecs(self) -> float:
-        return time.time() - self.startTime
+        """
+        Gets the total elapsed time, in seconds, on this stopwatch.
+
+        :return: the elapsed time in seconds
+        """
+        return self._elapsedSecs + self._getElapsedTimeSinceLastStart()
 
     def getElapsedTimedelta(self) -> pd.Timedelta:
+        """
+        :return: the elapsed time as a pandas.Timedelta object
+        """
         return pd.Timedelta(self.getElapsedTimeSecs(), unit="s")
 
     def getElapsedTimeString(self) -> str:
+        """
+        :return: a string representation of the elapsed time
+        """
         secs = self.getElapsedTimeSecs()
         if secs < 60:
             return f"{secs:.3f} seconds"

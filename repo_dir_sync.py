@@ -7,10 +7,14 @@ import sys
 from typing import List
 import platform
 
-
-def call(cmd):
+def popen(cmd):
     shell = platform.system() != "Windows"
     p = Popen(cmd, shell=shell, stdin=PIPE, stdout=PIPE)
+    return p
+
+
+def call(cmd):
+    p = popen(cmd)
     return p.stdout.read().decode("utf-8")
 
 
@@ -21,8 +25,9 @@ def execute(cmd, exceptionOnError=True):
         whether the call was successful
     :return: True if the call was successful, False otherwise (if exceptionOnError==False)
     """
-    ret = os.system(cmd)
-    success = ret == 0
+    p = popen(cmd)
+    p.wait()
+    success = p.returncode == 0
     if exceptionOnError:
         if not success:
             raise Exception("Command failed: %s" % cmd)

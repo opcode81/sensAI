@@ -8,7 +8,6 @@ sensAI - the Python library for sensible AI
    intro.ipynb
    intro_old.ipynb
    neural_networks.ipynb
-   tensor_models_pytorch_lightning.ipynb
    coordinate_clustering.ipynb
    clustering_evaluation.ipynb
    tracking_experiments.ipynb

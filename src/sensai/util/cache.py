@@ -212,21 +212,24 @@ class PicklePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
         if not cacheFound:
             self.cache = {}
         self._updateHook = DelayedUpdateHook(self.save, deferredSaveDelaySecs)
+        self._writeLock = threading.Lock()
 
     def save(self):
         """
         Saves the cache in the file whose path was provided at construction
         """
-        log.info(f"Saving cache to {self.picklePath}")
-        dumpPickle((self.version, self.cache), self.picklePath)
+        with self._writeLock:  # avoid concurrent modification while saving
+            log.info(f"Saving cache to {self.picklePath}")
+            dumpPickle((self.version, self.cache), self.picklePath)
 
     def get(self, key: TKey) -> Optional[TValue]:
         return self.cache.get(key)
 
     def set(self, key: TKey, value: TValue):
-        self.cache[key] = value
-        if self.saveOnUpdate:
-            self._updateHook.handleUpdate()
+        with self._writeLock:
+            self.cache[key] = value
+            if self.saveOnUpdate:
+                self._updateHook.handleUpdate()
 
 
 class SlicedPicklePersistentList(PersistentList):

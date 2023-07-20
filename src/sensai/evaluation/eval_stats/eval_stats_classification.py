@@ -64,12 +64,14 @@ class ClassificationMetricAccuracyWithoutLabels(ClassificationMetric):
     """
     Accuracy score with set of data points limited to the ones where the ground truth label is not one of the given labels
     """
-    def __init__(self, *labels: Any, probabilityThreshold=None):
+    def __init__(self, *labels: Any, probabilityThreshold=None, zeroValue=0.0):
         """
         :param labels: one or more labels which are not to be considered (all data points where the ground truth is
             one of these labels will be ignored)
         :param probabilityThreshold: a probability threshold: the probability of the most likely class must be at least this value for a data point
             to be considered in the metric computation (analogous to :class:`ClassificationMetricAccuracyMaxProbabilityBeyondThreshold`)
+        :param zeroValue: the metric value to assume for the case where the condition never applies (no countable instances without
+            the given label/beyond the given threshold)
         """
         if probabilityThreshold is not None:
             nameAdd = f", p_max >= {probabilityThreshold}"
@@ -79,6 +81,7 @@ class ClassificationMetricAccuracyWithoutLabels(ClassificationMetric):
         super().__init__(name, requiresProbabilities=probabilityThreshold is not None)
         self.labels = set(labels)
         self.probabilityThreshold = probabilityThreshold
+        self.zeroValue = zeroValue
 
     def _computeValue(self, y_true, y_predicted, y_predictedClassProbabilities):
         y_true = np.array(y_true)
@@ -90,6 +93,8 @@ class ClassificationMetricAccuracyWithoutLabels(ClassificationMetric):
                     if y_predictedClassProbabilities[predictedLabel].iloc[i] < self.probabilityThreshold:
                         continue
                 indices.append(i)
+        if len(indices) == 0:
+            return self.zeroValue
         return accuracy_score(y_true=y_true[indices], y_pred=y_predicted[indices])
 
     def getPairedMetrics(self) -> List[TMetric]:
@@ -156,7 +161,7 @@ class ClassificationMetricAccuracyMaxProbabilityBeyondThreshold(ClassificationMe
             classIdx_predicted = np.argmax(probabilities)
             prob_predicted = probabilities[classIdx_predicted]
             if prob_predicted >= self.threshold:
-                classIdx_true = labelToColIdx[y_true[i]]
+                classIdx_true = labelToColIdx.get(y_true[i], -1)  # -1 if true class is unknown to model (did not appear in training data)
                 relFreq.count(classIdx_predicted == classIdx_true)
         if relFreq.numTotal == 0:
             return self.zeroValue
@@ -534,6 +539,11 @@ class BinaryClassificationCounts:
     def getF1(self):
         return self._frac(self.tp, self.tp + 0.5 * (self.fp + self.fn))
 
+    def getRelFreqPositive(self):
+        positive = self.tp + self.fp
+        negative = self.tn + self.fn
+        return positive / (positive + negative)
+
 
 class BinaryClassificationProbabilityThresholdVariationData:
     def __init__(self, evalStats: ClassificationEvalStats):
@@ -552,9 +562,11 @@ class BinaryClassificationProbabilityThresholdVariationData:
         precision = [c.getPrecision() for c in self.counts]
         recall = [c.getRecall() for c in self.counts]
         f1 = [c.getF1() for c in self.counts]
+        rfPositive = [c.getRelFreqPositive() for c in self.counts]
         plt.plot(self.thresholds, precision, label="precision")
         plt.plot(self.thresholds, recall, label="recall")
         plt.plot(self.thresholds, f1, label="F1-score")
+        plt.plot(self.thresholds, rfPositive, label="rel. freq. positive")
         plt.legend()
         return fig
 

@@ -5,24 +5,41 @@ from typing import List, Dict, Any, Iterable
 
 import joblib
 
+from .io import isS3Path, S3Object
+
 log = logging.getLogger(__name__)
 
 
 def loadPickle(path, backend="pickle"):
-    with open(path, "rb") as f:
+    def readFile(f):
         if backend == "pickle":
-            return pickle.load(f)
+            try:
+                return pickle.load(f)
+            except:
+                log.error(f"Error loading {path}")
+                raise
         elif backend == "joblib":
             return joblib.load(f)
         else:
             raise ValueError(f"Unknown backend '{backend}'")
 
+    if isS3Path(path):
+        return readFile(S3Object(path).openFile("rb"))
+    with open(path, "rb") as f:
+        return readFile(f)
+
 
 def dumpPickle(obj, picklePath, backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
+    def openFile():
+        if isS3Path(picklePath):
+            return S3Object(picklePath).openFile("wb")
+        else:
+            return open(picklePath, "wb")
+
     dirName = os.path.dirname(picklePath)
     if dirName != "":
         os.makedirs(dirName, exist_ok=True)
-    with open(picklePath, "wb") as f:
+    with openFile() as f:
         if backend == "pickle":
             try:
                 pickle.dump(obj, f, protocol=protocol)
@@ -115,7 +132,7 @@ class PickleFailureDebugger:
 
 
 def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] = None, newOptionalProperties: List[str] = None,
-        newDefaultProperties: Dict[str, Any] = None) -> None:
+        newDefaultProperties: Dict[str, Any] = None, removedProperties: List[str] = None) -> None:
     """
     Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
     a parent class already implements __setstate__ and where it does not. Call this function whenever you would actually
@@ -128,6 +145,7 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
     :param renamedProperties: a mapping from old property names to new property names
     :param newOptionalProperties: a list of names of new property names, which, if not present, shall be initialised with None
     :param newDefaultProperties: a dictionary mapping property names to their default values, which shall be added if they are not present
+    :param removedProperties: a list of names of properties that are no longer being used
     """
     # handle new/changed properties
     if renamedProperties is not None:
@@ -143,6 +161,10 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
         for mNew, mValue in newDefaultProperties.items():
             if mNew not in state:
                 state[mNew] = mValue
+    if removedProperties is not None:
+        for p in removedProperties:
+            if p in state:
+                del state[p]
     # call super implementation, if any
     s = super(cls, obj)
     if hasattr(s, '__setstate__'):
@@ -152,7 +174,7 @@ def setstate(cls, obj, state: Dict[str, Any], renamedProperties: Dict[str, str] 
 
 
 def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProperties: Iterable[str] = None,
-        overrideProperties: Dict[str, Any] = None) -> Dict[str, Any]:
+             overrideProperties: Dict[str, Any] = None, excludedDefaultProperties: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
     a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually
@@ -165,6 +187,8 @@ def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProper
     :param excludedProperties: properties which shall be completely removed from serialisations
     :param overrideProperties: a mapping from property names to values specifying (new or existing) properties which are to be set;
         use this to set a fixed value for an existing property or to add a completely new property
+    :param excludedDefaultProperties: properties which shall be completely removed from serialisations, if they are set
+        to the given default value
     :return: the state dictionary, which may be modified by the receiver
     """
     s = super(cls, obj)
@@ -183,4 +207,8 @@ def getstate(cls, obj, transientProperties: Iterable[str] = None, excludedProper
     if overrideProperties is not None:
         for k, v in overrideProperties.items():
             d[k] = v
+    if excludedDefaultProperties is not None:
+        for p, v in excludedDefaultProperties.items():
+            if p in d and d[p] == v:
+                del d[p]
     return d
