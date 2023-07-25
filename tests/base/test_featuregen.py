@@ -8,8 +8,8 @@ import pytest
 from sensai import InputOutputData
 from sensai.data_transformation import DFTNormalisation, DFTFillNA, DataFrameTransformer
 from sensai.data_transformation.sklearn_transformer import SkLearnTransformerFactoryFactory
-from sensai.evaluation import VectorClassificationModelEvaluator
-from sensai.featuregen import FeatureGeneratorFlattenColumns, FeatureGeneratorTakeColumns, flattenedFeatureGenerator, \
+from sensai.evaluation import VectorClassificationModelEvaluator, VectorClassificationModelEvaluatorParams
+from sensai.featuregen import FeatureGeneratorFlattenColumns, FeatureGeneratorTakeColumns, flattened_feature_generator, \
     FeatureGenerator, RuleBasedFeatureGenerator, MultiFeatureGenerator, ChainedFeatureGenerator, FeatureGeneratorNAMarker, FeatureCollector
 from sensai.sklearn.sklearn_classification import SkLearnMLPVectorClassificationModel
 
@@ -45,12 +45,12 @@ def test_flatten_columns():
 
 def test_getFlattenedFeatureGenerator():
     inputDf = pd.DataFrame({"a": [np.array([1, 2])], "b": [np.array([5, 6])]})
-    fgen1 = flattenedFeatureGenerator(FeatureGeneratorTakeColumns("a"))
+    fgen1 = flattened_feature_generator(FeatureGeneratorTakeColumns("a"))
     assert fgen1.generate(inputDf).equals(pd.DataFrame({"a_0": np.array([1]), "a_1": np.array([2])}))
 
 
 class TestFgen(FeatureGenerator):
-    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame = None, ctx=None):
         pass
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
@@ -73,24 +73,24 @@ class RuleBasedTestFgen(RuleBasedFeatureGenerator):
 class TestFgenBasics:
     testdf = pd.DataFrame({"foo": [1, 2], "bar": [1, 2]})
 
-    @pytest.mark.parametrize("testfgen", [TestFgen(), TestDFT().toFeatureGenerator()])
+    @pytest.mark.parametrize("testfgen", [TestFgen(), TestDFT().to_feature_generator()])
     def test_basicProperties(self, testfgen):
-        assert not testfgen.isFitted()
-        assert testfgen.getGeneratedColumnNames() is None
+        assert not testfgen.is_fitted()
+        assert testfgen.get_generated_column_names() is None
         testfgen.fit(self.testdf)
-        assert testfgen.isFitted()
+        assert testfgen.is_fitted()
         testfgen.generate(self.testdf)
-        assert set(testfgen.getGeneratedColumnNames()) == {"foo", "bar"}
+        assert set(testfgen.get_generated_column_names()) == {"foo", "bar"}
     
-    @pytest.mark.parametrize("fgen", [TestFgen(), TestDFT().toFeatureGenerator(), RuleBasedTestFgen(), MultiFeatureGenerator(TestFgen()),
+    @pytest.mark.parametrize("fgen", [TestFgen(), TestDFT().to_feature_generator(), RuleBasedTestFgen(), MultiFeatureGenerator(TestFgen()),
         ChainedFeatureGenerator(TestFgen())])
     def test_Naming(self, fgen):
-        assert isinstance(fgen.getName(), str)
-        fgen.setName("bar")
-        assert fgen.getName() == "bar"
+        assert isinstance(fgen.get_name(), str)
+        fgen.set_name("bar")
+        assert fgen.get_name() == "bar"
 
     def test_ruleBasedAlwaysFitted(self):
-        assert RuleBasedTestFgen().isFitted()
+        assert RuleBasedTestFgen().is_fitted()
 
     def test_emptyChainRaisesError(self):
         with pytest.raises(ValueError):
@@ -100,17 +100,17 @@ class TestFgenBasics:
         # if one of the fgens is not fitted, the combination is not fitted either
         multifgen = MultiFeatureGenerator(TestFgen(), RuleBasedTestFgen())
         chainfgen = ChainedFeatureGenerator(TestFgen(), RuleBasedTestFgen())
-        assert chainfgen.featureGenerators[1].isFitted() and multifgen.featureGenerators[1].isFitted()
-        assert not multifgen.isFitted() and not chainfgen.isFitted()
+        assert chainfgen.featureGenerators[1].is_fitted() and multifgen.featureGenerators[1].is_fitted()
+        assert not multifgen.is_fitted() and not chainfgen.is_fitted()
         chainfgen.fit(self.testdf)
         multifgen.fit(self.testdf)
-        assert multifgen.isFitted() and chainfgen.isFitted()
-        assert chainfgen.featureGenerators[0].isFitted() and multifgen.featureGenerators[0].isFitted()
+        assert multifgen.is_fitted() and chainfgen.is_fitted()
+        assert chainfgen.featureGenerators[0].is_fitted() and multifgen.featureGenerators[0].is_fitted()
 
         # if all fgens are fitted, the combination is also fitted, even if fit was not called
         multifgen = MultiFeatureGenerator(RuleBasedTestFgen(), RuleBasedTestFgen())
         chainfgen = ChainedFeatureGenerator(RuleBasedTestFgen(), RuleBasedTestFgen())
-        assert multifgen.isFitted() and chainfgen.isFitted()
+        assert multifgen.is_fitted() and chainfgen.is_fitted()
 
 
 def test_FeatureGeneratorNAMarker(irisClassificationTestCase):
@@ -130,23 +130,23 @@ def test_FeatureGeneratorNAMarker(irisClassificationTestCase):
     iodata = InputOutputData(inputs, iodata.outputs)
 
     for useFGNA in (True, False):
-        fgs = [FeatureGeneratorTakeColumns(normalisationRuleTemplate=DFTNormalisation.RuleTemplate(independentColumns=True))]
+        fgs = [FeatureGeneratorTakeColumns(normalisation_rule_template=DFTNormalisation.RuleTemplate(independent_columns=True))]
         if useFGNA:
             fgs.append(FeatureGeneratorNAMarker(inputs.columns))
         fCollector = FeatureCollector(*fgs)
         model = SkLearnMLPVectorClassificationModel() \
-            .withFeatureCollector(fCollector) \
-            .withInputTransformers(
-                DFTNormalisation(fCollector.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.StandardScaler()),
+            .with_feature_collector(fCollector) \
+            .with_input_transformers(
+                DFTNormalisation(fCollector.get_normalisation_rules(), default_transformer_factory=SkLearnTransformerFactoryFactory.StandardScaler()),
                 DFTFillNA(-3))
         # NOTE: using -3 instead of 0 to fill N/A values in order to force the model to learn the purpose of the N/A markers,
         # because 0 values are actually a reasonable fallback (which happens to work) when using StandardScaler
         # NOTE: it is important to apply DFTNormalisation before DFTFillNA, because DFTNormalisation would learn using the filled values otherwise
 
-        ev = VectorClassificationModelEvaluator(iodata, testFraction=0.2)
-        ev.fitModel(model)
-        result = ev.evalModel(model)
-        accuracy = result.getEvalStats().getAccuracy()
+        ev = VectorClassificationModelEvaluator(iodata, params=VectorClassificationModelEvaluatorParams(fractional_split_test_fraction=0.2))
+        ev.fit_model(model)
+        result = ev.eval_model(model)
+        accuracy = result.get_eval_stats().get_accuracy()
         log.info(f"Accuracy (for useFGNA={useFGNA}) = {accuracy}")
         if useFGNA:
             assert accuracy > 0.85

@@ -7,7 +7,7 @@ import pytest
 import sklearn.datasets
 
 from sensai import InputOutputData, VectorClassificationModel
-from sensai.evaluation import VectorClassificationModelEvaluator
+from sensai.evaluation import VectorClassificationModelEvaluator, VectorClassificationModelEvaluatorParams
 
 sys.path.append(os.path.abspath("."))
 from config import topLevelDirectory
@@ -39,14 +39,15 @@ class ClassificationTestCase:
         self.data = data
 
     def testMinAccuracy(self, model: VectorClassificationModel, minAccuracy: float, fit=True):
-        ev = VectorClassificationModelEvaluator(self.data, testFraction=0.2)
+        params = VectorClassificationModelEvaluatorParams(fractional_split_test_fraction=0.2)
+        ev = VectorClassificationModelEvaluator(self.data, params=params)
         if fit:
-            ev.fitModel(model)
-        resultData = ev.evalModel(model)
-        stats = resultData.getEvalStats()
+            ev.fit_model(model)
+        resultData = ev.eval_model(model)
+        stats = resultData.get_eval_stats()
         #stats.plotConfusionMatrix().savefig("cmat.png")
-        log.info(f"Results for {model.getName()}: {stats}")
-        assert stats.getAccuracy() >= minAccuracy
+        log.info(f"Results for {model.get_name()}: {stats}")
+        assert stats.get_accuracy() >= minAccuracy
 
 
 @pytest.fixture(scope="session")

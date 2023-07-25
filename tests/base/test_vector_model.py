@@ -15,7 +15,7 @@ from sensai.vector_model import RuleBasedVectorRegressionModel, VectorRegression
 
 class FittableFgen(FeatureGenerator):
 
-    def _fit(self, X: pd.DataFrame, Y: pd.DataFrame = None, ctx=None):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame = None, ctx=None):
         pass
 
     def _generate(self, df: pd.DataFrame, ctx=None) -> pd.DataFrame:
@@ -24,7 +24,7 @@ class FittableFgen(FeatureGenerator):
 
 class FittableDFT(InvertibleDataFrameTransformer):
 
-    def applyInverse(self, df: pd.DataFrame) -> pd.DataFrame:
+    def apply_inverse(self, df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     def _fit(self, df: pd.DataFrame):
@@ -36,15 +36,15 @@ class FittableDFT(InvertibleDataFrameTransformer):
 
 class SampleRuleBasedVectorModel(RuleBasedVectorRegressionModel):
     def __init__(self):
-        super(SampleRuleBasedVectorModel, self).__init__(predictedVariableNames=["prediction"])
+        super(SampleRuleBasedVectorModel, self).__init__(predicted_variable_names=["prediction"])
 
     def _predict(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=X.index)
 
-    def getPredictedVariableNames(self):
+    def get_predicted_variable_names(self):
         return ["prediction"]
 
-    def isRegressionModel(self) -> bool:
+    def is_regression_model(self) -> bool:
         return True
 
 
@@ -53,7 +53,7 @@ class SampleVectorModel(VectorRegressionModel):
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"prediction": 1}, index=x.index)
 
-    def _fit(self, X: pd.DataFrame, Y: Optional[pd.DataFrame]):
+    def _fit(self, x: pd.DataFrame, y: Optional[pd.DataFrame]):
         pass
 
 
@@ -100,53 +100,53 @@ def fittedVectorModel():
 class TestIsFitted:
     @pytest.mark.parametrize("model", [SampleRuleBasedVectorModel(), fittedVectorModel()])
     def test_isFittedWhenPreprocessorsRuleBased(self, model, ruleBasedDFT, ruleBasedFgen):
-        assert model.isFitted()
-        model.withFeatureGenerator(ruleBasedFgen)
-        model.withInputTransformers(ruleBasedDFT)
-        assert model.isFitted()
+        assert model.is_fitted()
+        model.with_feature_generator(ruleBasedFgen)
+        model.with_input_transformers(ruleBasedDFT)
+        assert model.is_fitted()
 
     @pytest.mark.parametrize("modelConstructor", [SampleRuleBasedVectorModel, fittedVectorModel])
     def test_isFittedWithFittableProcessors(self, modelConstructor, fittableDFT, fittableFgen):
         # is fitted after fit with model
-        model = modelConstructor().withRawInputTransformers(fittableDFT)
-        assert not model.isFitted()
+        model = modelConstructor().with_raw_input_transformers(fittableDFT)
+        assert not model.is_fitted()
         model.fit(testX, testY)
-        assert model.isFitted()
+        assert model.is_fitted()
         
         # is fitted if DFT is fitted
         fittedDFT = copy(fittableDFT)
         fittedDFT.fit(testX)
-        model = modelConstructor().withRawInputTransformers(fittedDFT)
-        assert model.isFitted()
+        model = modelConstructor().with_raw_input_transformers(fittedDFT)
+        assert model.is_fitted()
 
         # same for fgen
-        model = modelConstructor().withFeatureGenerator(fittableFgen)
-        assert not model.isFitted()
+        model = modelConstructor().with_feature_generator(fittableFgen)
+        assert not model.is_fitted()
         model.fit(testX, testY)
-        assert model.isFitted()
+        assert model.is_fitted()
 
         fittedFgen = copy(fittableFgen)
         fittedFgen.fit(testX)
-        model = modelConstructor().withFeatureGenerator(fittedFgen)
-        assert model.isFitted()
+        model = modelConstructor().with_feature_generator(fittedFgen)
+        assert model.is_fitted()
 
     def test_isFittedWithTargetTransformer(self, vectorModel, fittableDFT):
-        assert not vectorModel.isFitted()
+        assert not vectorModel.is_fitted()
         vectorModel.fit(testX, testY)
-        assert vectorModel.isFitted()
-        vectorModel.withTargetTransformer(fittableDFT)
+        assert vectorModel.is_fitted()
+        vectorModel.with_target_transformer(fittableDFT)
 
         # test fitting separately
-        assert not vectorModel.isFitted()
-        vectorModel.getTargetTransformer().fit(testX)
-        assert vectorModel.isFitted()
+        assert not vectorModel.is_fitted()
+        vectorModel.get_target_transformer().fit(testX)
+        assert vectorModel.is_fitted()
 
         # test fitting together
-        vectorModel = SampleVectorModel().withTargetTransformer(FittableDFT())
-        assert not vectorModel.isFitted()
+        vectorModel = SampleVectorModel().with_target_transformer(FittableDFT())
+        assert not vectorModel.is_fitted()
         vectorModel.fit(testX, testY)
-        assert vectorModel.isFitted()
-        assert vectorModel.getTargetTransformer().isFitted()
+        assert vectorModel.is_fitted()
+        assert vectorModel.get_target_transformer().is_fitted()
 
 
 def test_InputRowsRemovedByTransformer(irisClassificationTestCase):
@@ -166,13 +166,13 @@ def test_InputRowsRemovedByTransformer(irisClassificationTestCase):
     expectedLength = len(iodata) - numNAValues
 
     class MyModel(VectorClassificationModel):
-        def _fitClassifier(self, X: pd.DataFrame, y: pd.DataFrame):
-            assert len(X) == expectedLength
+        def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+            assert len(x) == expectedLength
             assert len(y) == expectedLength
-            assert all(X.index.values == y.index.values)
+            assert all(x.index.values == y.index.values)
 
-        def _predictClassProbabilities(self, X: pd.DataFrame) -> pd.DataFrame:
+        def _predict_class_probabilities(self, x: pd.DataFrame) -> pd.DataFrame:
             pass
 
-    model = MyModel().withRawInputTransformers(DFTDropNA())
+    model = MyModel().with_raw_input_transformers(DFTDropNA())
     model.fit(iodata.inputs, iodata.outputs)

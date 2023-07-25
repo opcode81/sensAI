@@ -8,7 +8,7 @@ class A(ToStringMixin):
         self.p3 = self
         self.p5 = ["foo", self]
 
-    def _toStringExcludes(self):
+    def _tostring_excludes(self):
         return ["p2"]
 
 

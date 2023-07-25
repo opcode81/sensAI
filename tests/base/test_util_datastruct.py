@@ -8,22 +8,22 @@ def test_sorted_structures():
     sortedKV = SortedKeysAndValues(keys, values)
 
     for s in (sortedPairs, sortedKV):
-        assert s.ceilIndex(2) == 1
-        assert s.ceilValue(2) == "3"
-        assert s.ceilKeyAndValue(2) == (3, "3")
-        assert s.floorIndex(8) == 3
-        assert s.floorValue(8) == "7"
-        assert s.floorKeyAndValue(8) == (7, "7")
-        assert s.floorIndex(0) is None
-        assert s.floorValue(0) is None
-        assert s.ceilIndex(11) is None
-        assert s.ceilValue(11) is None
-        assert s.closestValue(2.5) == "3"
-        assert s.closestKeyAndValue(2.5) == (3, "3")
-        assert s.closestIndex(2.5) == 1
-        assert s.closestValue(1.1) == "1"
-        assert s.closestKeyAndValue(1.1) == (1, "1")
-        assert s.closestIndex(1.1) == 0
+        assert s.ceil_index(2) == 1
+        assert s.ceil_value(2) == "3"
+        assert s.ceil_key_and_value(2) == (3, "3")
+        assert s.floor_index(8) == 3
+        assert s.floor_value(8) == "7"
+        assert s.floor_key_and_value(8) == (7, "7")
+        assert s.floor_index(0) is None
+        assert s.floor_value(0) is None
+        assert s.ceil_index(11) is None
+        assert s.ceil_value(11) is None
+        assert s.closest_value(2.5) == "3"
+        assert s.closest_key_and_value(2.5) == (3, "3")
+        assert s.closest_index(2.5) == 1
+        assert s.closest_value(1.1) == "1"
+        assert s.closest_key_and_value(1.1) == (1, "1")
+        assert s.closest_index(1.1) == 0
         assert len(sortedPairs.slice(3, 5, inner=True)) == 2
         assert len(sortedPairs.slice(3, 5, inner=False)) == 2
         assert len(sortedPairs.slice(2, 8, inner=True)) == 3
@@ -34,13 +34,13 @@ def test_sorted_structures():
         assert len(sortedPairs.slice(-1, 0, inner=True)) == 0
         assert len(sortedPairs.slice(-1, 0, inner=False)) == 1
 
-    assert len(sortedKV.valueSliceInner(2, 8)) == 3
+    assert len(sortedKV.value_slice_inner(2, 8)) == 3
 
-    assert len(sortedPairs.valueSlice(2, 8)) == 3
-    assert sortedPairs.keyForIndex(3) == 7
+    assert len(sortedPairs.value_slice(2, 8)) == 3
+    assert sortedPairs.key_for_index(3) == 7
 
     sortedPairs = SortedKeyValuePairs(list(zip(keys, keys)))
     sortedKV = SortedKeysAndValues(keys, keys)
     for s in (sortedPairs, sortedKV):
-        assert s.interpolatedValue(2) == 2
+        assert s.interpolated_value(2) == 2
 
