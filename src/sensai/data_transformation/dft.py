@@ -629,10 +629,12 @@ class DFTNormalisation(DataFrameTransformer):
         :param rules: the set of rules; rules are always fitted and applied in the given order.
             A convenient way to obtain a set of rules in the :class:`sensai.vector_model.VectorModel` context is from a
             :class:`sensai.featuregen.FeatureCollector` or :class:`sensai.featuregen.MultiFeatureGenerator`.
-        :param default_transformer_factory: a factory for the creation of transformer instances (from sklearn.preprocessing, e.g. 
-            StandardScaler) that shall be used to create a transformer for all rules that don't specify a particular transformer.
+        :param default_transformer_factory: a factory for the creation of transformer instances (which implements the
+            API used by sklearn.preprocessing, e.g. StandardScaler) that shall be used to create a transformer for all
+            rules that do not specify a particular transformer.
             The default transformer will only be applied to columns matched by such rules, unmatched columns will
             not be transformed.
+            Use SkLearnTransformerFactoryFactory to conveniently create a factory.
         :param require_all_handled: whether to raise an exception if not all columns are matched by a rule
         :param inplace: whether to apply data frame transformations in-place
         """
