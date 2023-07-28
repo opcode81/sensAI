@@ -15,47 +15,16 @@ log = logging.getLogger(__name__)
 
 class FeatureGeneratorRegistry:
     """
-    Represents a registry for named feature generators which can be instantiated via factories.
-
-    In addition to functions registerFactory and getFeatureGenerator, feature generators can be registered and retrieved via \n
-    registry.<name> = <featureGeneratorFactory> \n
-    registry.<name> \n
-
-    Example:
-        >>> from sensai.featuregen import FeatureGeneratorRegistry, FeatureGeneratorTakeColumns
-        >>> import pandas as pd
-
-        >>> df = pd.DataFrame({"foo": [1, 2, 3], "bar": [7, 8, 9]})
-        >>> registry = FeatureGeneratorRegistry()
-        >>> registry.testFgen = lambda: FeatureGeneratorTakeColumns("foo")
-        >>> registry.testFgen().generate(df)
-           foo
-        0    1
-        1    2
-        2    3
+    Represents a registry for (named) feature generator factories
     """
     def __init__(self, use_singletons=False):
         """
         :param use_singletons: if True, internally maintain feature generator singletons, such that there is at most one
-            instance for each name
+            instance for each name/key
         """
-        # Important: Don't set public members in init. Since we override setattr this would lead to undesired consequences
         self._feature_generator_factories: Dict[Hashable, Callable[[], FeatureGenerator]] = {}
-        self._feature_generator_singletons: Dict[Hashable, Callable[[], FeatureGenerator]] = {}
+        self._feature_generator_singletons: Dict[Hashable, FeatureGenerator] = {}
         self._use_singletons = use_singletons
-
-    def __setattr__(self, name: str, value):
-        if not name.startswith("_"):
-            self.register_factory(name, value)
-        else:
-            super().__setattr__(name, value)
-
-    def __getattr__(self, item: str):
-        factory = self._feature_generator_factories.get(item)
-        if factory is not None:
-            return factory
-        else:
-            raise AttributeError(item)
 
     @property
     def available_features(self):
@@ -70,8 +39,9 @@ class FeatureGeneratorRegistry:
 
     def register_factory(self, name: Hashable, factory: Callable[[], FeatureGenerator]):
         """
-        Registers a feature generator factory which can subsequently be referenced by models via their name
-        :param name: the name (which can, in particular, be a string or an enum item)
+        Registers a feature generator factory which can subsequently be referenced by models via their name/hashable key
+        :param name: the name/key (which can, in particular, be a string or an Enum item). Especially for larger projects
+            the use of an Enum is recommended (for optimal IDE support)
         :param factory: the factory
         """
         name = self._name(name)
@@ -98,6 +68,14 @@ class FeatureGeneratorRegistry:
             if self._use_singletons:
                 self._feature_generator_singletons[name] = generator
         return generator
+
+    def collect_features(self, *feature_generators_or_names: Union[Hashable, FeatureGenerator]) -> "FeatureCollector":
+        """
+        Creates a feature collector for the given feature names/keys/instances, which can subsequently be added to a model.
+
+        :param feature_generators_or_names: feature names/keys known to this registry or feature generator instances
+        """
+        return FeatureCollector(*feature_generators_or_names, registry=self)
 
 
 class FeatureCollector(object):
