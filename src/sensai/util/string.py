@@ -1,10 +1,14 @@
 import functools
+import logging
 import re
 import sys
+import types
 from abc import ABC, abstractmethod
 from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping, Callable
 
 reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
+
+log = logging.getLogger(__name__)
 
 
 class StringConverter(ABC):
@@ -27,7 +31,7 @@ def dict_string(d: Mapping, brackets: Optional[str] = None, converter: StringCon
     :param converter: the string converter to use for values
     :return: the string representation
     """
-    s = ', '.join([f'{k}={to_string(v, converter=converter)}' for k, v in d.items()])
+    s = ', '.join([f'{k}={to_string(v, converter=converter, context=k)}' for k, v in d.items()])
     if brackets is not None:
         return brackets[:1] + s + brackets[-1:]
     else:
@@ -47,7 +51,7 @@ def list_string(l: Iterable[Any], brackets="[]", quote: Optional[str] = None, co
     :return: the string representation
     """
     def item(x):
-        x = to_string(x, converter=converter)
+        x = to_string(x, converter=converter, context="list")
         if quote is not None:
             return quote + x + quote
         else:
@@ -59,7 +63,7 @@ def list_string(l: Iterable[Any], brackets="[]", quote: Optional[str] = None, co
         return s
 
 
-def to_string(x, converter: StringConverter = None, apply_converter_to_non_complex_objects=True):
+def to_string(x, converter: StringConverter = None, apply_converter_to_non_complex_objects=True, context=None):
     """
     Converts the given object to a string, with proper handling of lists, tuples and dictionaries, optionally using a converter.
     The conversion also removes unwanted line breaks (as present, in particular, in sklearn's string representations).
@@ -69,24 +73,34 @@ def to_string(x, converter: StringConverter = None, apply_converter_to_non_compl
     :param apply_converter_to_non_complex_objects: whether to apply/pass on the converter (if any) not only when converting complex objects
         but also non-complex, primitive objects; use of this flag enables converters to implement their conversion functionality using this
         function for complex objects without causing an infinite recursion.
+    :param context: context in which the object is being converted (e.g. dictionary key for case where x is the corresponding
+        dictionary value), only for debugging purposes (will be reported in log messages upon recursion exception)
     :return: the string representation
     """
-    if type(x) == list:
-        return list_string(x, converter=converter)
-    elif type(x) == tuple:
-        return list_string(x, brackets="()", converter=converter)
-    elif type(x) == dict:
-        return dict_string(x, brackets="{}", converter=converter)
-    else:
-        if converter and apply_converter_to_non_complex_objects:
-            s = converter.to_string(x)
+    try:
+        if type(x) == list:
+            return list_string(x, converter=converter)
+        elif type(x) == tuple:
+            return list_string(x, brackets="()", converter=converter)
+        elif type(x) == dict:
+            return dict_string(x, brackets="{}", converter=converter)
+        elif type(x) == types.MethodType:
+            # could be bound method of a ToStringMixin instance (which would print the repr of the instance, which can potentially cause
+            # an infinite recursion)
+            return f"Method[{x.__name__}]"
         else:
-            s = str(x)
+            if converter and apply_converter_to_non_complex_objects:
+                s = converter.to_string(x)
+            else:
+                s = str(x)
 
-        # remove any unwanted line breaks and indentation after commas (as generated, for example, by sklearn objects)
-        s = reCommaWhitespacePotentiallyBreaks.sub(", ", s)
+            # remove any unwanted line breaks and indentation after commas (as generated, for example, by sklearn objects)
+            s = reCommaWhitespacePotentiallyBreaks.sub(", ", s)
 
-        return s
+            return s
+    except RecursionError as e:
+        log.error(f"Recursion in string conversion detected; context={context}")
+        raise
 
 
 def object_repr(obj, member_names_or_dict: Union[List[str], Dict[str, Any]]):
@@ -349,7 +363,7 @@ class ToStringMixin:
                 self._handled_to_string_mixin_ids.add(oid)
                 return str(self._ToStringMixinProxy(x, self))
             else:
-                return to_string(x, converter=self, apply_converter_to_non_complex_objects=False)
+                return to_string(x, converter=self, apply_converter_to_non_complex_objects=False, context=x.__class__)
 
         class _ToStringMixinProxy:
             """
