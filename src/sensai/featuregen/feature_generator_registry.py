@@ -4,6 +4,7 @@ from typing import Callable, Dict, TYPE_CHECKING, Hashable, Union
 import pandas as pd
 
 from . import FeatureGenerator, MultiFeatureGenerator
+from ..data_transformation import DFTNormalisation, DFTOneHotEncoder
 from ..util.string import list_string
 
 if TYPE_CHECKING:
@@ -101,14 +102,16 @@ class FeatureGeneratorRegistry:
 
 class FeatureCollector(object):
     """
-    A feature collector which can provide a multi-feature generator from a list of names/generators and registry
+    A feature collector which facilitates the collection of features that shall be used by a model as well as the
+    generation of commonly used feature transformers that are informed by the features' meta-data.
     """
 
-    def __init__(self, *feature_generators_or_names: Union[str, FeatureGenerator], registry:
-            FeatureGeneratorRegistry = None):
+    def __init__(self,
+            *feature_generators_or_names: Union[Hashable, FeatureGenerator],
+            registry: FeatureGeneratorRegistry = None):
         """
-        :param feature_generators_or_names: generator names (known to the registry) or generator instances.
-        :param registry: the feature generator registry for the case where names are passed
+        :param feature_generators_or_names: generator names/keys (known to the registry) or generator instances
+        :param registry: the feature generator registry for the case where names/keys are passed
         """
         self._feature_generators_or_names = feature_generators_or_names
         self._registry = registry
@@ -122,6 +125,9 @@ class FeatureCollector(object):
             include_generated_categorical_rules=include_generated_categorical_rules)
 
     def get_categorical_feature_name_regex(self) -> str:
+        """
+        :return: a regular expression that matches all known categorical feature names
+        """
         return self.get_multi_feature_generator().get_categorical_feature_name_regex()
 
     def _create_multi_feature_generator(self):
@@ -134,3 +140,62 @@ class FeatureCollector(object):
                     raise Exception(f"Received feature name '{f}' instead of instance but no registry to perform the lookup")
                 feature_generators.append(self._registry.get_feature_generator(f))
         return MultiFeatureGenerator(*feature_generators)
+
+    def create_dft_normalisation(self, default_transformer_factory=None, require_all_handled=True, inplace=False) -> DFTNormalisation:
+        """
+        Creates a feature transformer that will apply normalisation to all supported (numeric) features
+
+        :param default_transformer_factory: a factory for the creation of transformer instances (which implements the
+            API used by sklearn.preprocessing, e.g. StandardScaler) that shall be used to create a transformer for all
+            rules that do not specify a particular transformer.
+            The default transformer will only be applied to columns matched by such rules, unmatched columns will
+            not be transformed.
+            Use SkLearnTransformerFactoryFactory to conveniently create a factory.
+        :param require_all_handled: whether to raise an exception if not all columns are matched by a rule
+        :param inplace: whether to apply data frame transformations in-place
+        :return: the transformer
+        """
+        return DFTNormalisation(self.get_normalisation_rules(), default_transformer_factory=default_transformer_factory,
+            require_all_handled=require_all_handled, inplace=inplace)
+
+    def create_dft_one_hot_encoder(self, ignore_unknown=False, inplace=False):
+        """
+        Creates a feature transformer that will apply one-hot encoding to all the features that are known to be categorical
+
+        :param inplace: whether to perform the transformation in-place
+        :param ignore_unknown: if True and an unknown category is encountered during transform, the resulting one-hot
+            encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
+        :return: the transformer
+        """
+        return DFTOneHotEncoder(self.get_categorical_feature_name_regex(), ignore_unknown=ignore_unknown, inplace=inplace)
+
+    def create_feature_transformer_normalisation(self, default_transformer_factory=None, require_all_handled=True, inplace=False) \
+            -> DFTNormalisation:
+        """
+        Creates a feature transformer that will apply normalisation to all supported (numeric) features.
+        Alias of create_dft_normalisation.
+
+        :param default_transformer_factory: a factory for the creation of transformer instances (which implements the
+            API used by sklearn.preprocessing, e.g. StandardScaler) that shall be used to create a transformer for all
+            rules that do not specify a particular transformer.
+            The default transformer will only be applied to columns matched by such rules, unmatched columns will
+            not be transformed.
+            Use SkLearnTransformerFactoryFactory to conveniently create a factory.
+        :param require_all_handled: whether to raise an exception if not all columns are matched by a rule
+        :param inplace: whether to apply data frame transformations in-place
+        :return: the transformer
+        """
+        return self.create_dft_normalisation(default_transformer_factory=default_transformer_factory,
+            require_all_handled=require_all_handled, inplace=inplace)
+
+    def create_feature_transformer_one_hot_encoder(self, ignore_unknown=False, inplace=False):
+        """
+        Creates a feature transformer that will apply one-hot encoding to all the features that are known to be categorical.
+        Alias of create_dft_one_hot_encoder.
+
+        :param inplace: whether to perform the transformation in-place
+        :param ignore_unknown: if True and an unknown category is encountered during transform, the resulting one-hot
+            encoded columns for this feature will be all zeros. if False, an unknown category will raise an error.
+        :return: the transformer
+        """
+        return self.create_dft_one_hot_encoder(ignore_unknown=ignore_unknown, inplace=inplace)
