@@ -50,8 +50,7 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
             normalisation_mode: NormalisationMode = NormalisationMode.NONE,
             cuda: bool = True,
             p_dropout: Optional[float] = None,
-            nn_optimiser_params: Optional[NNOptimiserParams] = None,
-            **nn_optimiser_dict_params) -> None:
+            nn_optimiser_params: Optional[NNOptimiserParams] = None) -> None:
         """
         :param hidden_dims: sequence containing the number of neurons to use in hidden layers
         :param hid_activation_function: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
@@ -61,11 +60,18 @@ class MultiLayerPerceptronVectorRegressionModel(TorchVectorRegressionModel):
         :param cuda: whether to use CUDA (GPU acceleration)
         :param p_dropout: the probability with which to apply dropouts after each hidden layer
         :param nn_optimiser_params: parameters for NNOptimiser; if None, use default (or what is specified in nnOptimiserDictParams)
-        :param nn_optimiser_dict_params: [for backward compatibility] parameters for NNOptimiser (alternative to nnOptimiserParams)
         """
-        nn_optimiser_params = NNOptimiserParams.from_either_dict_or_instance(nn_optimiser_dict_params, nn_optimiser_params)
-        super().__init__(MultiLayerPerceptronTorchModel, [cuda, hidden_dims, hid_activation_function, output_activation_function],
-                dict(p_dropout=p_dropout, input_dim=input_dim), normalisation_mode, nn_optimiser_params)
+        self.hidden_dims = hidden_dims
+        self.hid_activation_function = hid_activation_function
+        self.output_activation_function = output_activation_function
+        self.input_dim = input_dim
+        self.cuda = cuda
+        self.p_dropout = p_dropout
+        super().__init__(self._create_torch_model, normalisation_mode, nn_optimiser_params)
+
+    def _create_torch_model(self) -> MultiLayerPerceptronTorchModel:
+        return MultiLayerPerceptronTorchModel(self.cuda, self.hidden_dims, self.hid_activation_function, self.output_activation_function,
+            p_dropout=self.p_dropout, input_dim=self.input_dim)
 
 
 class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationModel):
@@ -77,8 +83,7 @@ class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationMod
             input_dim: Optional[int] = None,
             normalisation_mode: NormalisationMode = NormalisationMode.NONE, cuda: bool = True,
             p_dropout: Optional[float] = None,
-            nn_optimiser_params: Optional[NNOptimiserParams] = None,
-            **nn_optimiser_dict_params) -> None:
+            nn_optimiser_params: Optional[NNOptimiserParams] = None) -> None:
         """
         :param hidden_dims: sequence containing the number of neurons to use in hidden layers
         :param hid_activation_function: the activation function (torch.nn.functional.* or torch.*) to use for all hidden layers
@@ -87,14 +92,20 @@ class MultiLayerPerceptronVectorClassificationModel(TorchVectorClassificationMod
         :param normalisation_mode: the normalisation mode to apply to input and output data
         :param cuda: whether to use CUDA (GPU acceleration)
         :param p_dropout: the probability with which to apply dropouts after each hidden layer
-        :param nn_optimiser_params: parameters for NNOptimiser; if None, use default (or what is specified in nnOptimiserDictParams)
-        :param nn_optimiser_dict_params: [for backward compatibility] parameters for NNOptimiser (alternative to nnOptimiserParams)
+        :param nn_optimiser_params: parameters for NNOptimiser; if None, use default
         """
-        nn_optimiser_params = NNOptimiserParams.from_either_dict_or_instance(nn_optimiser_dict_params, nn_optimiser_params)
+        self.hidden_dims = hidden_dims
+        self.hid_activation_function = hid_activation_function
+        self.output_activation_function = output_activation_function
+        self.input_dim = input_dim
+        self.cuda = cuda
+        self.p_dropout = p_dropout
         output_mode = ClassificationOutputMode.for_activation_fn(ActivationFunction.torch_function_from_any(output_activation_function))
         super().__init__(output_mode,
-            MultiLayerPerceptronTorchModel,
-            [cuda, hidden_dims, hid_activation_function, output_activation_function],
-            dict(p_dropout=p_dropout, input_dim=input_dim),
+            self._create_torch_model,
             normalisation_mode,
             nn_optimiser_params)
+
+    def _create_torch_model(self) -> MultiLayerPerceptronTorchModel:
+        return MultiLayerPerceptronTorchModel(self.cuda, self.hidden_dims, self.hid_activation_function, self.output_activation_function,
+            p_dropout=self.p_dropout, input_dim=self.input_dim)

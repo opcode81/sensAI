@@ -36,6 +36,16 @@ class ResidualFeedForwardNetworkVectorRegressionModel(TorchVectorRegressionModel
             use_batch_normalisation: bool = False,
             normalisation_mode: NormalisationMode = NormalisationMode.NONE,
             nn_optimiser_params: Union[NNOptimiserParams, dict, None] = None) -> None:
-        super().__init__(ResidualFeedForwardNetworkTorchModel, [cuda, hidden_dims],
-            dict(bottleneckDimensionFactor=bottleneck_dimension_factor, pDropout=p_dropout, useBatchNormalisation=use_batch_normalisation),
+        self.hidden_dims = hidden_dims
+        self.bottleneck_dimension_factor = bottleneck_dimension_factor
+        self.cuda = cuda
+        self.p_dropout = p_dropout
+        self.use_batch_normalisation = use_batch_normalisation
+        super().__init__(self._create_torch_model,
             normalisation_mode=normalisation_mode, nn_optimiser_params=nn_optimiser_params)
+
+    def _create_torch_model(self):
+        return ResidualFeedForwardNetworkTorchModel(self.cuda, self.hidden_dims,
+            bottleneck_dimension_factor=self.bottleneck_dimension_factor,
+            p_dropout=self.p_dropout,
+            use_batch_normalisation=self.use_batch_normalisation)

@@ -1,5 +1,7 @@
+import functools
 import io
 import logging
+import typing
 from abc import ABC, abstractmethod
 from typing import Union, Tuple, Callable, Optional, List, Sequence
 
@@ -359,6 +361,16 @@ class TorchModelFromModule(TorchModel):
         return self.module
 
 
+class TorchModelFactoryFromModule:
+    """Represents a factory for the creation of a TorchModel based on a torch module"""
+    def __init__(self, module: torch.nn.Module, cuda: bool = True):
+        self.module = module
+        self.cuda = cuda
+
+    def __call__(self) -> TorchModel:
+        return TorchModelFromModule(self.module, self.cuda)
+
+
 class VectorTorchModel(TorchModel, ABC):
     """
     Base class for TorchModels that can be used within VectorModels, where the input and output dimensions
@@ -389,27 +401,25 @@ class VectorTorchModel(TorchModel, ABC):
         pass
 
 
+TTorchVectorRegressionModel = typing.TypeVar("TTorchVectorRegressionModel", bound="TorchVectorRegressionModel")
+
+
 class TorchVectorRegressionModel(VectorRegressionModel):
     """
     Base class for the implementation of VectorRegressionModels based on TorchModels.
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
 
-    def __init__(self, model_class: Callable[..., TorchModel],
-            model_args: Sequence = (),
-            model_kw_args: Optional[dict] = None,  # TODO change construction mechanisms such that they are safe wrt to refactoring
+    def __init__(self, torch_model_factory: Callable[[], TorchModel],
             normalisation_mode: NormalisationMode = NormalisationMode.NONE,
             nn_optimiser_params: Union[dict, NNOptimiserParams, None] = None) -> None:
         """
-        :param model_class: the constructor/factory function with which to create the contained TorchModel instance
-        :param model_args: the constructor argument list to pass to ``modelClass``
-        :param model_kw_args: the dictionary of constructor keyword arguments to pass to ``modelClass``
+        :param torch_model_factory: the factory function with which to create the contained TorchModel instance that the instance is to
+            encapsulate. For the instance to be picklable, this cannot be a lambda or locally defined function.
         :param normalisation_mode: the normalisation mode to apply to input data frames
         :param nn_optimiser_params: the parameters to apply in NNOptimiser during training
         """
         super().__init__()
-        if model_kw_args is None:
-            model_kw_args = {}
 
         if nn_optimiser_params is None:
             nn_optimiser_params_instance = NNOptimiserParams()
@@ -418,11 +428,9 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         if nn_optimiser_params_instance.loss_evaluator is None:
             nn_optimiser_params_instance.loss_evaluator = NNLossEvaluatorRegression(NNLossEvaluatorRegression.LossFunction.MSELOSS)
 
+        self.torch_model_factory = torch_model_factory
         self.normalisationMode = normalisation_mode
         self.nnOptimiserParams = nn_optimiser_params_instance
-        self.modelClass = model_class
-        self.modelArgs = model_args
-        self.modelKwArgs = model_kw_args
         self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
         self.outputTensoriser: Optional[Tensoriser] = None
@@ -432,6 +440,10 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self._normalisationCheckThreshold = 5
 
     def __setstate__(self, state) -> None:
+        if "modelClass" in state:  # old-style factory
+            state["torch_model_factory"] = functools.partial(state["modelClass"], *state["modelArgs"], **state["modelKwArgs"])
+            for k in ("modelClass", "modelArgs", "modelKwArgs"):
+                del state[k]
         state["nnOptimiserParams"] = NNOptimiserParams.from_dict_or_instance(state["nnOptimiserParams"])
         new_optional_members = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
             "outputTensorToArrayConverter"]
@@ -442,7 +454,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
     @classmethod
     def from_module(cls, module: torch.nn.Module, cuda=True, normalisation_mode: NormalisationMode = NormalisationMode.NONE,
             nn_optimiser_params: Optional[NNOptimiserParams] = None) -> "TorchVectorRegressionModel":
-        return cls(TorchModelFromModule, model_kw_args=dict(module=module, cuda=cuda), normalisation_mode=normalisation_mode,
+        return cls(TorchModelFactoryFromModule(module=module, cuda=cuda), normalisation_mode=normalisation_mode,
             nn_optimiser_params=nn_optimiser_params)
 
     def _tostring_excludes(self) -> List[str]:
@@ -452,7 +464,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         else:
             return excludes
 
-    def with_input_tensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+    def with_input_tensoriser(self: TTorchVectorRegressionModel, tensoriser: Tensoriser) -> TTorchVectorRegressionModel:
         """
         :param tensoriser: tensoriser to use in order to convert input data frames to (one or more) tensors.
             The default tensoriser directly converts the data frame's values (which is assumed to contain only scalars that
@@ -464,7 +476,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.inputTensoriser = tensoriser
         return self
 
-    def with_output_tensoriser(self, tensoriser: RuleBasedTensoriser) -> __qualname__:
+    def with_output_tensoriser(self: TTorchVectorRegressionModel, tensoriser: RuleBasedTensoriser) -> TTorchVectorRegressionModel:
         """
         :param tensoriser: tensoriser to use in order to convert the output data frame to a tensor.
             The default output tensoriser directly converts the data frame's values to a float tensor.
@@ -478,7 +490,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.outputTensoriser = tensoriser
         return self
 
-    def with_output_tensor_to_array_converter(self, output_tensor_to_array_converter: "OutputTensorToArrayConverter") -> __qualname__:
+    def with_output_tensor_to_array_converter(self: TTorchVectorRegressionModel,
+            output_tensor_to_array_converter: "OutputTensorToArrayConverter") -> TTorchVectorRegressionModel:
         """
         Configures the use of a custom converter from tensors to numpy arrays, which is applied during inference.
         A custom converter can be required, for example, to handle variable-length outputs (where the output tensor
@@ -489,8 +502,10 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         :return: self
         """
         self.outputTensorToArrayConverter = output_tensor_to_array_converter
+        return self
 
-    def with_torch_data_set_provider_factory(self, torch_data_set_provider_factory: "TorchDataSetProviderFactory") -> __qualname__:
+    def with_torch_data_set_provider_factory(self: TTorchVectorRegressionModel,
+            torch_data_set_provider_factory: "TorchDataSetProviderFactory") -> TTorchVectorRegressionModel:
         """
         :param torch_data_set_provider_factory: the torch data set provider factory, which is used to instantiate the provider which
             will provide the training and validation data sets from the input data frame that is passed in for learning.
@@ -500,7 +515,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.torchDataSetProviderFactory = torch_data_set_provider_factory
         return self
 
-    def with_data_frame_splitter(self, data_frame_splitter: DataFrameSplitter) -> __qualname__:
+    def with_data_frame_splitter(self: TTorchVectorRegressionModel, data_frame_splitter: DataFrameSplitter) -> TTorchVectorRegressionModel:
         """
         :param data_frame_splitter: the data frame splitter which is used to split the input/output data frames that are passed for
             learning into a data frame that is used for training and a data frame that is used for validation.
@@ -511,7 +526,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.dataFrameSplitter = data_frame_splitter
         return self
 
-    def with_normalisation_check_threshold(self, threshold: Optional[float]):
+    def with_normalisation_check_threshold(self: TTorchVectorRegressionModel, threshold: Optional[float]) -> TTorchVectorRegressionModel:
         """
         Defines a threshold with which to check inputs that are passed to the underlying neural network.
         Whenever an (absolute) input value exceeds the threshold, a warning is triggered.
@@ -523,7 +538,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return self
 
     def _create_torch_model(self) -> TorchModel:
-        torch_model = self.modelClass(*self.modelArgs, **self.modelKwArgs)
+        torch_model = self.torch_model_factory()
         torch_model.set_normalisation_check_threshold(self._normalisationCheckThreshold)
         return torch_model
 
@@ -561,51 +576,50 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return pd.DataFrame(y_array, columns=self.get_model_output_variable_names())
 
 
+TTorchVectorClassificationModel = typing.TypeVar("TTorchVectorClassificationModel", bound="TorchVectorClassificationModel")
+
+
 class TorchVectorClassificationModel(VectorClassificationModel):
     """
     Base class for the implementation of VectorClassificationModels based on TorchModels.
     An instance of this class will have an instance of TorchModel as the underlying model.
     """
     def __init__(self, output_mode: ClassificationOutputMode,
-            model_class: Callable[..., VectorTorchModel],
-            model_args: Sequence = (),
-            model_kwargs: Optional[dict] = None,  # TODO change construction mechanisms such that they are safe wrt to refactoring
+            torch_model_factory: Callable[[], TorchModel],
             normalisation_mode: NormalisationMode = NormalisationMode.NONE,
-            nn_optimiser_params: Union[dict, NNOptimiserParams, None] = None) -> None:
+            nn_optimiser_params: Optional[NNOptimiserParams] = None) -> None:
         """
         :param output_mode: specifies the nature of the output of the underlying neural network model
-        :param model_class: the constructor with which to create the wrapped torch model
-        :param model_args: the constructor argument list to pass to modelClass
-        :param model_kwargs: the dictionary of constructor keyword arguments to pass to modelClass
+        :param torch_model_factory: the factory function with which to create the contained TorchModel instance that the instance is to
+            encapsulate. For the instance to be picklable, this cannot be a lambda or locally defined function.
         :param normalisation_mode: the normalisation mode to apply to input data frames
         :param nn_optimiser_params: the parameters to apply in NNOptimiser during training
         """
         super().__init__()
-        if model_kwargs is None:
-            model_kwargs = {}
 
         if nn_optimiser_params is None:
-            nn_optimiser_params_instance = NNOptimiserParams()
-        else:
-            nn_optimiser_params_instance = NNOptimiserParams.from_dict_or_instance(nn_optimiser_params)
-        if nn_optimiser_params_instance.loss_evaluator is None:
+            nn_optimiser_params = NNOptimiserParams()
+        if nn_optimiser_params.loss_evaluator is None:
             loss_function = NNLossEvaluatorClassification.LossFunction.default_for_output_mode(output_mode)
-            nn_optimiser_params_instance.loss_evaluator = NNLossEvaluatorClassification(loss_function)
+            nn_optimiser_params.loss_evaluator = NNLossEvaluatorClassification(loss_function)
 
         self.outputMode = output_mode
+        self.torch_model_factory = torch_model_factory
         self.normalisationMode = normalisation_mode
-        self.nnOptimiserParams: NNOptimiserParams = nn_optimiser_params_instance
-        self.modelClass = model_class
-        self.modelArgs = model_args
-        self.modelKwArgs = model_kwargs
-        self.model: Optional[VectorTorchModel] = None
+        self.nnOptimiserParams: NNOptimiserParams = nn_optimiser_params
+        self.model: Optional[TorchModel] = None
         self.inputTensoriser: Optional[Tensoriser] = None
         self.outputTensoriser: Optional[Tensoriser] = None
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
         self._normalisationCheckThreshold = 5
 
+    # noinspection DuplicatedCode
     def __setstate__(self, state) -> None:
+        if "modelClass" in state:  # old-style factory
+            state["torch_model_factory"] = functools.partial(state["modelClass"], *state["modelArgs"], **state["modelKwArgs"])
+            for k in ("modelClass", "modelArgs", "modelKwArgs"):
+                del state[k]
         state["nnOptimiserParams"] = NNOptimiserParams.from_dict_or_instance(state["nnOptimiserParams"])
         new_optional_members = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser"]
         new_default_properties = {"outputMode": ClassificationOutputMode.PROBABILITIES, "_normalisationCheckThreshold": 5}
@@ -616,10 +630,10 @@ class TorchVectorClassificationModel(VectorClassificationModel):
     def from_module(cls, module: torch.nn.Module, output_mode: ClassificationOutputMode, cuda=True,
             normalisation_mode: NormalisationMode = NormalisationMode.NONE,
             nn_optimiser_params: Optional[NNOptimiserParams] = None) -> "TorchVectorClassificationModel":
-        return cls(output_mode, TorchModelFromModule, model_kwargs=dict(module=module, cuda=cuda),
+        return cls(output_mode, TorchModelFactoryFromModule(module, cuda=cuda),
             normalisation_mode=normalisation_mode, nn_optimiser_params=nn_optimiser_params)
 
-    def with_input_tensoriser(self, tensoriser: Tensoriser) -> __qualname__:
+    def with_input_tensoriser(self: TTorchVectorClassificationModel, tensoriser: Tensoriser) -> TTorchVectorClassificationModel:
         """
         :param tensoriser: tensoriser to use in order to convert input data frames to (one or more) tensors.
             The default tensoriser directly converts the data frame's values (which is assumed to contain only scalars that
@@ -631,7 +645,7 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.inputTensoriser = tensoriser
         return self
 
-    def with_output_tensoriser(self, tensoriser: RuleBasedTensoriser) -> __qualname__:
+    def with_output_tensoriser(self: TTorchVectorClassificationModel, tensoriser: RuleBasedTensoriser) -> TTorchVectorClassificationModel:
         """
         :param tensoriser: tensoriser to use in order to convert the output data frame to a tensor.
             NOTE: It is required to be a rule-based tensoriser, because mechanisms that require fitting on the data
@@ -642,7 +656,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.outputTensoriser = tensoriser
         return self
 
-    def with_torch_data_set_provider_factory(self, torch_data_set_provider_factory: "TorchDataSetProviderFactory") -> __qualname__:
+    def with_torch_data_set_provider_factory(self: TTorchVectorClassificationModel,
+            torch_data_set_provider_factory: "TorchDataSetProviderFactory") -> TTorchVectorClassificationModel:
         """
         :param torch_data_set_provider_factory: the torch data set provider factory, which is used to instantiate the provider which
             will provide the training and validation data sets from the input data frame that is passed in for learning.
@@ -652,7 +667,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.torchDataSetProviderFactory = torch_data_set_provider_factory
         return self
 
-    def with_data_frame_splitter(self, data_frame_splitter: DataFrameSplitter) -> __qualname__:
+    def with_data_frame_splitter(self: TTorchVectorClassificationModel, data_frame_splitter: DataFrameSplitter) \
+            -> TTorchVectorClassificationModel:
         """
         :param data_frame_splitter: the data frame splitter which is used to split the input/output data frames that are passed for
             learning into a data frame that is used for training and a data frame that is used for validation.
@@ -663,7 +679,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self.dataFrameSplitter = data_frame_splitter
         return self
 
-    def with_normalisation_check_threshold(self, threshold: Optional[float]):
+    def with_normalisation_check_threshold(self: TTorchVectorClassificationModel, threshold: Optional[float]) \
+            -> TTorchVectorClassificationModel:
         """
         Defines a threshold with which to check inputs that are passed to the underlying neural network.
         Whenever an (absolute) input value exceeds the threshold, a warning is triggered.
@@ -674,8 +691,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         self._normalisationCheckThreshold = threshold
         return self
 
-    def _create_torch_model(self) -> VectorTorchModel:
-        torch_model = self.modelClass(*self.modelArgs, **self.modelKwArgs)
+    def _create_torch_model(self) -> TorchModel:
+        torch_model = self.torch_model_factory()
         torch_model.set_normalisation_check_threshold(self._normalisationCheckThreshold)
         return torch_model
 

@@ -1,5 +1,4 @@
 import re
-import os
 
 import sklearn
 import torch
@@ -7,12 +6,12 @@ import torch
 import sensai.torch
 from sensai import NormalisationMode, normalisation
 from sensai.data_transformation import DFTNormalisation
+from sensai.featuregen import FeatureGeneratorTakeColumns
 from sensai.torch import NNOptimiser
 from sensai.torch.torch_base import TorchModelFromModuleFactory
 from sensai.torch.torch_data import TorchDataSetFromTensors
 from sensai.torch.torch_modules import MultiLayerPerceptron
 from sensai.torch.torch_opt import NNLossEvaluatorClassification, NNOptimiserParams
-from sensai.featuregen import FeatureGeneratorTakeColumns
 
 
 def test_MLPClassifier(irisDataSet, irisClassificationTestCase, testResources):
@@ -49,3 +48,6 @@ def test_NNOptimiserWithoutValidation_MLPClassifier(irisDataSet):
     modelOutputs = model.apply(inputTensor, as_numpy=False)
     accuracy = torch.sum(torch.argmax(modelOutputs, 1) == outputTensor).item() / len(outputTensor)
     assert accuracy > 0.9
+
+
+# TODO add test for TorchVectorRegressionModel, e.g. MLP
