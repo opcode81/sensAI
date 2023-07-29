@@ -538,7 +538,15 @@ class NNLossEvaluatorClassification(NNLossEvaluatorFixedDim):
 class NNOptimiserParams(ToStringMixin):
     REMOVED_PARAMS = {"cuda"}
     RENAMED_PARAMS = {
-        "optimiserClip": "shrinkageClip"
+        "optimiserClip": "optimiser_clip",
+        "lossEvaluator": "loss_evaluator",
+        "optimiserLR": "optimiser_lr",
+        "earlyStoppingEpochs": "early_stopping_epochs",
+        "batchSize": "batch_size",
+        "trainFraction": "train_fraction",
+        "scaledOutputs": "scaled_outputs",
+        "useShrinkage": "use_shrinkage",
+        "shrinkageClip": "shrinkage_clip",
     }
 
     def __init__(self,
