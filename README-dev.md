@@ -63,9 +63,9 @@ Results will be stored in `docs/build/`.
 
    * `bumpversion patch  --commit`
    * `bumpversion minor --commit`
-   * `bumpversion major  --commit`
+   * `bumpversion major --commit`
 
-   This will create a new "-dev" version which can be pushed without a release ending up on PyPI.
+   This will create a new "-alpha" version which can be pushed without a release ending up on PyPI.
 
 3. Push this version to github
    `git push`
