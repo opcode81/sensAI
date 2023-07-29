@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional, Dict
+from typing import List, Union, Sequence, Callable, TYPE_CHECKING, Tuple, Optional, Dict, Any
 
 import matplotlib.figure
 import numpy as np
@@ -554,7 +554,7 @@ class NNOptimiserParams(ToStringMixin):
             use_shrinkage=True,
             shrinkage_clip=10.,
             shuffle=True,
-            **optimiser_args):
+            optimiser_args: Optional[Dict[str, Any]] = None):
         """
         :param loss_evaluator: the loss evaluator to use
         :param gpu: the index of the GPU to be used (if CUDA is enabled for the model to be trained); if None, default to first GPU
@@ -596,7 +596,7 @@ class NNOptimiserParams(ToStringMixin):
         self.train_fraction = train_fraction
         self.scaled_outputs = scaled_outputs
         self.loss_evaluator = loss_evaluator
-        self.optimiser_args = optimiser_args
+        self.optimiser_args = optimiser_args if optimiser_args is not None else {}
         self.use_shrinkage = use_shrinkage
         self.early_stopping_epochs = early_stopping_epochs
         self.shuffle = shuffle
