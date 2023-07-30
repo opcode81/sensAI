@@ -6,8 +6,11 @@ sensAI - the Python library for sensible AI
    :glob:
 
    intro.ipynb
-   intro_old.ipynb
    neural_networks.ipynb
+
+..
+  Temporarily disabled notebooks (not yet updated)
+   intro_old.ipynb
    coordinate_clustering.ipynb
    clustering_evaluation.ipynb
    tracking_experiments.ipynb
