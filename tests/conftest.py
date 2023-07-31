@@ -6,8 +6,8 @@ import pandas as pd
 import pytest
 import sklearn.datasets
 
-from sensai import InputOutputData, VectorClassificationModel
-from sensai.evaluation import VectorClassificationModelEvaluator
+from sensai import InputOutputData, VectorClassificationModel, VectorRegressionModel
+from sensai.evaluation import VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, VectorRegressionModelEvaluatorParams
 
 sys.path.append(os.path.abspath("."))
 from config import topLevelDirectory
@@ -15,9 +15,12 @@ from config import topLevelDirectory
 log = logging.getLogger(__name__)
 
 
+RESOURCE_DIR = os.path.join(topLevelDirectory, "tests", "resources")
+
+
 @pytest.fixture(scope="session")
 def testResources():
-    return os.path.join(topLevelDirectory, "tests", "resources")
+    return RESOURCE_DIR
 
 
 class IrisDataSet:
@@ -57,3 +60,48 @@ def irisDataSet():
 @pytest.fixture(scope="session")
 def irisClassificationTestCase(irisDataSet):
     return ClassificationTestCase(irisDataSet.getInputOutputData())
+
+
+class RegressionTestCase:
+    def __init__(self, data: InputOutputData):
+        self.data = data
+        self.evaluatorParams = VectorRegressionModelEvaluatorParams(fractionalSplitTestFraction=0.2, fractionalSplitShuffle=True,
+            fractionalSplitRandomSeed=42)
+
+    def testMinR2(self, model: VectorRegressionModel, minR2: float, fit=True):
+        ev = VectorRegressionModelEvaluator(self.data, params=self.evaluatorParams)
+        if fit:
+            ev.fitModel(model)
+        resultData = ev.evalModel(model)
+        stats = resultData.getEvalStats()
+
+        #stats.plotScatterGroundTruthPredictions()
+        #from matplotlib import pyplot as plt; plt.show()
+        #resultDataTrain = ev.evalModel(model, onTrainingData=True); log.info(f"on train: {resultDataTrain.getEvalStats()}")
+
+        log.info(f"Results for {model.getName()}: {stats}")
+        assert stats.getR2() >= minR2
+
+
+class DiabetesDataSet:
+    """
+    Classic diabetes data set (downloaded from https://www4.stat.ncsu.edu/~boos/var.select/diabetes.tab.txt)
+    """
+    _iod = None
+
+    @classmethod
+    def getInputOutputData(cls):
+        if cls._iod is None:
+            df = pd.read_csv(os.path.join(RESOURCE_DIR, "diabetes.tab.txt"), sep="\t")
+            return InputOutputData.fromDataFrame(df, "Y")
+        return cls._iod
+
+
+@pytest.fixture(scope="session")
+def diabetesDataSet():
+    return DiabetesDataSet()
+
+
+@pytest.fixture(scope="session")
+def diabetesRegressionTestCase(diabetesDataSet):
+    return RegressionTestCase(diabetesDataSet.getInputOutputData())
