@@ -92,7 +92,7 @@ class TestFgenBasics:
     def test_ruleBasedAlwaysFitted(self):
         assert RuleBasedTestFgen().is_fitted()
 
-    def test_emptyChainRaisesError(self):
+    def test_emptyChainInvalid(self):
         with pytest.raises(ValueError):
             ChainedFeatureGenerator()
 
