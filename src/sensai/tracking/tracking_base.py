@@ -130,11 +130,27 @@ class TrackedExperiment(Generic[TContext], ABC):
         pass
 
     def begin_context(self, name: str, description: str = "") -> TContext:
+        """
+        Begins a context in which actual information will be tracked.
+        The returned object is a context manager, which can be used in a with-statement.
+
+        :param name: the name of the context (e.g. model name)
+        :param description: a description (e.g. full model parameters/specification)
+        :return: the context, which can subsequently be used to track information
+        """
         instance = self._create_tracking_context(self.instancePrefix + name, description)
         self._contexts.append(instance)
         return instance
 
     def begin_context_for_model(self, model: VectorModelBase):
+        """
+        Begins a tracking context for the case where we want to track information about a model (wrapper around `begin_context` for convenience).
+        The model name is used as the context name, and the model's string representation is used as the description.
+        The returned object is a context manager, which can be used in a with-statement.
+
+        :param model: the model
+        :return: the context, which can subsequently be used to track information
+        """
         return self.begin_context(model.get_name(), str(model))
 
     def end_context(self, instance: TContext):

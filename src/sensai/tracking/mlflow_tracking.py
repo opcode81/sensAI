@@ -32,10 +32,12 @@ class MLFlowExperiment(TrackedExperiment[MLFlowTrackingContext]):
     def __init__(self, experiment_name: str, tracking_uri: str, additional_logging_values_dict=None,
             context_prefix: str = ""):
         """
-        :param experiment_name:
-        :param tracking_uri:
+        :param experiment_name: the name of the experiment, which should be the same for all models of the same kind (i.e. all models evaluated
+            under the same conditions)
+        :param tracking_uri: the URI of the server (if any); use "" to track in the local file system
         :param additional_logging_values_dict:
-        :param context_prefix:
+        :param context_prefix: a prefix to add to all contexts that are created within the experiment. This can be used to add
+            an identifier of a certain execution/run, such that the actual context name passed to `begin_context` can be concise (e.g. just model name).
         """
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name=experiment_name)
