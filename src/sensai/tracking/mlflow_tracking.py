@@ -21,6 +21,9 @@ class MLFlowTrackingContext(TrackingContext):
     def track_figure(self, name: str, fig: plt.Figure):
         mlflow.log_figure(fig, name + ".png")
 
+    def track_text(self, name: str, content: str):
+        mlflow.log_text(content, name + ".txt")
+
     def _end(self):
         mlflow.end_run()
 

@@ -33,12 +33,29 @@ class TrackingContext(ABC):
         pass
 
     def track_metrics(self, metrics: Dict[str, float], predicted_var_name: Optional[str] = None):
+        """
+        :param metrics: the metrics to be logged
+        :param predicted_var_name: the name of the predicted variable for the case where there is more than one. If it is provided,
+            the variable name will be prepended to every metric name.
+        """
         if predicted_var_name is not None:
             metrics = {f"{predicted_var_name}_{k}": v for k, v in metrics.items()}
         self._track_metrics(metrics)
 
     @abstractmethod
     def track_figure(self, name: str, fig: plt.Figure):
+        """
+        :param name: the name of the figure (not a filename, should not include file extension)
+        :param fig: the figure
+        """
+        pass
+
+    @abstractmethod
+    def track_text(self, name: str, content: str):
+        """
+        :param name: the name of the text (not a filename, should not include file extension)
+        :param content: the content (arbitrarily long text, e.g. a log)
+        """
         pass
 
     def __enter__(self):
@@ -61,6 +78,10 @@ class TrackingContext(ABC):
 
 
 class DummyTrackingContext(TrackingContext):
+    """
+    A dummy tracking context which performs no actual tracking.
+    It is useful to avoid having to write conditional tracking code for the case where there isn't a tracked experiment.
+    """
     def __init__(self, name):
         super().__init__(name, None)
 
@@ -68,6 +89,9 @@ class DummyTrackingContext(TrackingContext):
         pass
 
     def track_figure(self, name: str, fig: plt.Figure):
+        pass
+
+    def track_text(self, name: str, content: str):
         pass
 
     def _end(self):
