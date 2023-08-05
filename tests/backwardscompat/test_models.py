@@ -2,6 +2,11 @@ import os
 
 import sensai
 from sensai import VectorModel
+from sensai.data_transformation import DFTNormalisation, SkLearnTransformerFactoryFactory, DFTOneHotEncoder
+from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureCollector
+from sensai.sklearn.sklearn_regression import SkLearnLinearRegressionVectorRegressionModel, SkLearnRandomForestVectorRegressionModel, \
+    SkLearnMultiLayerPerceptronVectorRegressionModel
+from tests.conftest import RegressionTestCase
 
 
 def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
@@ -12,4 +17,31 @@ def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
     irisClassificationTestCase.testMinAccuracy(model, 0.8, fit=False)
 
 
-# TODO test backward compatibility with torch vector models created with v0
+# TODO
+def createRegressionModelsForBackwardsCompatibilityTest(testCase: RegressionTestCase):
+    fc = FeatureCollector(FeatureGeneratorTakeColumns(categoricalFeatureNames=["SEX"],
+        normalisationRuleTemplate=DFTNormalisation.RuleTemplate(independentColumns=False)))
+
+    modelLinear = SkLearnLinearRegressionVectorRegressionModel() \
+        .withFeatureCollector(fc) \
+        .withFeatureTransformers(
+            DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()))
+            #DFTNormalisation(fc.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.RobustScaler()))
+
+    modelRF = SkLearnRandomForestVectorRegressionModel() \
+        .withFeatureCollector(fc) \
+        .withFeatureTransformers(DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()))
+
+    modelMLP = SkLearnMultiLayerPerceptronVectorRegressionModel(hidden_layer_sizes=(10, 10), solver="lbfgs") \
+        .withFeatureCollector(fc) \
+        .withFeatureTransformers(
+            DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()),
+            DFTNormalisation(fc.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.RobustScaler()))
+
+    return modelMLP
+
+
+# TODO
+def todo_test_backward_compatibility_v020(diabetesRegressionTestCase):
+    model = createRegressionModelsForBackwardsCompatibilityTest(diabetesRegressionTestCase)
+    diabetesRegressionTestCase.testMinR2(model, 0.5, fit=True)
