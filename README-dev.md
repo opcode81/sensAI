@@ -18,14 +18,20 @@ Use conda to set up the Python environment:
 
 Solving the environment may take several minutes (but should ultimately work).
 
-NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with all (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see below).
+NOTE: versions are mostly unpinned in the environment specification, because this facilitates conda dependency resolution. Also, sensAI is intended to be compatible with *all* (newer) versions of the dependencies. If it isn't, we need to specify  an upper version bound in `setup.py` (where it matters the most) as well as in `environment.yml`. Compatibility with old (pinned) versions and the latest versions is tested in the tox build (see below).
 
 # Build and Test Pipeline
 
 The tests and docs build are executed via **tox** in several environments:
-* `py`: the "regular" test environment, where we test against the pinned dependencies which we also use for development (by explicitly including `requirements.txt` with the pinned versions; this is also the environment in which we test the execution of notebooks
+* `py`: the "regular" test environment, where we test against the pinned dependencies (by explicitly including `requirements.txt` with the pinned versions; this is also the environment in which we test the execution of notebooks
 * `py_latest_dependencies`: the environment where we use the latest versions of all dependencies (except where we have identified an incompatibility; see `setup.py` definitions `DEPS_VERSION_LOWER_BOUND` and `DEPS_VERSION_UPPER_BOUND_EXCLUSIVE`); by not including `requirements.txt`, we depend on the latest admissible versions according to `setup.py`
 * `docs`: the environment in which docs are built via sphinx 
+
+## Automated Tests
+
+The tests can be locally run without tox via
+
+    sh run_pytest_tests.sh
 
 ## Docs Build
 
@@ -66,6 +72,8 @@ Results will be stored in `docs/build/`.
    * `bumpversion major --commit`
 
    This will create a new "-alpha" version which can be pushed without a release ending up on PyPI.
+   
+   If you want to release an alpha version, you may change the build number via `bumpversion build --commit`. 
 
 3. Push this version to github
    `git push`
@@ -73,13 +81,16 @@ Results will be stored in `docs/build/`.
 
 4. If the build succeeded and you want to release this version, 
 
-   * Create the release version:
+   * Set the release version and add the respective git tag:
      `bumpversion release --commit --tag`
+     
+     (unless you want to publish the alpha version, in which case you need create the git tag manually.)
+
    * Push the new release:
      * `git push`
      * `git push --tags` (triggers PyPI release)
 
-   If it it did not succeed and you need to fix stuff, 
+   If it did not succeed and you need to fix stuff, 
 
    * Fix whatever you need to fix, adding commits
    * Create a new test build via
