@@ -6,7 +6,6 @@ from sensai.data_transformation import DFTNormalisation, SkLearnTransformerFacto
 from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureCollector
 from sensai.sklearn.sklearn_regression import SkLearnLinearRegressionVectorRegressionModel, SkLearnRandomForestVectorRegressionModel, \
     SkLearnMultiLayerPerceptronVectorRegressionModel
-from tests.conftest import RegressionTestCase
 
 
 def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
@@ -18,7 +17,7 @@ def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
 
 
 # TODO
-def createRegressionModelsForBackwardsCompatibilityTest(testCase: RegressionTestCase):
+def createRegressionModelsForBackwardsCompatibilityTest(testCase):
     fc = FeatureCollector(FeatureGeneratorTakeColumns(categoricalFeatureNames=["SEX"],
         normalisationRuleTemplate=DFTNormalisation.RuleTemplate(independentColumns=False)))
 
