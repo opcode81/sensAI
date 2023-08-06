@@ -49,7 +49,8 @@ def create_regression_models_for_backward_compatibility_test(version):
         print(eval_stats)
         r2 = eval_stats.getR2()
         persisted_data = {"R2": r2, "model": model}
-        dumpPickle(persisted_data, RESOURCE_PATH / "backward_compatibility" / f"regression_model_{model.getName()}.{version}.pickle")
+        dumpPickle(persisted_data, RESOURCE_PATH / "backward_compatibility" / f"regression_model_{model.getName()}.{version}.pickle",
+            protocol=4)
 
 
 if __name__ == '__main__':
