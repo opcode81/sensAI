@@ -1,14 +1,15 @@
 import os
+from glob import glob
+
+import pytest
 
 import sensai
 from sensai import VectorModel
-from sensai.data_transformation import DFTNormalisation, SkLearnTransformerFactoryFactory, DFTOneHotEncoder
-from sensai.featuregen import FeatureGeneratorTakeColumns, FeatureCollector
-from sensai.sklearn.sklearn_regression import SkLearnLinearRegressionVectorRegressionModel, SkLearnRandomForestVectorRegressionModel, \
-    SkLearnMultiLayerPerceptronVectorRegressionModel
+from sensai.util.pickle import load_pickle
+from tests.conftest import RESOURCE_DIR
 
 
-def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
+def test_classification_model_backward_compatibility_v0_0_4(testResources, irisClassificationTestCase):
     # The model file was generated with tests/frameworks/torch/test_torch.test_MLPClassifier at commit f93c6b11d
     modelPath = os.path.join(testResources, "torch_mlp.pickle")
     model = VectorModel.load(modelPath)
@@ -16,31 +17,12 @@ def test_modelCanBeLoaded(testResources, irisClassificationTestCase):
     irisClassificationTestCase.testMinAccuracy(model, 0.8, fit=False)
 
 
-# TODO
-def createRegressionModelsForBackwardsCompatibilityTest(testCase):
-    fc = FeatureCollector(FeatureGeneratorTakeColumns(categoricalFeatureNames=["SEX"],
-        normalisationRuleTemplate=DFTNormalisation.RuleTemplate(independentColumns=False)))
+@pytest.mark.parametrize("pickle_file", glob(f"{RESOURCE_DIR}/backward_compatibility/regression_model_*.v0.2.0.pickle"))
+def test_regression_model_backward_compatibility_v0_2_0(pickle_file, diabetesRegressionTestCase):
+    """
+    Tests for compatibility with models created with v0.2.0 using create_test_models.py
+    """
+    d = load_pickle(pickle_file)
+    r2, model = d["R2"], d["model"]
+    diabetesRegressionTestCase.testMinR2(model, r2-0.02, fit=False)
 
-    modelLinear = SkLearnLinearRegressionVectorRegressionModel() \
-        .withFeatureCollector(fc) \
-        .withFeatureTransformers(
-            DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()))
-            #DFTNormalisation(fc.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.RobustScaler()))
-
-    modelRF = SkLearnRandomForestVectorRegressionModel() \
-        .withFeatureCollector(fc) \
-        .withFeatureTransformers(DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()))
-
-    modelMLP = SkLearnMultiLayerPerceptronVectorRegressionModel(hidden_layer_sizes=(10, 10), solver="lbfgs") \
-        .withFeatureCollector(fc) \
-        .withFeatureTransformers(
-            DFTOneHotEncoder(fc.getCategoricalFeatureNameRegex()),
-            DFTNormalisation(fc.getNormalisationRules(), defaultTransformerFactory=SkLearnTransformerFactoryFactory.RobustScaler()))
-
-    return modelMLP
-
-
-# TODO
-def todo_test_backward_compatibility_v020(diabetesRegressionTestCase):
-    model = createRegressionModelsForBackwardsCompatibilityTest(diabetesRegressionTestCase)
-    diabetesRegressionTestCase.testMinR2(model, 0.5, fit=True)
