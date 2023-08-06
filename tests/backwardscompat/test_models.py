@@ -6,7 +6,7 @@ import pytest
 import sensai
 from sensai import VectorModel
 from sensai.util.pickle import load_pickle
-from tests.conftest import RESOURCE_DIR
+from model_test_case import RESOURCE_DIR
 
 
 def test_classification_model_backward_compatibility_v0_0_4(testResources, irisClassificationTestCase):
