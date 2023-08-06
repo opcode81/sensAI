@@ -1,7 +1,8 @@
 import logging
 import os
 import pickle
-from typing import List, Dict, Any, Iterable
+from pathlib import Path
+from typing import List, Dict, Any, Iterable, Union
 
 import joblib
 
@@ -29,7 +30,9 @@ def loadPickle(path, backend="pickle"):
         return readFile(f)
 
 
-def dumpPickle(obj, picklePath, backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
+def dumpPickle(obj, picklePath: Union[str, Path], backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
+    if isinstance(picklePath, Path):
+        picklePath = str(picklePath)
     def openFile():
         if isS3Path(picklePath):
             return S3Object(picklePath).openFile("wb")
