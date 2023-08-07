@@ -1,10 +1,13 @@
 import logging
 from typing import Union, Optional
 
+import numpy as np
 import sklearn.ensemble
 import sklearn.naive_bayes
 import sklearn.neural_network
 import sklearn.tree
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 from .sklearn_base import AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification
 
@@ -12,16 +15,16 @@ log = logging.getLogger(__name__)
 
 
 class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
-    def __init__(self, min_samples_leaf=8, random_state=42, **model_args):
-        super().__init__(sklearn.tree.DecisionTreeClassifier,
+    def __init__(self, min_samples_leaf=1, random_state=42, **model_args):
+        super().__init__(DecisionTreeClassifier,
             min_samples_leaf=min_samples_leaf, random_state=random_state, **model_args)
 
 
 class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel,
         FeatureImportanceProviderSkLearnClassification):
-    def __init__(self, min_samples_leaf=8, random_state=42, use_balanced_class_weights=False, **model_args):
-        super().__init__(sklearn.ensemble.RandomForestClassifier,
-            random_state=random_state, min_samples_leaf=min_samples_leaf,
+    def __init__(self, n_estimators=100, min_samples_leaf=1, random_state=42, use_balanced_class_weights=False, **model_args):
+        super().__init__(RandomForestClassifier,
+            random_state=random_state, min_samples_leaf=min_samples_leaf, n_estimators=n_estimators,
             use_balanced_class_weights=use_balanced_class_weights,
             **model_args)
 
@@ -61,3 +64,15 @@ class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationMod
 class SkLearnLogisticRegressionVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, random_state=42, **model_args):
         super().__init__(sklearn.linear_model.LogisticRegression, random_state=random_state, **model_args)
+
+
+class SkLearnKNeighborsVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
+    def __init__(self, **model_args):
+        super().__init__(sklearn.neighbors.KNeighborsClassifier, **model_args)
+
+    def _predict_sklearn(self, input_values):
+        # Apply a transformation to fix a bug in sklearn 1.3.0 (and perhaps earlier versions):
+        # https://github.com/scikit-learn/scikit-learn/issues/26768
+        inputs = np.ascontiguousarray(input_values)
+
+        return super()._predict_sklearn(inputs)
