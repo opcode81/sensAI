@@ -1,23 +1,25 @@
 import re
 
-import sklearn
 import torch
+from sklearn.preprocessing import StandardScaler
 
 import sensai.torch
 from sensai import NormalisationMode, normalisation
-from sensai.data_transformation import DFTNormalisation
+from sensai.data_transformation import DFTNormalisation, DFTSkLearnTransformer
 from sensai.featuregen import FeatureGeneratorTakeColumns
-from sensai.torch import NNOptimiser
+from sensai.torch import NNOptimiser, Optimiser
 from sensai.torch.torch_base import TorchModelFromModuleFactory
 from sensai.torch.torch_data import TorchDataSetFromTensors
+from sensai.torch.torch_models.mlp.mlp_models import MultiLayerPerceptronVectorRegressionModel
+from sensai.torch.torch_models.residualffn.residualffn_models import ResidualFeedForwardNetworkVectorRegressionModel
 from sensai.torch.torch_modules import MultiLayerPerceptron
 from sensai.torch.torch_opt import NNLossEvaluatorClassification, NNOptimiserParams
 
 
-def test_MLPClassifier(irisDataSet, irisClassificationTestCase, testResources):
-    featureNames = irisDataSet.getInputOutputData().inputs.columns
+def test_classifier_MLPClassifier(irisClassificationTestCase):
+    featureNames = irisClassificationTestCase.data.inputs.columns
     dftNorm = DFTNormalisation([DFTNormalisation.Rule(re.escape(f)) for f in featureNames],
-        default_transformer_factory=sklearn.preprocessing.StandardScaler)
+        default_transformer_factory=StandardScaler)
     nn_optimiser_params = NNOptimiserParams(epochs=100, optimiser="adam", batch_size=200)
     model = sensai.torch.models.MultiLayerPerceptronVectorClassificationModel(
             hidden_dims=(50,25,8), cuda=False,
@@ -50,4 +52,17 @@ def test_NNOptimiserWithoutValidation_MLPClassifier(irisDataSet):
     assert accuracy > 0.9
 
 
-# TODO add test for TorchVectorRegressionModel, e.g. MLP
+def test_regressor_ResidualFeedForwardNetworkVectorRegressionModel(diabetesRegressionTestCase):
+    nnOptimiserParams = NNOptimiserParams(optimiser=Optimiser.ADAMW, batch_size=32, early_stopping_epochs=30)
+    model = ResidualFeedForwardNetworkVectorRegressionModel((20, 20, 20), bottleneck_dimension_factor=0.5, cuda=False, nn_optimiser_params=nnOptimiserParams) \
+        .with_feature_transformers(DFTSkLearnTransformer(StandardScaler())) \
+        .with_name("RFFN")
+    diabetesRegressionTestCase.testMinR2(model, 0.48)
+
+
+def test_regressor_MLP(diabetesRegressionTestCase):
+    nnOptimiserParams = NNOptimiserParams(optimiser=Optimiser.ADAMW, batch_size=32, early_stopping_epochs=30)
+    model = MultiLayerPerceptronVectorRegressionModel((20, 20), cuda=False, nn_optimiser_params=nnOptimiserParams, hid_activation_function=torch.relu) \
+        .with_feature_transformers(DFTSkLearnTransformer(StandardScaler())) \
+        .with_name("MLP")
+    diabetesRegressionTestCase.testMinR2(model, 0.48)
