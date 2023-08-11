@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Generic, TypeVar
+from typing import Dict, Any, Optional, Generic, TypeVar, List
 
 from matplotlib import pyplot as plt
 
@@ -27,6 +27,12 @@ class TrackingContext(ABC):
                 return experiment.begin_context_for_model(model)
             else:
                 return experiment.begin_context(name, description)
+
+    def is_enabled(self):
+        """
+        :return: True if tracking is enabled, i.e. whether results can be saved via this context
+        """
+        return True
 
     @abstractmethod
     def _track_metrics(self, metrics: Dict[str, float]):
@@ -70,11 +76,13 @@ class TrackingContext(ABC):
         pass
 
     def end(self):
-        self._end()
+        # first end the context in the experiment (which may add final stuff)
         if self._isRunning:
             if self._experiment is not None:
                 self._experiment.end_context(self)
             self._isRunning = False
+        # then end the context for good
+        self._end()
 
 
 class DummyTrackingContext(TrackingContext):
@@ -84,6 +92,9 @@ class DummyTrackingContext(TrackingContext):
     """
     def __init__(self, name):
         super().__init__(name, None)
+
+    def is_enabled(self):
+        return False
 
     def _track_metrics(self, metrics: Dict[str, float]):
         pass
@@ -110,7 +121,7 @@ class TrackedExperiment(Generic[TContext], ABC):
         # TODO additional_logging_values_dict probably needs to be removed
         self.instancePrefix = context_prefix
         self.additionalLoggingValuesDict = additional_logging_values_dict
-        self._contexts = []
+        self._contexts: List[TContext] = []
 
     @deprecated("Use a tracking context instead")
     def track_values(self, values_dict: Dict[str, Any], add_values_dict: Dict[str, Any] = None):
@@ -151,13 +162,18 @@ class TrackedExperiment(Generic[TContext], ABC):
         :param model: the model
         :return: the context, which can subsequently be used to track information
         """
-        return self.begin_context(model.get_name(), str(model))
+        return self.begin_context(model.get_name(), model.pprints())
 
     def end_context(self, instance: TContext):
         running_instance = self._contexts[-1]
         if instance != running_instance:
             raise ValueError(f"Passed instance ({instance}) is not the currently running instance ({running_instance})")
         self._contexts.pop()
+
+    def __del__(self):
+        # make sure all contexts that are still running are eventually closed
+        for c in reversed(self._contexts):
+            c.end()
 
 
 class TrackingMixin(ABC):
@@ -172,3 +188,18 @@ class TrackingMixin(ABC):
     @property
     def tracked_experiment(self) -> Optional[TrackedExperiment]:
         return self._objectId2trackedExperiment.get(id(self))
+
+    def begin_optional_tracking_context_for_model(self, model: VectorModelBase, track: bool = True) -> TrackingContext:
+        """
+        Begins a tracking context for the given model; the returned object is a context manager and therefore method should
+        preferably be used in a `with` statement.
+        This method can be called regardless of whether there actually is a tracked experiment (hence the term 'optional').
+        If there is no tracked experiment, calling methods on the returned object has no effect.
+        Furthermore, tracking can be disabled by passing `track=False` even if a tracked experiment is present.
+
+        :param model: the model for which to begin tracking
+        :paraqm track: whether tracking shall be enabled; if False, force use of a dummy context which performs no actual tracking even
+            if a tracked experiment is present
+        :return: a context manager that can be used to track results for the given model
+        """
+        return TrackingContext.from_optional_experiment(self.tracked_experiment if track else None, model=model)
