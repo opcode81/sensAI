@@ -67,13 +67,13 @@ Results will be stored in `docs/build/`.
 
 2. Bump the version that the new release shall change by using one of the following commands:
 
-   * `bumpversion patch  --commit`
+   * `bumpversion patch --commit`
    * `bumpversion minor --commit`
    * `bumpversion major --commit`
 
-   This will create a new "-alpha" version which can be pushed without a release ending up on PyPI.
+   This will create a new beta version.
    
-   If you want to release an alpha version, you may change the build number via `bumpversion build --commit`. 
+   If you intend to release a beta version, you may change the build number via `bumpversion build --commit`. 
 
 3. Push this version to github
    `git push`
@@ -84,7 +84,7 @@ Results will be stored in `docs/build/`.
    * Set the release version and add the respective git tag:
      `bumpversion release --commit --tag`
      
-     (unless you want to publish the alpha version, in which case you need create the git tag manually.)
+     (unless you want to publish a beta version, in which case you need to skip this command and instead create the git tag manually.)
 
    * Push the new release:
      * `git push`
