@@ -1,8 +1,8 @@
-<p style="text-align:center">
+<p align="center" style="text-align:center">
   <img src="resources/sensai-logo.png" style="width:400px"><br>
   the Python library for sensible AI
 
-  <div style="text-align:center">
+  <div align="center" style="text-align:center">
   <a href="https://pypi.org/project/sensai/">
       <img src="https://img.shields.io/pypi/v/sensai.svg" alt="PyPI">
   </a>
