@@ -12,7 +12,13 @@ import pandas as pd
 log = getLogger(__name__)
 
 LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(message)s'
+
+# Holds the log format that is configured by the user (using function `configure`), such
+# that it can be reused in other places
 _logFormat = LOG_DEFAULT_FORMAT
+
+# User-configured callback which is called after logging is configured via function `configure`
+_configureCallback: Optional[Callable[[], None]] = None
 
 
 def remove_log_handlers():
@@ -24,8 +30,25 @@ def remove_log_handlers():
         logger.removeHandler(logger.handlers[0])
 
 
+def remove_log_handler(handler):
+    getLogger().removeHandler(handler)
+
+
 def is_log_handler_active(handler):
     return handler in getLogger().handlers
+
+
+def set_configure_callback(callback: Callable[[], None]):
+    """
+    Configures a function to be called when logging is configured, e.g. through :func:`configure, :func:`run_main` or
+    :func:`run_cli`.
+    A typical use for the callback is to configure the logging behaviour of packages, setting appropriate log levels.
+
+    :param callback: the function to cal
+    :return:
+    """
+    global _configureCallback
+    _configureCallback = callback
 
 
 # noinspection PyShadowingBuiltins
@@ -45,6 +68,8 @@ def configure(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     getLogger("urllib3").setLevel(lg.INFO)
     getLogger("msal").setLevel(lg.INFO)
     pd.set_option('display.max_colwidth', 255)
+    if _configureCallback:
+        _configureCallback()
 
 
 # noinspection PyShadowingBuiltins
@@ -69,6 +94,26 @@ def run_main(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEB
         log.error("Exception during script execution", exc_info=e)
 
 
+def run_cli(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
+    """
+    Configures logging with the given parameters and runs the given main function as a
+    CLI using `jsonargparse` (which is configured to also parse attribute docstrings, such
+    that dataclasses can be used as function arguments).
+    Using this function requires that `jsonargparse` and `docstring_parser` be available.
+    Like `run_main`, two additional log messages will be logged (at the beginning and end
+    of the execution), and it is ensured that all exceptions will be logged.
+
+    :param main_fn: the function to be executed
+    :param format: the log message format
+    :param level: the minimum log level
+    :return: the result of `main_fn`
+    """
+    from jsonargparse import set_docstring_parse_options, CLI
+
+    set_docstring_parse_options(attribute_docstrings=True)
+    return run_main(lambda: CLI(main_fn), format=format, level=level)
+
+
 def datetime_tag() -> str:
     """
     :return: a string tag for use in log file names which contains the current date and time (compact but readable)
@@ -86,16 +131,17 @@ def _at_exit_report_file_logger():
         print(f"A log file was saved to {path}")
 
 
-def add_file_logger(path):
+def add_file_logger(path, register_atexit=True):
     global _isAtExitReportFileLoggerRegistered
     log.info(f"Logging to {path} ...")
     handler = FileHandler(path)
     handler.setFormatter(Formatter(_logFormat))
     Logger.root.addHandler(handler)
     _fileLoggerPaths.append(path)
-    if not _isAtExitReportFileLoggerRegistered:
+    if not _isAtExitReportFileLoggerRegistered and register_atexit:
         atexit.register(_at_exit_report_file_logger)
         _isAtExitReportFileLoggerRegistered = True
+    return handler
 
 
 def add_memory_logger() -> None:
@@ -263,3 +309,26 @@ class LogTime:
     def __enter__(self):
         self.start()
         return self
+
+
+class FileLoggerContext:
+    """
+    A context handler to be used in conjunction with Python's `with` statement which enables file-based logging.
+    """
+    def __init__(self, path: str, enabled=True):
+        """
+        :param path: the path to the log file
+        :param enabled: whether to actually perform any logging.
+            This switch allows the with statement to be applied regardless of whether logging shall be enabled.
+        """
+        self.enabled = enabled
+        self.path = path
+        self._log_handler = None
+
+    def __enter__(self):
+        if self.enabled:
+            self._log_handler = add_file_logger(self.path, register_atexit=False)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self._log_handler is not None:
+            remove_log_handler(self._log_handler)
