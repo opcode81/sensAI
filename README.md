@@ -1,6 +1,20 @@
-# sensAI
+<p align="center" style="text-align:center">
+  <img src="resources/sensai-logo.png" style="width:400px"><br>
+  the Python library for sensible AI
 
-the Python library for sensible AI 
+  <div align="center" style="text-align:center">
+  <a href="https://pypi.org/project/sensai/">
+      <img src="https://img.shields.io/pypi/v/sensai.svg" alt="PyPI">
+  </a>
+  <a href="https://raw.githubusercontent.com/jambit/sensAI/master/LICENSE">
+        <img alt="License" src="https://img.shields.io/pypi/l/sensai">
+  </a>
+  <a href="https://github.com/jambit/sensAI/actions/workflows/tox.yaml">
+        <img src="https://github.com/jambit/sensAI/actions/workflows/tox.yaml/badge.svg" alt="Build status">
+  </a>
+  </div>
+</p>
+
 
 ## About sensAI
 
@@ -31,12 +45,11 @@ Reference documentation and tutorials can be found [here](https://jambit.github.
 sensAI may be integrated into your project in several ways: 
 
 1. **Install it as a library** with `pip install sensai`.
-   Choose this option if you do not intend to make changes to sensAI in the context of your project.
+   Choose this option as a regular user of sensAI with no intention of extending
+   the library as part of your work.
 2. **Include sensAI's source code as a package within your project** (e.g. in `src/sensai`), which you synchronise with a sensAI branch.
    Choose this option if you intend to make changes to sensAI as you develop your project. When using this option, you (and others) may even make changes to sensAI in several branches of your project and even several projects using the same inclusion mechanism at the same time.
    See developer documentation in README-dev.md for details on how synchronisation works.
-3. **Clone sensAI and add its source directory to your `PYTHONPATH`**.
-   Choose this option if you potentially intend to make changes to sensAI but no one else working on your project will do the same and you will be modifying sensAI's source in no more than one branch at a time.
 
 
 ## Contributors
@@ -51,5 +64,4 @@ External contributions are welcome! Please issue a pull request.
 
 #### Code Style
 
-We deliberately do not comply with PEP 8 and do not intend to adapt in the future. 
-If you decide to contribute, please strive for consistency.
+If you decide to contribute, please strive for consistency with the existing codebase.

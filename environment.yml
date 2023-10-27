@@ -42,6 +42,8 @@ dependencies:
       - clearml
       - tensorflow-cpu
       - pytorch-lightning
+      - jsonargparse
+      - docstring_parser
       # required for locally running the tox build (which will work on Linux only at this time)
       - tox
       - virtualenv

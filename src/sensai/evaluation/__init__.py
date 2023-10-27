@@ -5,6 +5,7 @@ from .eval_util import RegressionModelEvaluation, ClassificationModelEvaluation,
     eval_model_via_evaluator, create_evaluation_util, create_vector_model_evaluator, create_vector_model_cross_validator
 from .evaluator import VectorClassificationModelEvaluator, VectorRegressionModelEvaluator, \
     RegressionEvaluatorParams, ClassificationEvaluatorParams, \
+    VectorRegressionModelEvaluatorParams, VectorClassificationModelEvaluatorParams, \
     VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData, \
     RuleBasedVectorClassificationModelEvaluator, RuleBasedVectorRegressionModelEvaluator
 
