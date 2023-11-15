@@ -415,7 +415,7 @@ class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificati
     def __init__(self,
             data: Optional[InputOutputData],
             test_data: InputOutputData = None,
-            params: VectorClassificationModelEvaluatorParams = None):
+            params: ClassificationEvaluatorParams = None):
         """
         Constructs an evaluator with test and training data.
 
