@@ -64,14 +64,21 @@ setup(
     name='sensai',
     package_dir={"": "src"},
     license="MIT",
-    url="https://github.com/jambit/sensAI",
+    url="https://github.com/aai-institute/sensAI",
     packages=find_namespace_packages(where="src"),
     include_package_data=True,
     version='1.0.0b3',
-    description='Library for sensible AI',
+    description='The Python library for sensible AI',
     install_requires=relaxed_requirements_from_file("requirements.txt"),
     dependency_links=["https://download.pytorch.org/whl/torch_stable.html"],
     setup_requires=["wheel"],
     extras_require=extras_require,
-    author='jambit GmbH'
+    author='appliedAI Institute gGmbh & jambit GmbH',
+    classifiers=[
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "License :: OSI Approved :: MIT License"
+    ]
 )
