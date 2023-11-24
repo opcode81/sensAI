@@ -38,7 +38,7 @@ In particular, sensAI provides ...
 
 ## Documentation
 
-Reference documentation and tutorials can be found [here](https://jambit.github.io/sensAI/docs/).
+Reference documentation and tutorials can be found [here](https://aai-institute.github.io/sensAI/docs/).
 
 ### Integrating sensAI into a Project
 
@@ -54,14 +54,23 @@ sensAI may be integrated into your project in several ways:
 
 ## Contributors
 
-sensAI is being developed by the artificial intelligence group at [jambit GmbH](http://www.jambit.com) and by members of [appliedAI](http://www.appliedai.de).
+<p align="center" style="text-align:center; padding-top:20px">
+  <a href="https://www.appliedai-institute.de">
+      <img style="height:50px" src="resources/aai-institute-logo.svg" alt="appliedAI Institute">
+  </a>
+  <a href="http://www.jambit.com">
+        <img style="height:50px; margin-left:20px" src="resources/jambit-logo.svg" alt="jambit">
+  </a>
+</p>
 
-The main contributors are Dominik Jain, Michael Panchenko, Kristof Schröder and Magnus Winter.
+sensAI is being developed by members of <a href="http://transferlab.ai">TransferLab</a> at 
+<a href="https://www.appliedai-institute.de">appliedAI Institute for Europe gGmbh</a>.  
+The library was originally created by the machine intelligence group at [jambit GmbH](http://www.jambit.com) and was applied in many research and pre-development projects.
+
+The main contributors are <a href="https://github.com/opcode81">Dominik Jain</a>, <a href="https://github.com/MischaPanch">Michael Panchenko</a>, and <a href="https://github.com/schroedk">Kristof Schröder</a>.
 
 ### How to contribute 
 
 External contributions are welcome! Please issue a pull request.
-
-#### Code Style
 
 If you decide to contribute, please strive for consistency with the existing codebase.
