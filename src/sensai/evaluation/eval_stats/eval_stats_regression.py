@@ -148,35 +148,35 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     def compute_metric_value(self, metric: RegressionMetric) -> float:
         return metric.compute_value_for_eval_stats(self, model=self.model, io_data=self.ioData)
 
-    # TODO consider renaming these methods, as they are not strictly getters
-    def get_mse(self):
+    def compute_mse(self):
+        """Computes the mean squared error (MSE)"""
         return self.compute_metric_value(RegressionMetricMSE())
 
-    def get_rrse(self):
-        """Gets the root relative squared error"""
+    def compute_rrse(self):
+        """Computes the root relative squared error"""
         return self.compute_metric_value(RegressionMetricRRSE())
 
-    def get_correlation_coeff(self):
+    def compute_pcc(self):
         """Gets the Pearson correlation coefficient (PCC)"""
         return self.compute_metric_value(RegressionMetricPCC())
 
-    def get_r2(self):
+    def compute_r2(self):
         """Gets the R^2 score"""
         return self.compute_metric_value(RegressionMetricR2())
 
-    def get_mae(self):
+    def compute_mae(self):
         """Gets the mean absolute error"""
         return self.compute_metric_value(RegressionMetricMAE())
 
-    def get_rmse(self):
+    def compute_rmse(self):
         """Gets the root mean squared error"""
         return self.compute_metric_value(RegressionMetricRMSE())
 
-    def get_std_dev_ae(self):
+    def compute_std_dev_ae(self):
         """Gets the standard deviation of the absolute error"""
         return self.compute_metric_value(RegressionMetricStdDevAE())
 
-    def get_eval_stats_collection(self) -> "RegressionEvalStatsCollection":
+    def create_eval_stats_collection(self) -> "RegressionEvalStatsCollection":
         """
         For the case where we collected data on multiple dimensions, obtain a stats collection where
         each object in the collection holds stats on just one dimension

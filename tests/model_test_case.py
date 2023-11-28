@@ -66,7 +66,7 @@ class RegressionTestCase:
         #resultDataTrain = ev.evalModel(model, onTrainingData=True); log.info(f"on train: {resultDataTrain.getEvalStats()}")
 
         log.info(f"Results for {model.get_name()}: {stats}")
-        assert stats.get_r2() >= minR2
+        assert stats.compute_r2() >= minR2
 
 
 class DiabetesDataSet:
