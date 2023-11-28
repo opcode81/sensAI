@@ -166,11 +166,11 @@ class EvaluatorParams(ToStringMixin, ABC):
 
 
 class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
-    def __init__(self, data: Optional[InputOutputData], test_data: InputOutputData = None, params: EvaluatorParams = None):
+    def __init__(self, data: InputOutputData, test_data: InputOutputData = None, params: EvaluatorParams = None):
         """
         Constructs an evaluator with test and training data.
 
-        :param data: the full data set, or, if testData is given, the training data
+        :param data: the full data set, or, if `test_data` is given, the training data
         :param test_data: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
         :param params: the parameters
         """
@@ -299,7 +299,7 @@ class VectorRegressionModelEvaluatorParams(RegressionEvaluatorParams):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
-    def __init__(self, data: Optional[InputOutputData], test_data: InputOutputData = None,
+    def __init__(self, data: InputOutputData, test_data: InputOutputData = None,
             params: RegressionEvaluatorParams = None):
         """
         Constructs an evaluator with test and training data.
@@ -308,7 +308,6 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         :param test_data: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
         :param params: the parameters
         """
-        # TODO params should not be optional
         super().__init__(data=data, test_data=test_data, params=params)
         self.params = params
 
@@ -413,17 +412,16 @@ class VectorClassificationModelEvaluatorParams(ClassificationEvaluatorParams):
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
     def __init__(self,
-            data: Optional[InputOutputData],
+            data: InputOutputData,
             test_data: InputOutputData = None,
             params: ClassificationEvaluatorParams = None):
         """
         Constructs an evaluator with test and training data.
 
-        :param data: the full data set, or, if testData is given, the training data
+        :param data: the full data set, or, if `test_data` is given, the training data
         :param test_data: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
         :param params: the parameters
         """
-        # TODO params should not be optional
         super().__init__(data=data, test_data=test_data, params=params)
         self.params = params
 
@@ -472,7 +470,8 @@ class RuleBasedVectorClassificationModelEvaluator(VectorClassificationModelEvalu
     def __init__(self, data: InputOutputData):
         super().__init__(data, test_data=data)
 
-    def eval_model(self, model: VectorModelBase, on_training_data=False, track=True) -> VectorClassificationModelEvaluationData:
+    def eval_model(self, model: VectorModelBase, on_training_data=False, track=True,
+            fit=False) -> VectorClassificationModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
@@ -494,7 +493,8 @@ class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, test_data=data)
 
-    def eval_model(self, model: VectorModelBase, on_training_data=False, track=True) -> VectorRegressionModelEvaluationData:
+    def eval_model(self, model: Union[VectorModelBase, VectorModelFittableBase], on_training_data=False, track=True,
+            fit=False) -> VectorRegressionModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
         will fit the model's preprocessors on the full data set and evaluating it will evaluate the model on the
