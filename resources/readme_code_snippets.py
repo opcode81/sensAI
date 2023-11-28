@@ -114,6 +114,13 @@ if __name__ == '__main__':
         FeatureGeneratorTemperature())
     feature_df = fg.generate(df)
 
+    # feature collector example
+
+    feature_collector = registry.collect_features(
+        FeatureName.TEMPERATURE,
+        FeatureName.WEEKDAY)
+    features_df = feature_collector.get_multi_feature_generator().generate(df)
+
 
     # DFT example
 
