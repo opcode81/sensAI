@@ -54,14 +54,14 @@ sensAI may be integrated into your project in several ways:
 
 ## Contributors
 
-<p align="center" style="text-align:center; padding-top:20px">
-  <a href="https://www.appliedai-institute.de">
+<div align="center" style="text-align:center; padding:30px">
+  <a href="https://www.appliedai-institute.de" style="text-decoration:none">
       <img style="height:50px" src="resources/aai-institute-logo.svg" alt="appliedAI Institute">
   </a>
-  <a href="http://www.jambit.com">
+  <a href="http://www.jambit.com" style="text-decoration:none">
         <img style="height:50px; margin-left:20px" src="resources/jambit-logo.svg" alt="jambit">
   </a>
-</p>
+</div>
 
 sensAI is being developed by members of <a href="http://transferlab.ai">TransferLab</a> at 
 <a href="https://www.appliedai-institute.de">appliedAI Institute for Europe gGmbh</a>.  
