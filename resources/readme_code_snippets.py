@@ -136,19 +136,19 @@ if __name__ == '__main__':
 
     model_xgb = XGBRandomForestVectorRegressionModel() \
         .with_name("XGBoost") \
-        .with_feature_collector(feature_coll) \
+        .with_feature_collector(feature_coll, shared=True) \
         .with_feature_transformers(
             feature_coll.create_dft_one_hot_encoder())
     model_linear = SkLearnLinearRegressionVectorRegressionModel() \
         .with_name("Linear") \
-        .with_feature_collector(feature_coll) \
+        .with_feature_collector(feature_coll, shared=True) \
         .with_feature_transformers(
             feature_coll.create_dft_one_hot_encoder())
     model_rffn = ResidualFeedForwardNetworkVectorRegressionModel(
             hidden_dims=[10]*5,
             cuda=False) \
         .with_name("RFFN") \
-        .with_feature_collector(feature_coll) \
+        .with_feature_collector(feature_coll, shared=True) \
         .with_feature_transformers(
         feature_coll.create_dft_one_hot_encoder(),
             feature_coll.create_dft_normalisation()) \

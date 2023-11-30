@@ -210,18 +210,26 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
         self._featureGenerator = feature_generator
         return self
 
-    def with_feature_collector(self: TVectorModel, feature_collector: FeatureCollector) -> TVectorModel:
+    def with_feature_collector(self: TVectorModel, feature_collector: FeatureCollector,
+            shared: bool = False) -> TVectorModel:
         """
-        Makes the model use the given feature collector's multi-feature generator
+        Makes the model use a multi-feature generator obtained from the given collector
         in order compute the underlying model's input from the data frame that is given.
         Overrides any feature generator previously passed to :meth:`withFeatureGenerator` (if any).
 
-        Note: Feature computation takes place before input transformation.
+        Note: Feature generation takes place before feature transformation.
 
-        :param feature_collector: the feature collector whose feature generator shall be used for input computation
+        :param feature_collector: the feature collector from which to obtain the multi-feature generator
+        :param shared: whether the given feature collector is shared between models (i.e. whether
+            the same instance is passed to multiple models).
+            Passing `shared=False` ensures that models using the same collector do not end up
+            using the same multi-feature collector.
         :return: self
         """
-        self._featureGenerator = feature_collector.get_multi_feature_generator()
+        if shared:
+            self._featureGenerator = feature_collector.create_multi_feature_generator()
+        else:
+            self._featureGenerator = feature_collector.get_multi_feature_generator()
         return self
 
     def _pre_processors_are_fitted(self):

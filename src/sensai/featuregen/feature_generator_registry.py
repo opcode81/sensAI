@@ -94,9 +94,16 @@ class FeatureCollector(object):
         """
         self._feature_generators_or_names = feature_generators_or_names
         self._registry = registry
-        self._multi_feature_generator = self._create_multi_feature_generator()
+        self._multi_feature_generator = self.create_multi_feature_generator()
 
     def get_multi_feature_generator(self) -> MultiFeatureGenerator:
+        """
+        Gets the multi-feature generator that was created for this collector.
+        To create a new, independent instance (e.g. when using this collector for multiple
+        models), use :meth:`create_multi_feature_generator` instead.
+
+        :return: the multi-feature generator that was created for this instance
+        """
         return self._multi_feature_generator
 
     def get_normalisation_rules(self, include_generated_categorical_rules=True):
@@ -109,7 +116,15 @@ class FeatureCollector(object):
         """
         return self.get_multi_feature_generator().get_categorical_feature_name_regex()
 
-    def _create_multi_feature_generator(self):
+    def create_multi_feature_generator(self):
+        """
+        Creates a new instance of the multi-feature generator that generates the features
+        collected by this instance. If the feature collector instance is not used for
+        multiple models, use :meth:`get_multi_feature_generator` instead to obtain
+        the instance that has already been created.
+
+        :return: a new multi-feature generator that generates the collected features
+        """
         feature_generators = []
         for f in self._feature_generators_or_names:
             if isinstance(f, FeatureGenerator):
