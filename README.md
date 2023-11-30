@@ -22,8 +22,7 @@ sensAI is a high-level AI toolkit with a specific focus on **rapid
 experimentation** for machine learning applications. 
 Its basic interfaces are similar to sklearn's, yet we modularise data pipelines
 without sacrificing semantics (retaining meta-information at every step) 
-and provide high-level interfaces for many canonical tasks, achieving largely
-declarative semantics.
+and provide high-level interfaces that severely cut down on boilerplate code.
 
 Some of sensAI's key benefits are: 
 
@@ -53,9 +52,9 @@ Some of sensAI's key benefits are:
 
   * **Fully integrated solutions for canonical tasks**
     
-    Do away with boilerplate by using high-level interfaces for model
+    Do away with boilerplate code by using high-level interfaces for model
     evaluation, model selection or feature selection.
-    Log and track all relevant parameters and results along the way, 
+    Log and track all relevant parameters as well as results along the way, 
     using file-based logging or tracking frameworks such as MLflow.
 
   * **Declarative semantics**
@@ -326,13 +325,12 @@ ev = RegressionModelEvaluation(io_data,
 ev.compare_models([model_xgb, model_linear, model_rffn])
 ```
 
-:white_check_mark: **Do away with boilerplate**  
-
 They can be flexibly adapted to your needs. 
 You can inject evaluation metrics, mechanisms for the splitting of data,
 apply cross-validation, create plots that visualize model performance,
 compare model performance using multiple datasets, and much more.
 
+:white_check_mark: **Do away with boilerplate**  
 :white_check_mark: **Retain flexibility**
 
 ### Track Results
@@ -403,16 +401,16 @@ be overlooked.
 
 sensAI supports combinatorial optimisation via
 
- * **stochastic local search**, via implementations of
+ * **stochastic local search**, provding implementations of
      * simulated annealing
-     * parallel tempering
+     * parallel tempering.
 
    Both algorithms support adaptive (i.e. data-driven), 
    probability-based temperature schedules, greatly facilitating 
    parametrisation in practice.
  
  * **constraint programming**, by providing utilities for formulating
-   and solving optimisation problems in MiniZinc
+   and solving optimisation problems in MiniZinc.
 
 ### Utilities, Utilities, Utilities
 
