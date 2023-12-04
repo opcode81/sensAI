@@ -20,11 +20,15 @@
 
 sensAI is a high-level AI toolkit with a specific focus on **rapid 
 experimentation** for machine learning applications. 
-Through a high level of abstraction and integration, 
-sensAI minimises overhead, achieving largely declarative semantics,
- while retaining a high degree of **flexibility**.
-It thus addresses the needs of developers who seek to work efficiently on
-custom-tailored AI and machine learning solutions.
+Through high levels of abstraction and integration, 
+sensAI minimises overhead whilst retaining a high degree of **flexibility**
+for the implementation of custom solutions.
+
+If you would normally use a library like scikit-learn on its own,
+consider adding sensAI in order to
+  * gain flexibility, straightforwardly supporting a greater variety of models,
+  * increase the level of abstraction, cutting down on boilerplate,
+  * improve logging and tracking with minimal effort.
 
 Some of sensAI's key benefits are: 
 
@@ -51,7 +55,11 @@ Some of sensAI's key benefits are:
         the properties associated with features, others can be manually
         designed to exploit a model's specific capabilities (e.g. a tensor-based
         representation of complex, non-tabular data for neural networks).
-
+ 
+    Strongly associate pipelines with models in order to avoid errors and
+    gain the flexibility of supporting highly heterogeneous models within
+    a single framework, bridging the gap to production along the way.
+ 
   * **Fully integrated solutions for canonical tasks**
     
     Do away with boilerplate code by using high-level interfaces for model
@@ -62,13 +70,43 @@ Some of sensAI's key benefits are:
   * **Declarative semantics**
   
     Through its high level of abstraction, sensAI achieves largely 
-    declarative semantics: Focus on what to do rather than on how to do it.
-    sensAI embraces object-oriented design in order to achieve this.
+    declarative semantics: Focus on what to do rather than how to do it.
+
+    Eschew the notion of external configuration for a single task, making 
+    your high-level code read like configuration instead.
+    Gain the flexibility of specifying variations of your models and experiments 
+    with minimal code changes/extensions.
 
 While sensAI's main focus is on supervised and unsupervised machine learning,
 it also provides functionality for discrete optimisation and a wide range
 of general-purpose utilities that are frequently required in AI applications.
-    
+
+<hr>
+
+<!-- generated with `markdown-toc -i README.md` -->
+**Table of Contents**
+
+<!-- toc -->
+
+  * [Supervised Learning](#supervised-learning)
+    + [Feature Generators](#feature-generators)
+    + [Feature Generator Registry](#feature-generator-registry)
+    + [(Model-Specific) Data Transformation](#model-specific-data-transformation)
+    + [Vector Models](#vector-models)
+    + [Evaluation](#evaluation)
+    + [Tracking of Results](#tracking-of-results)
+    + [Feature and Model Selection](#feature-and-model-selection)
+    + [Peace of Mind](#peace-of-mind)
+  * [Beyond Supervised Learning](#beyond-supervised-learning)
+    + [Unsupervised Learning](#unsupervised-learning)
+    + [Combinatorial Optimisation](#combinatorial-optimisation)
+    + [Utilities, Utilities, Utilities](#utilities-utilities-utilities)
+- [Documentation](#documentation)
+  * [Integrating sensAI into a Project](#integrating-sensai-into-a-project)
+- [Contributors](#contributors)
+
+<!-- tocstop -->
+
 ## Supervised Learning
 
 Many real-world tasks can be reduced to classification and regression problems, 
@@ -335,7 +373,7 @@ compare model performance using multiple datasets, and much more.
 :white_check_mark: **Do away with boilerplate**  
 :white_check_mark: **Retain flexibility**
 
-### Track Results
+### Tracking of Results
 
 sensAI supports two mechanisms for the tracking of results:
   * Writing results directly to the file system
@@ -369,12 +407,12 @@ ev.compare_models([model_xgb, model_linear, model_rffn],
 
 ### Feature and Model Selection
 
-sensAI provides convenient abstractions for hyperparameter optimisation, 
-feature selection and model selection.
+sensAI provides convenient abstractions for feature selection, model selection
+and hyperparameter optimisation.
 
-Through its modular design, sensAI's representations can also be efficiently 
-combined with other libraries that are specialised for such purposes,
-e.g. hyperopt and optuna.
+Through its modular design, sensAI's representations can be straightforwardly 
+combined with other libraries that are specialised for such purposes
+(e.g. hyperopt or optuna).
 
 ### Peace of Mind
 
@@ -422,23 +460,44 @@ sensAI's `util` package contains a wide range of general utilities, including
  * data structures (e.g. for tree-map-style lookups)
  * logging and profiling utilities
  * I/O utilities
- * multi-processing tools, e.g. a debugger for pickle errors
+ * multi-processing tools (e.g. a debugger for pickle errors)
  * etc.
 
 # Documentation
 
-Reference documentation and tutorials can be found [here](https://aai-institute.github.io/sensAI/docs/).
+ * [Reference documentation and tutorials](https://aai-institute.github.io/sensAI/docs/)
+
+   At this point, the documentation is still limited, but we plan to add 
+   further tutorials and overview documentation in the future.
+  
+   For all the things we do not yet cover extensively, we encourage you to use 
+   your IDE to browse class hierarchies and discover functionality by using 
+   auto-completion.
+
+   If you have a usage question, don't hesitate to add an issue on GitHub.
+
+ * [Beyond Jupyter: A Refactoriung Journey](https://github.com/aai-institute/beyond-jupyter-spotify-popularity)
+
+   Explore this lecture series on software design in machine learning, in
+   which sensAI is prominently featured.
+   Our *Refactoring Journey* shows how a use case that is
+   initially implemented as a Jupyter notebook can be successively refactored
+   in order to improve the software design, gain flexibility for experimentation,
+   and ultimately arrive at a solution that could directly be deployed for
+   production.
+
+
 
 ## Integrating sensAI into a Project
 
-sensAI may be integrated into your project in several ways: 
+sensAI can be integrated into your project in several ways: 
 
 1. **Install it as a library** with `pip install sensai`.
    Choose this option as a regular user of sensAI with no intention of extending
    the library as part of your work.
 2. **Include sensAI's source code as a package within your project** (e.g. in `src/sensai`), which you synchronise with a sensAI branch.
-   Choose this option if you intend to make changes to sensAI as you develop your project. When using this option, you (and others) may even make changes to sensAI in several branches of your project and even several projects using the same inclusion mechanism at the same time.
-   See developer documentation in README-dev.md for details on how synchronisation works.
+   Choose this option if you intend to make changes to sensAI as you develop your project. When using this option, you (and others) may even make changes to sensAI in several branches of your project (and even several projects) at the same time.
+   See developer documentation in [README-dev.md](README-dev.md) for details on how synchronisation works.
 
 
 # Contributors
@@ -458,8 +517,4 @@ The library was originally created by the machine intelligence group at [jambit 
 
 The main contributors are <a href="https://github.com/opcode81">Dominik Jain</a>, <a href="https://github.com/MischaPanch">Michael Panchenko</a>, and <a href="https://github.com/schroedk">Kristof Schröder</a>.
 
-## How to contribute 
-
-External contributions are welcome! Please issue a pull request.
-
-If you decide to contribute, please strive for consistency with the existing codebase.
+External contributions are welcome.
