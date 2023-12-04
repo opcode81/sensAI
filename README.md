@@ -20,9 +20,11 @@
 
 sensAI is a high-level AI toolkit with a specific focus on **rapid 
 experimentation** for machine learning applications. 
-Its basic interfaces are similar to sklearn's, yet we modularise data pipelines
-without sacrificing semantics (retaining meta-information at every step) 
-and provide high-level interfaces that severely cut down on boilerplate code.
+Through a high level of abstraction and integration, 
+sensAI minimises overhead, achieving largely declarative semantics,
+ while retaining a high degree of **flexibility**.
+It thus addresses the needs of developers who seek to work efficiently on
+custom-tailored AI and machine learning solutions.
 
 Some of sensAI's key benefits are: 
 
