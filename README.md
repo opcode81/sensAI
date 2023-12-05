@@ -1,5 +1,5 @@
 <p align="center" style="text-align:center">
-  <img src="resources/sensai-logo.png" style="width:400px"><br>
+  <img src="resources/sensai-logo.svg" style="width:400px"><br>
   the Python library for sensible AI
 
   <div align="center" style="text-align:center">
@@ -88,6 +88,7 @@ of general-purpose utilities that are frequently required in AI applications.
 
 <!-- toc -->
 
+- [About sensAI](#about-sensai)
   * [Supervised Learning](#supervised-learning)
     + [Feature Generators](#feature-generators)
     + [Feature Generator Registry](#feature-generator-registry)
@@ -476,7 +477,7 @@ sensAI's `util` package contains a wide range of general utilities, including
 
    If you have a usage question, don't hesitate to add an issue on GitHub.
 
- * [Beyond Jupyter: A Refactoriung Journey](https://github.com/aai-institute/beyond-jupyter-spotify-popularity)
+ * [Beyond Jupyter: A Refactoring Journey](https://github.com/aai-institute/beyond-jupyter-spotify-popularity)
 
    Explore this lecture series on software design in machine learning, in
    which sensAI is prominently featured.
