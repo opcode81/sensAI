@@ -24,12 +24,6 @@ Through high levels of abstraction and integration,
 sensAI minimises overhead whilst retaining a high degree of **flexibility**
 for the implementation of custom solutions.
 
-If you would normally use a library like scikit-learn on its own,
-consider adding sensAI in order to
-  * gain flexibility, straightforwardly supporting a greater variety of models,
-  * increase the level of abstraction, cutting down on boilerplate,
-  * improve logging and tracking with minimal effort.
-
 Some of sensAI's key benefits are: 
 
   * **A unifying interface to a wide variety of model classes across frameworks**
@@ -76,6 +70,12 @@ Some of sensAI's key benefits are:
     your high-level code read like configuration instead.
     Gain the flexibility of specifying variations of your models and experiments 
     with minimal code changes/extensions.
+
+So if you would normally use a library like scikit-learn or XGBoost on its own,
+consider adding sensAI in order to
+  * gain flexibility, straightforwardly supporting a greater variety of models,
+  * increase the level of abstraction, cutting down on boilerplate,
+  * improve logging and tracking with minimal effort.
 
 While sensAI's main focus is on supervised and unsupervised machine learning,
 it also provides functionality for discrete optimisation and a wide range
