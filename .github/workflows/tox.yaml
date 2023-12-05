@@ -1,4 +1,4 @@
-name: Merge develop, run tests and build documentation
+name: Build
 
 on:
   pull_request:
