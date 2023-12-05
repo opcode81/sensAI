@@ -17,6 +17,7 @@ def test_classification_model_backward_compatibility_v0_0_4(testResources, irisC
     irisClassificationTestCase.testMinAccuracy(model, 0.8, fit=False)
 
 
+# TODO NOTE sklearn is breaking persisted objects with newer versions (e.g. OneHotEncoder), so this will ultimately need to use entirely different models
 @pytest.mark.parametrize("pickle_file", glob(f"{RESOURCE_DIR}/backward_compatibility/regression_model_*.v0.2.0.pickle"))
 def test_regression_model_backward_compatibility_v0_2_0(pickle_file, diabetesRegressionTestCase):
     """
