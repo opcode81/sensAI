@@ -1,5 +1,11 @@
 # Changelog
 
+## Next Release
+
+### Fixes
+
+* `TagBuilder`: Fix return value of `with_component`  
+
 ## v1.0.0 (2023-12-06) 
 
 ### Improvements/Changes
