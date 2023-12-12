@@ -2,6 +2,17 @@
 
 ## Next Release
 
+### Improvements/Changes
+
+* `vectoriser`:
+  * `SequenceVectoriser`: Allow to inject a sequence item identifier provider
+    (instance of new class `ItemIdentifierProvider`) in order to determine the set of
+    relevant unique items when using fitting mode UNIQUE  
+* `torch`:
+  * `TorchVectorRegressionModel`: Add support for auto-regressive predictions
+    by adding class `TorchAutoregressiveResultHandler` and method 
+    `with_autogressive_result_handler`
+
 ### Fixes
 
 * `TagBuilder`: Fix return value of `with_component`  
