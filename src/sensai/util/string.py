@@ -483,6 +483,7 @@ class TagBuilder:
 
     def with_component(self, component: str):
         self.components.append(component)
+        return self
 
     def with_conditional(self, cond: bool, component: str):
         """
