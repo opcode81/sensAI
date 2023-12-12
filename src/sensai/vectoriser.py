@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 import logging
 from typing import Callable, Union, TypeVar, Generic, Sequence, List, Tuple, Iterable, Dict, Hashable, Optional
@@ -142,6 +143,15 @@ class EmptyVectoriser(Vectoriser):
         return np.zeros(0)
 
 
+class ItemIdentifierProvider(Generic[T], ABC):
+    """
+    Provides identifiers for sequence items.
+    """
+    @abstractmethod
+    def get_identifier(self, item: T) -> Hashable:
+        pass
+
+
 class SequenceVectoriser(Generic[T], ToStringMixin):
     """
     Supports the application of Vectorisers to sequences of objects of some type T, where each object of type T is
@@ -163,13 +173,22 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
         UNIQUE = "unique"  # use collection of unique items
         CONCAT = "concat"  # use collection obtained by concatenating all sequences using numpy.concatenate
 
-    def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]], fitting_mode: FittingMode = FittingMode.UNIQUE):
+    def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]],
+            fitting_mode: FittingMode = FittingMode.UNIQUE,
+            unique_id_provider: Optional[ItemIdentifierProvider] = None):
         """
         :param vectorisers: zero or more vectorisers that are to be applied. If more than one vectoriser is supplied,
             vectors are generated from input instances of type T by concatenating the results of the vectorisers in
             the order the vectorisers are given.
+        :param fitting_mode: the fitting mode for vectorisers. If `NONE`, no fitting takes place.
+            If `UNIQUE`, fit vectorisers on unique set of items of type T. By default, uniqueness is determined based
+            on Python object identity. If a custom mechanisms for determining an item's identity is desired,
+            pass `unique_id_retriever`.
+            If `CONCAT`, fit vectorisers based on all items of type T, concatenating them to a single sequence.
+        :param unique_id_provider: An object used to determine item identities when using fitting mode `UNIQUE`.
         """
         self.fittingMode = fitting_mode
+        self.uniqueIdProvider = unique_id_provider
         if isinstance(vectorisers, Vectoriser):
             self.vectorisers = [vectorisers]
         else:
@@ -179,16 +198,26 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
 
     def __setstate__(self, state):
         state["fittingMode"] = state.get("fittingMode", self.FittingMode.UNIQUE)
-        setstate(SequenceVectoriser, self, state)
+        setstate(SequenceVectoriser, self, state, new_optional_properties=["uniqueIdProvider"])
 
     def fit(self, data: Iterable[Sequence[T]]):
         log.debug(f"Fitting {self}")
         if self.fittingMode == self.FittingMode.NONE:
             return
         if self.fittingMode == self.FittingMode.UNIQUE:
-            items = set()
-            for seq in data:
-                items.update(seq)
+            if self.uniqueIdProvider is None:
+                items = set()
+                for seq in data:
+                    items.update(seq)
+            else:
+                items = []
+                identifiers = set()
+                for seq in data:
+                    for item in seq:
+                        identifier = self.uniqueIdProvider.get_identifier(item)
+                        if identifier not in identifiers:
+                            identifiers.add(identifier)
+                            items.append(item)
         elif self.fittingMode == self.FittingMode.CONCAT:
             items = np.concatenate(data)
         else:

@@ -411,6 +411,31 @@ class VectorTorchModel(TorchModel, ABC):
         pass
 
 
+class TorchAutoregressiveResultHandler(ABC):
+    """
+    Supports the saving of predictions results such that subsequent predictions
+    can build on earlier predictions, thus supporting autoregressive models.
+    """
+
+    @abstractmethod
+    def clear_results(self):
+        pass
+
+    @abstractmethod
+    def save_results(self, input_df: pd.DataFrame, results: np.ndarray) -> None:
+        """
+        Saves the regression results such that they can be used as input for subsequent prediction steps.
+        The input will typically be processed by a feature generator or vectoriser, so the result
+        should be stored in a place from which the respective feature generator or vectoriser can retrieve it.
+
+        :param input_df: the input data frame for which results were obtained (number of rows corresponds to
+            length of `results`)
+        :param results: the results array, which is typically a 2D array where `results[i]` is an array
+            containing the results for the i-th input row
+        """
+        pass
+
+
 TTorchVectorRegressionModel = typing.TypeVar("TTorchVectorRegressionModel", bound="TorchVectorRegressionModel")
 
 
@@ -448,6 +473,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.torchDataSetProviderFactory: Optional[TorchDataSetProviderFactory] = None
         self.dataFrameSplitter: Optional[DataFrameSplitter] = None
         self._normalisationCheckThreshold = 5
+        self.inferenceBatchSize: Optional[int] = None
+        self.autoregressiveResultHandler: Optional[TorchAutoregressiveResultHandler] = None
 
     def __setstate__(self, state) -> None:
         if "modelClass" in state:  # old-style factory
@@ -456,7 +483,7 @@ class TorchVectorRegressionModel(VectorRegressionModel):
                 del state[k]
         state["nnOptimiserParams"] = NNOptimiserParams.from_dict_or_instance(state["nnOptimiserParams"])
         new_optional_members = ["inputTensoriser", "torchDataSetProviderFactory", "dataFrameSplitter", "outputTensoriser",
-            "outputTensorToArrayConverter"]
+            "outputTensorToArrayConverter", "inferenceBatchSize", "autoRegressiveResultHandler"]
         new_default_properties = {"_normalisationCheckThreshold": 5}
         setstate(TorchVectorRegressionModel, self, state, new_optional_properties=new_optional_members,
             new_default_properties=new_default_properties)
@@ -547,6 +574,28 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self._normalisationCheckThreshold = threshold
         return self
 
+    def with_autoregressive_result_handler(self: TTorchVectorRegressionModel,
+            result_handler: TorchAutoregressiveResultHandler,
+            inference_batch_size=1) -> TTorchVectorRegressionModel:
+        """
+        Adds a result handler which can be used to store prediction results such that subsequent predictions
+        can use the prediction result, supporting autoregressive models.
+        The autoregressive predictions are assumed to be handled in a single call to method :meth:`predict`,
+        and the results will be stored for the duration of the call.
+        For autoregressive predictions that build on earlier predictions, we must typically restrict
+        the batch size such that predictions from the earlier batch can be saved and correctly reused
+        as input for the subsequent predictions. The models input preprocessors (such as feature generators
+        or vectorisers) must make ensure that the results being stored by the result handler are appropriately
+        used as input.
+
+        :param result_handler: the result handler
+        :param inference_batch_size: the batch size to use for predictions
+        :return: self
+        """
+        self.autoregressiveResultHandler = result_handler
+        self.inferenceBatchSize = inference_batch_size
+        return self
+
     def _create_torch_model(self) -> TorchModel:
         torch_model = self.torch_model_factory()
         torch_model.set_normalisation_check_threshold(self._normalisationCheckThreshold)
@@ -568,17 +617,27 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         self.model.fit(data_set_provider, self.nnOptimiserParams)
 
     def _predict_outputs_for_input_data_frame(self, inputs: pd.DataFrame) -> np.ndarray:
-        batch_size = self.nnOptimiserParams.batch_size
-        results = []
-        data_set = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, input_tensoriser=self.inputTensoriser)
-        if self.outputTensorToArrayConverter is None:
-            for input_batch in data_set.iter_batches(batch_size, input_only=True):
-                results.append(self.model.apply_scaled(input_batch, as_numpy=True))
-        else:
-            for input_batch in data_set.iter_batches(batch_size, input_only=True):
+        tensorise_dynamically = False
+        if self.autoregressiveResultHandler is not None:
+            self.autoregressiveResultHandler.clear_results()
+            tensorise_dynamically = True  # must be dynamically tensorised to allow inclusion of predicted results
+        batch_size = self.nnOptimiserParams.batch_size if self.inferenceBatchSize is None else self.inferenceBatchSize
+        results: List[np.ndarray] = []
+        data_set = TorchDataSetFromDataFrames(inputs, None, self.model.cuda, input_tensoriser=self.inputTensoriser,
+            tensorise_dynamically=tensorise_dynamically)
+        start_idx = 0
+        for input_batch in data_set.iter_batches(batch_size, input_only=True):
+            if self.outputTensorToArrayConverter is None:
+                result = self.model.apply_scaled(input_batch, as_numpy=True)
+            else:
                 output_batch = self.model.apply_scaled(input_batch, as_numpy=False)
                 result = self.outputTensorToArrayConverter.convert(output_batch, input_batch)
-                results.append(result)
+            if self.autoregressiveResultHandler is not None:
+                self.autoregressiveResultHandler.save_results(inputs.iloc[start_idx:start_idx+len(result)], result)
+            start_idx += len(result)
+            results.append(result)
+        if self.autoregressiveResultHandler is not None:
+            self.autoregressiveResultHandler.clear_results()
         return np.concatenate(results)
 
     def _predict(self, inputs: pd.DataFrame) -> pd.DataFrame:
