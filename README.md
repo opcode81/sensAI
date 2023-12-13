@@ -3,15 +3,9 @@
   the Python library for sensible AI
 
   <div align="center" style="text-align:center">
-  <a href="https://pypi.org/project/sensai/" style="text-decoration:none">
-      <img src="https://img.shields.io/pypi/v/sensai.svg" alt="PyPI">
-  </a>
-  <a href="https://raw.githubusercontent.com/jambit/sensAI/master/LICENSE" style="text-decoration:none">
-        <img alt="License" src="https://img.shields.io/pypi/l/sensai">
-  </a>
-  <a href="https://github.com/jambit/sensAI/actions/workflows/tox.yaml" style="text-decoration:none">
-        <img src="https://github.com/jambit/sensAI/actions/workflows/tox.yaml/badge.svg" alt="Build status">
-  </a>
+  <a href="https://pypi.org/project/sensai/" style="text-decoration:none"><img src="https://img.shields.io/pypi/v/sensai.svg" alt="PyPI"></a>
+  <a href="https://raw.githubusercontent.com/jambit/sensAI/master/LICENSE" style="text-decoration:none"><img alt="License" src="https://img.shields.io/pypi/l/sensai"></a>
+  <a href="https://github.com/jambit/sensAI/actions/workflows/tox.yaml" style="text-decoration:none"><img src="https://github.com/jambit/sensAI/actions/workflows/tox.yaml/badge.svg" alt="Build status"></a>
   </div>
 </p>
 
@@ -503,13 +497,12 @@ sensAI can be integrated into your project in several ways:
 
 # Contributors
 
-<div align="center" style="text-align:center; padding:30px">
-  <a href="https://www.appliedai-institute.de" style="text-decoration:none">
-      <img style="height:50px" src="resources/aai-institute-logo.svg" alt="appliedAI Institute">
-  </a>
-  <a href="http://www.jambit.com" style="text-decoration:none">
-        <img style="height:50px; margin-left:20px" src="resources/jambit-logo.svg" alt="jambit">
-  </a>
+<div align="center" style="text-align:center; padding:100px">
+  <br>
+  <a href="https://www.appliedai-institute.de" style="text-decoration:none"><img style="height:50px" src="resources/aai-institute-logo.svg" alt="appliedAI Institute"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="http://www.jambit.com" style="text-decoration:none"><img style="height:50px;" src="resources/jambit-logo.svg" alt="jambit"></a>
+  <br><br>
 </div>
 
 sensAI is being developed by members of <a href="http://transferlab.ai">TransferLab</a> at 
