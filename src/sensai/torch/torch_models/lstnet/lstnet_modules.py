@@ -144,11 +144,15 @@ class LSTNetwork(MCDropoutCapableNNModule):
             state["mode"] = self.Mode.CLASSIFICATION if state["isClassification"] else self.Mode.REGRESSION
         setstate(LSTNetwork, self, state, removed_properties=["isClassification"])
 
+    @staticmethod
+    def compute_encoder_dim(hid_rnn: int, skip: int, hid_skip: int) -> int:
+        return hid_rnn + skip * hid_skip
+
     def get_encoder_dim(self):
         """
         :return: the vector dimension that is output for the case where mode=ENCODER
         """
-        return self.hidRNN + self.skip * self.hidSkip
+        return self.compute_encoder_dim(self.hidRNN, self.skip, self.hidSkip)
 
     def forward(self, x):
         batch_size = x.size(0)

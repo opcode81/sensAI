@@ -22,22 +22,31 @@ class Vectoriser(Generic[T], ToStringMixin):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, f: Callable[[T], Union[float, np.ndarray, list]], transformer=None):
+    def __init__(self, f: Callable[[T], Union[float, np.ndarray, list]], transformer=None, is_fitted=False):
         """
         :param f: the function which maps from an instance of T to an array/list/scalar
         :param transformer: an optional transformer (e.g. instance of one of the classes in sklearn.preprocessing)
             which can be used to transform/normalise the generated arrays
+        :param is_fitted: whether the vectoriser (and therefore the given transformer) is assumed to be fitted already
         """
         self._fn = f
         self.transformer = transformer
         self._resultType = None
         self.name = None
+        self._is_fitted = is_fitted
 
     def __setstate__(self, state):
-        setstate(Vectoriser, self, state, new_optional_properties=["_resultType", "name"], renamed_properties={"f": "_fn"})
+        new_default_properties = {
+            "_is_fitted": True  # we assume that any persisted objects have been fitted
+        }
+        setstate(Vectoriser, self, state, new_optional_properties=["_resultType", "name"], renamed_properties={"f": "_fn"},
+            new_default_properties=new_default_properties)
 
     def _tostring_exclude_private(self) -> bool:
         return True
+
+    def is_fitted(self) -> bool:
+        return self._is_fitted
 
     def set_name(self, name):
         self.name = name
@@ -55,6 +64,7 @@ class Vectoriser(Generic[T], ToStringMixin):
         if self.transformer is not None:
             values = [self._f(item) for item in items]
             self.transformer.fit(np.array(values))
+        self._is_fitted = True
 
     def _f(self, x) -> np.array:
         y = self._fn(x)
@@ -175,7 +185,8 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
 
     def __init__(self, vectorisers: Union[Sequence[Vectoriser[T]], Vectoriser[T]],
             fitting_mode: FittingMode = FittingMode.UNIQUE,
-            unique_id_provider: Optional[ItemIdentifierProvider] = None):
+            unique_id_provider: Optional[ItemIdentifierProvider] = None,
+            refit_vectorisers: bool = True):
         """
         :param vectorisers: zero or more vectorisers that are to be applied. If more than one vectoriser is supplied,
             vectors are generated from input instances of type T by concatenating the results of the vectorisers in
@@ -185,10 +196,17 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
             on Python object identity. If a custom mechanisms for determining an item's identity is desired,
             pass `unique_id_retriever`.
             If `CONCAT`, fit vectorisers based on all items of type T, concatenating them to a single sequence.
-        :param unique_id_provider: An object used to determine item identities when using fitting mode `UNIQUE`.
+        :param unique_id_provider: an object used to determine item identities when using fitting mode `UNIQUE`.
+        :param refit_vectorisers: whether any vectorisers that have previously been fitted shall be
+            fitted once more when this sequence vectoriser is fitted. Set this to false if you are reusing vectorisers
+            that are also part of another sequence vectoriser that will be fitted/has been fitted before this
+            sequence vectoriser. This can be useful, in particular, in encoder-decoders where the target features
+            are partly the same as the history sequence features, and we want to reuse the latter and their
+            fitted transformers for the target features.
         """
         self.fittingMode = fitting_mode
         self.uniqueIdProvider = unique_id_provider
+        self.refitVectorisers = refit_vectorisers
         if isinstance(vectorisers, Vectoriser):
             self.vectorisers = [vectorisers]
         else:
@@ -198,12 +216,21 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
 
     def __setstate__(self, state):
         state["fittingMode"] = state.get("fittingMode", self.FittingMode.UNIQUE)
-        setstate(SequenceVectoriser, self, state, new_optional_properties=["uniqueIdProvider"])
+        setstate(SequenceVectoriser, self, state, new_optional_properties=["uniqueIdProvider"],
+            new_default_properties={"refitVectorisers": True})
 
     def fit(self, data: Iterable[Sequence[T]]):
         log.debug(f"Fitting {self}")
+
         if self.fittingMode == self.FittingMode.NONE:
             return
+
+        if not self.refitVectorisers:
+            if all(v.is_fitted() for v in self.vectorisers):
+                log.debug(f"No vectorisers to be fitted; all contained vectorisers have previously been fitted")
+                return
+
+        # obtain items for fitting
         if self.fittingMode == self.FittingMode.UNIQUE:
             if self.uniqueIdProvider is None:
                 items = set()
@@ -219,12 +246,14 @@ class SequenceVectoriser(Generic[T], ToStringMixin):
                             identifiers.add(identifier)
                             items.append(item)
         elif self.fittingMode == self.FittingMode.CONCAT:
-            items = np.concatenate(data)
+            items = np.concatenate(data)  # type: ignore
         else:
             raise ValueError(self.fittingMode)
+
         for v in self.vectorisers:
-            log.debug(f"Fitting {v}")
-            v.fit(items)
+            if self.refitVectorisers or not v.is_fitted():
+                log.debug(f"Fitting {v}")
+                v.fit(items)
 
     def apply(self, seq: Sequence[T], transform=True) -> List[np.array]:
         """

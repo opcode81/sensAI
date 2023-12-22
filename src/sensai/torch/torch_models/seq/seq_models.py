@@ -4,9 +4,9 @@ from typing import Optional, List, Union
 import pandas as pd
 import torch
 
-from sensai.torch import TorchVectorRegressionModel, Tensoriser, NNOptimiserParams, TorchModel
-from sensai.torch.torch_models.seq.seq_modules import EncoderDecoderModule, EncoderFactory, DecoderFactory
-from sensai.vectoriser import SequenceVectoriser
+from ....torch import TorchVectorRegressionModel, Tensoriser, NNOptimiserParams, TorchModel
+from ....torch.torch_models.seq.seq_modules import EncoderDecoderModule, EncoderFactory, DecoderFactory
+from ....vectoriser import SequenceVectoriser
 
 log = logging.getLogger(__name__)
 
