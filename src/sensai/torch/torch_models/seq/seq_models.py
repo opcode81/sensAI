@@ -12,6 +12,11 @@ log = logging.getLogger(__name__)
 
 
 class EncoderDecoderVectorRegressionModel(TorchVectorRegressionModel):
+    """
+    A highly general encoder-decoder sequence model, which encodes a sequence of history items
+    and uses the encoding to make predictions for one or more target sequence items.
+    History and target sequences are converted to vectors via vectorisers.
+    """
     def __init__(self, cuda: bool,
             history_sequence_column_name: str,
             history_sequence_vectoriser: SequenceVectoriser,
@@ -24,18 +29,21 @@ class EncoderDecoderVectorRegressionModel(TorchVectorRegressionModel):
             nn_optimiser_params: Optional[NNOptimiserParams] = None):
         """
         :param cuda: whether to use a CUDA device
-        :param history_sequence_column_name:
-        :param history_sequence_vectoriser:
-        :param history_sequence_variable_length:
+        :param history_sequence_column_name: the name of the data frame input column which contains the history sequences to be encoded.
+            The column must contain a sequence of items that can be converted to vectors via the `history_sequence_vectorizer`
+        :param history_sequence_vectoriser: a vectorizer which converts history sequence items to vectors
+        :param history_sequence_variable_length: whether history sequences can be of variable length
         :param target_sequence_column_name: the column containing the target item sequence; Note that the column must
             contain sequences even if there is but a single target item for which predictions shall be made.
             In such cases, simply use a column that contains lists with a single item each.
         :param target_sequence_vectoriser: the vectoriser for the generation of feature vectors for the target
             items.
-        :param latent_dim:
-        :param encoder_factory:
-        :param decoder_factory:
-        :param nn_optimiser_params:
+        :param latent_dim: the number of latent dimensions to be used by the encoder
+        :param encoder_factory: a factory for the creation of the encoder, which takes sequence items from the history
+            and encodes them into vectors of dimension `latent_dim`
+        :param decoder_factory: a factory for the creation of the decoder component, which takes a latent vector produced by the
+            encoder and (a sequence of) target features to make predictions
+        :param nn_optimiser_params: the optimiser parameters
         """
         super().__init__(self._create_model, nn_optimiser_params=nn_optimiser_params)
         self.history_sequence_variable_length = history_sequence_variable_length

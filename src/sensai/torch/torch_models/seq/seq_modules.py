@@ -72,6 +72,12 @@ class EncoderFactory(ToStringMixin, ABC):
 class DecoderFactory(ToStringMixin, ABC):
     @abstractmethod
     def create_decoder(self, latent_dim: int, target_feature_dim: int) -> TDecoder:
+        """
+        :param latent_dim: the latent vector size which is used for the representation of the history
+        :param target_feature_dim: the number of dimensions/features that are given for each prediction to be made
+            (each future sequence item)
+        :return: a torch module satisfying :class:`DecoderProtocol`
+        """
         pass
 
 
@@ -489,7 +495,7 @@ class EncoderDecoderModule(torch.nn.Module):
         :param encoder: a torch module satisfying :class:`EncoderProtocol`
         :param decoder: a torch module satisfying :class:`DecoderProtocol`
         :param variable_history_length: whether the history sequence is variable-length.
-            If it is not, then the the model will not pass on the lengths tensor to the encoder, allowing it to simplify
+            If it is not, then the model will not pass on the lengths tensor to the encoder, allowing it to simplify
             its handling of this case (even if the original input provides the lengths).
         """
         super().__init__()
