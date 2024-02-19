@@ -62,7 +62,8 @@ def _is_regression(model: Optional[VectorModel], is_regression: Optional[bool]) 
 
 
 def create_vector_model_evaluator(data: InputOutputData, model: VectorModel = None,
-        is_regression: bool = None, params: Union[RegressionEvaluatorParams, ClassificationEvaluatorParams] = None) \
+        is_regression: bool = None, params: Union[RegressionEvaluatorParams, ClassificationEvaluatorParams] = None,
+        test_data: Optional[InputOutputData] = None) \
             -> Union[VectorRegressionModelEvaluator, VectorClassificationModelEvaluator]:
     is_regression = _is_regression(model, is_regression)
     if params is None:
@@ -72,9 +73,9 @@ def create_vector_model_evaluator(data: InputOutputData, model: VectorModel = No
             params = ClassificationEvaluatorParams(fractional_split_test_fraction=0.2)
         log.debug(f"No evaluator parameters specified, using default: {params}")
     if is_regression:
-        return VectorRegressionModelEvaluator(data, params=params)
+        return VectorRegressionModelEvaluator(data, test_data=test_data, params=params)
     else:
-        return VectorClassificationModelEvaluator(data, params=params)
+        return VectorClassificationModelEvaluator(data, test_data=test_data, params=params)
 
 
 def create_vector_model_cross_validator(data: InputOutputData,
@@ -217,18 +218,24 @@ class ModelEvaluation(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidato
             eval_stats_plot_collector: Union[RegressionEvalStatsPlotCollector, ClassificationEvalStatsPlotCollector],
             evaluator_params: Optional[Union[RegressionEvaluatorParams, ClassificationEvaluatorParams,
                 Dict[str, Any]]] = None,
-            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None):
+            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
+            test_io_data: Optional[InputOutputData] = None):
         """
-        :param io_data: the data set to use for evaluation
+        :param io_data: the data set to use for evaluation. For evaluation purposes, this dataset usually will be split
+            into training and test data according to the rules specified by `evaluator_params`.
+            However, if `test_io_data` is specified, then this is taken to be the training data and `test_io_data` is
+            taken to be the test data when creating evaluators for simple (single-split) evaluation.
         :param eval_stats_plot_collector: a collector for plots generated from evaluation stats objects
         :param evaluator_params: parameters with which to instantiate evaluators
         :param cross_validator_params: parameters with which to instantiate cross-validators
+        :param test_io_data: optional test data (see `io_data`)
         """
         if cross_validator_params is None:
             cross_validator_params = VectorModelCrossValidatorParams(folds=5)
         self.evaluator_params = evaluator_params
         self.cross_validator_params = cross_validator_params
         self.io_data = io_data
+        self.test_io_data = test_io_data
         self.eval_stats_plot_collector = eval_stats_plot_collector
 
     def create_evaluator(self, model: TModel = None, is_regression: bool = None) -> TEvaluator:
@@ -240,7 +247,8 @@ class ModelEvaluation(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidato
         :param is_regression: whether to create a regression model evaluator. Either this or model have to be specified
         :return: an evaluator
         """
-        return create_vector_model_evaluator(self.io_data, model=model, is_regression=is_regression, params=self.evaluator_params)
+        return create_vector_model_evaluator(self.io_data, model=model, is_regression=is_regression, test_data=self.test_io_data,
+            params=self.evaluator_params)
 
     def create_cross_validator(self, model: TModel = None, is_regression: bool = None) -> TCrossValidator:
         """
@@ -529,14 +537,19 @@ class RegressionModelEvaluation(ModelEvaluation[VectorRegressionModel, VectorReg
         VectorRegressionModelCrossValidator, VectorRegressionModelCrossValidationData, RegressionEvalStats]):
     def __init__(self, io_data: InputOutputData,
             evaluator_params: Optional[Union[RegressionEvaluatorParams, Dict[str, Any]]] = None,
-            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None):
+            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
+            test_io_data: Optional[InputOutputData] = None):
         """
-        :param io_data: the data set to use for evaluation
+        :param io_data: the data set to use for evaluation. For evaluation purposes, this dataset usually will be split
+            into training and test data according to the rules specified by `evaluator_params`.
+            However, if `test_io_data` is specified, then this is taken to be the training data and `test_io_data` is
+            taken to be the test data when creating evaluators for simple (single-split) evaluation.
         :param evaluator_params: parameters with which to instantiate evaluators
         :param cross_validator_params: parameters with which to instantiate cross-validators
+        :param test_io_data: optional test data (see `io_data`)
         """
         super().__init__(io_data, eval_stats_plot_collector=RegressionEvalStatsPlotCollector(), evaluator_params=evaluator_params,
-            cross_validator_params=cross_validator_params)
+            cross_validator_params=cross_validator_params, test_io_data=test_io_data)
 
 
 class ClassificationModelEvaluation(ModelEvaluation[VectorClassificationModel, VectorClassificationModelEvaluator,
@@ -544,14 +557,19 @@ class ClassificationModelEvaluation(ModelEvaluation[VectorClassificationModel, V
         ClassificationEvalStats]):
     def __init__(self, io_data: InputOutputData,
             evaluator_params: Optional[Union[ClassificationEvaluatorParams, Dict[str, Any]]] = None,
-            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None):
+            cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
+            test_io_data: Optional[InputOutputData] = None):
         """
-        :param io_data: the data set to use for evaluation
+        :param io_data: the data set to use for evaluation. For evaluation purposes, this dataset usually will be split
+            into training and test data according to the rules specified by `evaluator_params`.
+            However, if `test_io_data` is specified, then this is taken to be the training data and `test_io_data` is
+            taken to be the test data when creating evaluators for simple (single-split) evaluation.
         :param evaluator_params: parameters with which to instantiate evaluators
         :param cross_validator_params: parameters with which to instantiate cross-validators
+        :param test_io_data: optional test data (see `io_data`)
         """
         super().__init__(io_data, eval_stats_plot_collector=ClassificationEvalStatsPlotCollector(), evaluator_params=evaluator_params,
-            cross_validator_params=cross_validator_params)
+            cross_validator_params=cross_validator_params, test_io_data=test_io_data)
 
 
 class MultiDataModelEvaluation:

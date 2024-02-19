@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor
 import uuid
@@ -124,16 +125,18 @@ class ParametersMetricsCollection:
         self.sort_column_name = sort_column_name
         self.csv_path = csv_path
         self.ascending = ascending
-        if os.path.exists(csv_path) and incremental:
+        csv_path_exists = csv_path is not None and os.path.exists(csv_path)
+        if csv_path_exists and incremental:
             self.df = pd.read_csv(csv_path)
             log.info(f"Found existing CSV file with {len(self.df)} entries; {csv_path} will be extended (incremental mode)")
             self._current_row = len(self.df)
             self.value_dicts = [nt._asdict() for nt in self.df.itertuples()]
         else:
-            if os.path.exists(csv_path):
-                log.info(f"Results will be written to new file {csv_path}")
-            else:
-                log.warning(f"Results in existing file ({csv_path}) will be overwritten (non-incremental mode)")
+            if csv_path is not None:
+                if not csv_path_exists:
+                    log.info(f"Results will be written to new file {csv_path}")
+                else:
+                    log.warning(f"Results in existing file ({csv_path}) will be overwritten (non-incremental mode)")
             self.df = None
             self._current_row = 0
             self.value_dicts = []
@@ -237,12 +240,12 @@ class GridSearch(TrackingMixin):
         self.model_factory = model_factory
         if type(parameter_options) == list:
             self.parameter_options_list = parameter_options
-            param_names = set(parameter_options[0].keys())
-            for d in parameter_options[1:]:
-                if set(d.keys()) != param_names:
-                    raise ValueError("Keys must be the same for all parameter options dictionaries")
         else:
             self.parameter_options_list = [parameter_options]
+        self.param_names = set(self.parameter_options_list[0].keys())
+        for d in self.parameter_options_list[1:]:
+            if set(d.keys()) != self.param_names:
+                raise ValueError("Keys must be the same for all parameter options dictionaries")
         self.num_processes = num_processes
         self.parameter_combination_skip_decider = parameter_combination_skip_decider
         self.model_save_directory = model_save_directory
@@ -289,16 +292,18 @@ class GridSearch(TrackingMixin):
             skip_decider.tell(params, values)
         return values
 
-    def run(self, metrics_evaluator: MetricsDictProvider, sort_column_name=None, ascending=True) -> pd.DataFrame:
+    def run(self, metrics_evaluator: MetricsDictProvider, sort_column_name=None, ascending=True) -> "GridSearch.Result":
         """
         Run the grid search. If csvResultsPath was provided in the constructor, each evaluation result will be saved
         to that file directly after being computed
 
         :param metrics_evaluator: the evaluator or cross-validator with which to evaluate models
-        :param sort_column_name: the name of the column by which to sort the data frame of results; if None, do not sort.
-            Note that the column names that are generated depend on the evaluator/validator being applied.
-        :param ascending: whether to sort in ascending order; has an effect only if sortColumnName is not None
-        :return: the data frame with all evaluation results
+        :param sort_column_name: the name of the metric (column) by which to sort the data frame of results; if None, do not sort.
+            Note that all Metric instances have a static member `name`, e.g. you could use `RegressionMetricMSE.name`.
+        :param ascending: whether to sort in ascending order; has an effect only if `sort_column_name` is specified.
+            The result object will assume, by default, that the resulting top/first element is the best,
+            i.e. ascending=False means "higher is better", and ascending=True means "Lower is better".
+        :return: an object holding the results
         """
         if self.tracked_experiment is not None:
             logging_callback = self.tracked_experiment.track_values
@@ -345,7 +350,53 @@ class GridSearch(TrackingMixin):
             for future in futures:
                 collect_result(future.result())
 
-        return params_metrics_collection.get_data_frame()
+        df = params_metrics_collection.get_data_frame()
+        return self.Result(df, self.param_names, default_metric_name=sort_column_name, default_higher_is_better=not ascending)
+
+    class Result:
+        def __init__(self, df: pd.DataFrame, param_names: List[str], default_metric_name: Optional[str] = None,
+                default_higher_is_better: Optional[bool] = None):
+            self.df = df
+            self.param_names = param_names
+            self.default_metric_name = default_metric_name
+            if default_metric_name is not None:
+                self.default_higher_is_better = default_higher_is_better
+            else:
+                self.default_higher_is_better = None
+
+        @dataclass
+        class BestParams:
+            metric_name: str
+            metric_value: float
+            params: dict
+
+        def get_best_params(self, metric_name: Optional[str] = None, higher_is_better: Optional[bool] = None) -> BestParams:
+            """
+
+            :param metric_name: the metric name for which to return the best result; can be None if the GridSearch used
+                a metric to sort by
+            :param higher_is_better: whether higher is better for the metric to sort by; can be None if the GridSearch
+                use a metric to sort by and configured the sort order such that the best configuration is at the top
+            :return: a pair (d, v) where d dictionary with the best parameters found during the grid search and v is the
+                corresponding metric value
+            """
+            if metric_name is None:
+                metric_name = self.default_metric_name
+                if metric_name is None:
+                    raise ValueError("metric_name must be specified")
+            if higher_is_better is None:
+                higher_is_better = self.default_higher_is_better
+                if higher_is_better is None:
+                    raise ValueError("higher_is_better must be specified")
+
+            df = self.df.sort_values(metric_name, axis=0, inplace=False, ascending=not higher_is_better)
+
+            best_params = {}
+            for param in self.param_names:
+                best_params[param] = df.iloc[0][param]
+            best_metric_value = df.iloc[0][metric_name]
+
+            return self.BestParams(metric_name=metric_name, metric_value=best_metric_value, params=best_params)
 
 
 class SAHyperOpt(TrackingMixin):
