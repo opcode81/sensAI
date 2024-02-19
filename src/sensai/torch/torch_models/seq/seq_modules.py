@@ -1,7 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional, Protocol, Union, Sequence
+from typing import Optional, Union, Sequence
+from typing_extensions import Protocol
 
 import torch
 
