@@ -5,13 +5,28 @@
 ### Improvements/Changes
 
 * `vectoriser`:
-  * `SequenceVectoriser`: Allow to inject a sequence item identifier provider
-    (instance of new class `ItemIdentifierProvider`) in order to determine the set of
-    relevant unique items when using fitting mode UNIQUE  
+  * `SequenceVectoriser`: 
+    * Allow to inject a sequence item identifier provider
+      (instance of new class `ItemIdentifierProvider`) in order to determine the set of
+      relevant unique items when using fitting mode UNIQUE
+    * Allow sharing of vectorisers between instances such
+      that a previously fitted vectoriser can be reused in its fitted state,
+      which can be particularly useful for encoder-decoder settings where
+      the decoding stage uses some of the same features (vectorisers) as the
+      encoding stage.
+  * Make Vectorisers aware of their 'fitted' status.
 * `torch`:
   * `TorchVectorRegressionModel`: Add support for auto-regressive predictions
     by adding class `TorchAutoregressiveResultHandler` and method 
     `with_autogressive_result_handler`
+  * `LSTNetwork`:
+    * Add new mode 'encoder', where the output of the complex path
+      prior to the dense layer is returned
+    * Changed constructor interface to comply with PEP-8
+  * Add package `seq` for encoder-decoder-style sequence models, adding the
+    highly flexible vector model implementation 
+    `EncoderDecoderVectorRegressionModel` and a multitude of low-level encoder 
+    and decoder modules
 * `data`:
   * Add `DataFrameSplitterColumnEquivalenceClass`, which splits a data frame
     based on equivalence classes of a given column
@@ -25,10 +40,13 @@
 
 ### Fixes
 
-* `TagBuilder`: Fix return value of `with_component` 
+* `TagBuilder`: Fix return value of `with_component`  
 * `ModelEvaluation`: `create_plots` did not track plots with given tracking context
    if `show_plots`=False and `result_writer`=None. 
 * `ParametersMetricsCollection`: `csv_path` could not be None 
+* `LSTNetworkVectorClassificationModel` is now functional in v1,
+  improving the representation (no more dictionaries).
+  This breaks compatibility with sensAI v0.x representations of this class.
 
 ## v1.0.0 (2023-12-06) 
 

@@ -11,7 +11,6 @@ from ...torch_base import TorchVectorClassificationModel, VectorTorchModel, Clas
 from ...torch_data import TorchDataSetProviderFromDataUtil, TensorScalerIdentity, TensorScaler, DataUtil
 from ...torch_enums import ActivationFunction
 from ...torch_opt import NNOptimiserParams
-from ....util.string import object_repr
 
 log: logging.Logger = logging.getLogger(__name__)
 
@@ -51,48 +50,63 @@ class LSTNetworkVectorClassificationModel(TorchVectorClassificationModel):
         :param output_activation: the output activation function
         :param nn_optimiser_params: parameters for NNOptimiser to use for training
         """
+        self.num_input_time_slices = num_input_time_slices
+        self.input_dim_per_time_slice = input_dim_per_time_slice
+        self.num_convolutions = num_convolutions
+        self.num_cnn_time_slices = num_cnn_time_slices
+        self.hid_rnn = hid_rnn
+        self.skip = skip
+        self.hid_skip = hid_skip
+        self.hw_window = hw_window
+        self.hw_combine = hw_combine
+        self.dropout = dropout
         self.cuda = cuda
-        self.numClasses = num_classes
-        lstnet_args = dict(numInputTimeSlices=num_input_time_slices, inputDimPerTimeSlice=input_dim_per_time_slice, numOutputTimeSlices=1,
-            outputDimPerTimeSlice=num_classes, numConvolutions=num_convolutions, numCnnTimeSlices=num_cnn_time_slices, hidRNN=hid_rnn,
-            hwWindow=hw_window, hwCombine=hw_combine, dropout=dropout, outputActivation=output_activation,
-            skip=skip, hidSkip=hid_skip, isClassification=True)
+        self.output_activation = output_activation
+        self.num_classes = num_classes
         output_mode = ClassificationOutputMode.for_activation_fn(ActivationFunction.torch_function_from_any(output_activation))
-        super().__init__(output_mode, self._LSTNetworkModel, model_args=[self.cuda], model_kwargs=lstnet_args,
-            nn_optimiser_params=nn_optimiser_params)
+        super().__init__(output_mode, self._create_lst_network_model, nn_optimiser_params=nn_optimiser_params)
+
+    def _create_lst_network_model(self):
+        return self._LSTNetworkModel(self)
 
     class _LSTNetworkModel(VectorTorchModel):
-        def __init__(self, cuda, **lstnet_args):
-            """
-            :param cuda: flag indicating whether cuda is used
-            :param inputDim: the total number of inputs per data point
-            :param numClasses: the number of classes to predict
-            :param lstnet_args: arguments with which to construct the underlying LSTNetwork instance
-            """
-            super().__init__(cuda)
-            self.lstnetArgs = lstnet_args
+        def __init__(self, parent: "LSTNetworkVectorClassificationModel"):
+            super().__init__(parent.cuda)
+            self.parent = parent
 
         def create_torch_module_for_dims(self, input_dim, output_dim):
-            expected_input_dim = self.lstnetArgs["numInputTimeSlices"] * self.lstnetArgs["inputDimPerTimeSlice"]
+            p = self.parent
+            expected_input_dim = p.num_input_time_slices * p.input_dim_per_time_slice
             if expected_input_dim != input_dim:
                 raise ValueError(f"Unexpected input size {input_dim}, expected {self.inputDim}")
-            if self.lstnetArgs["outputDimPerTimeSlice"] is None:
-                self.lstnetArgs["outputDimPerTimeSlice"] = output_dim
+            if p.num_classes is None:
+                output_dim_per_time_slice = output_dim
             else:
-                if self.lstnetArgs["outputDimPerTimeSlice"] != output_dim:
-                    raise ValueError(f"Unexpected output size {output_dim}, expected {self.lstnetArgs['outputDimPerTimeSlice']}")
-            return LSTNetwork(**self.lstnetArgs)
-
-        def __str__(self):
-            return object_repr(self, self.lstnetArgs)
+                output_dim_per_time_slice = p.num_classes
+                if p.num_classes != output_dim:
+                    raise ValueError(f"Unexpected output dim {output_dim}, expected {p.num_classes}")
+            return LSTNetwork(num_input_time_slices=p.num_input_time_slices,
+                input_dim_per_time_slice=p.input_dim_per_time_slice,
+                num_output_time_slices=1,
+                output_dim_per_time_slice=output_dim_per_time_slice,
+                num_convolutions=p.num_convolutions,
+                num_cnn_time_slices=p.num_cnn_time_slices,
+                hid_rnn=p.hid_rnn,
+                hw_window=p.hw_window,
+                hw_combine=p.hw_combine,
+                dropout=p.dropout,
+                output_activation=p.output_activation,
+                skip=p.skip,
+                hid_skip=p.hid_skip,
+                mode=LSTNetwork.Mode.CLASSIFICATION)
 
     def _create_data_set_provider(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> TorchDataSetProviderFromDataUtil:
-        if self.numClasses is None:
-            self.numClasses = len(self._labels)
-        elif self.numClasses != len(self._labels):
-            raise ValueError(f"Output dimension {self.numClasses} per time time slice was specified, while the training data contains "
+        if self.num_classes is None:
+            self.num_classes = len(self._labels)
+        elif self.num_classes != len(self._labels):
+            raise ValueError(f"Output dimension {self.num_classes} per time time slice was specified, while the training data contains "
                              f"{len(self._labels)} classes")
-        return TorchDataSetProviderFromDataUtil(self.DataUtil(inputs, outputs, self.numClasses), self.cuda)
+        return TorchDataSetProviderFromDataUtil(self.DataUtil(inputs, outputs, self.num_classes), self.cuda)
 
     def _predict_outputs_for_input_data_frame(self, inputs: pd.DataFrame) -> torch.Tensor:
         log.info(f"Predicting outputs for {len(inputs)} inputs")

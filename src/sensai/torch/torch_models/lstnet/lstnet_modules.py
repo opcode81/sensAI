@@ -1,9 +1,11 @@
+from enum import Enum
 from typing import Union, Callable
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+from sensai.util.pickle import setstate
 from ...torch_base import MCDropoutCapableNNModule
 from ...torch_enums import ActivationFunction
 
@@ -30,7 +32,8 @@ class LSTNetwork(MCDropoutCapableNNModule):
                   
             * Dense layer
             
-        * Direct regression dense layer (so-called "highway" path).
+        * Direct regression dense layer (so-called "highway" path) which uses the features of the last hwWindow time slices to
+          directly make a prediction
         
     The model ultimately combines the outputs of these two paths via a combination function.
     Many parts of the model are optional and can be completely disabled.
@@ -39,55 +42,74 @@ class LSTNetwork(MCDropoutCapableNNModule):
 
     The model expects as input a tensor of size (batchSize, numInputTimeSlices, inputDimPerTimeSlice).
     As output, the model will produce a tensor of size (batchSize, numOutputTimeSlices, outputDimPerTimeSlice)
-    if isClassification==False (default) and a tensor of size (batchSize, outputDimPerTimeSlice=numClasses, numOutputTimeSlices)
-    if isClassification==True; the latter shape matches what is required by the multi-dimensional case of loss function
+    if mode==REGRESSION and a tensor of size (batchSize, outputDimPerTimeSlice=numClasses, numOutputTimeSlices)
+    if mode==CLASSIFICATION; the latter shape matches what is required by the multi-dimensional case of loss function
     CrossEntropyLoss, for example, and therefore is suitable for classification use cases.
+    For mode==ENCODER, the model will produce a tensor of size (batch_size, hidRNN + skip * hidSkip).
     """
-    def __init__(self, numInputTimeSlices, inputDimPerTimeSlice, numOutputTimeSlices=1, outputDimPerTimeSlice=1,
-            numConvolutions: int = 100, numCnnTimeSlices: int = 6, hidRNN: int = 100, skip: int = 0, hidSkip: int = 5,
-            hwWindow: int = 0, hwCombine: str = "plus", dropout=0.2, outputActivation: Union[str, ActivationFunction, Callable] = "sigmoid",
-            isClassification=False):
+
+    class Mode(Enum):
+        REGRESSION = "regression"
+        CLASSIFICATION = "classification"
+        ENCODER = "encoder"
+
+    def __init__(self,
+            num_input_time_slices: int,
+            input_dim_per_time_slice: int,
+            num_output_time_slices: int = 1,
+            output_dim_per_time_slice: int = 1,
+            num_convolutions: int = 100,
+            num_cnn_time_slices: int = 6,
+            hid_rnn: int = 100,
+            skip: int = 0,
+            hid_skip: int = 5,
+            hw_window: int = 0,
+            hw_combine: str = "plus",
+            dropout=0.2,
+            output_activation: Union[str, ActivationFunction, Callable] = "sigmoid",
+            mode: Mode = Mode.REGRESSION):
         """
-        :param numInputTimeSlices: the number of input time slices
-        :param inputDimPerTimeSlice: the dimension of the input data per time slice
-        :param numOutputTimeSlices: the number of time slices predicted by the model
-        :param outputDimPerTimeSlice: the number of dimensions per output time slice. While this is the number of
+        :param num_input_time_slices: the number of input time slices
+        :param input_dim_per_time_slice: the dimension of the input data per time slice
+        :param num_output_time_slices: the number of time slices predicted by the model
+        :param output_dim_per_time_slice: the number of dimensions per output time slice. While this is the number of
             target variables per time slice for regression problems, this must be the number of classes for classification problems.
-        :param numCnnTimeSlices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
+        :param num_cnn_time_slices: the number of time slices considered by each convolution (i.e. it is one of the dimensions of the matrix used for
             convolutions, the other dimension being inputDimPerTimeSlice), a.k.a. "Ck"
-        :param numConvolutions: the number of separate convolutions to apply, i.e. the number of independent convolution matrices, a.k.a "hidC";
+        :param num_convolutions: the number of separate convolutions to apply, i.e. the number of independent convolution matrices, a.k.a "hidC";
             if it is 0, then the entire complex processing path is not applied.
-        :param hidRNN: the number of hidden output dimensions for the RNN stage
+        :param hid_rnn: the number of hidden output dimensions for the RNN stage
         :param skip: the number of time slices to skip for the skip-RNN. If it is 0, then the skip-RNN is not used.
-        :param hidSkip: the number of output dimensions of each of the skip parallel RNNs
-        :param hwWindow: the number of time slices from the end of the input time series to consider as input for the highway component.
+        :param hid_skip: the number of output dimensions of each of the skip parallel RNNs
+        :param hw_window: the number of time slices from the end of the input time series to consider as input for the highway component.
             If it is 0, the highway component is not used.
-        :param hwCombine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
+        :param hw_combine: {"plus", "product", "bilinear"} the function with which the highway component's output is combined with the complex path's output
         :param dropout: the dropout probability to use during training (dropouts are applied after every major step in the evaluation path)
-        :param outputActivation: the output activation function
-        :param isClassification: whether the model is to serve as a classifier, in which case the output tensor dimension ordering is adapted
-            to suit loss functions such as CrossEntropyLoss
+        :param output_activation: the output activation function
+        :param mode: the prediction mode. For `CLASSIFICATION`, the output tensor dimension ordering is adapted to suit loss functions such
+            as CrossEntropyLoss. When set to `ENCODER`, will output the latent representation prior to the dense layer in the complex path
+            of the network (see class docstring).
         """
-        if numConvolutions == 0 and hwWindow == 0:
+        if num_convolutions == 0 and hw_window == 0:
             raise ValueError("No processing paths remain")
-        if numInputTimeSlices < numCnnTimeSlices or (hwWindow != 0 and hwWindow < numInputTimeSlices):
+        if num_input_time_slices < num_cnn_time_slices or (hw_window != 0 and hw_window < num_input_time_slices):
             raise Exception("Inconsistent numbers of times slices provided")
 
         super().__init__()
-        self.inputDimPerTimeSlice = inputDimPerTimeSlice
-        self.timeSeriesDimPerTimeSlice = outputDimPerTimeSlice
-        self.totalOutputDim = self.timeSeriesDimPerTimeSlice * numOutputTimeSlices
-        self.numOutputTimeSlices = numOutputTimeSlices
-        self.window = numInputTimeSlices
-        self.hidRNN = hidRNN
-        self.numConv = numConvolutions
-        self.hidSkip = hidSkip
-        self.Ck = numCnnTimeSlices  # the "height" of the CNN filter/kernel; the "width" being inputDimPerTimeSlice
+        self.inputDimPerTimeSlice = input_dim_per_time_slice
+        self.timeSeriesDimPerTimeSlice = output_dim_per_time_slice
+        self.totalOutputDim = self.timeSeriesDimPerTimeSlice * num_output_time_slices
+        self.numOutputTimeSlices = num_output_time_slices
+        self.window = num_input_time_slices
+        self.hidRNN = hid_rnn
+        self.numConv = num_convolutions
+        self.hidSkip = hid_skip
+        self.Ck = num_cnn_time_slices  # the "height" of the CNN filter/kernel; the "width" being inputDimPerTimeSlice
         self.convSeqLength = self.window - self.Ck + 1  # the length of the output sequence produced by the CNN for each kernel matrix
         self.skip = skip
-        self.hw = hwWindow
+        self.hw = hw_window
         self.pDropout = dropout
-        self.isClassification = isClassification
+        self.mode = mode
 
         # configure CNN-RNN path
         if self.numConv > 0:
@@ -106,16 +128,31 @@ class LSTNetwork(MCDropoutCapableNNModule):
         if self.hw > 0:
             # direct mapping from all inputs to all outputs
             self.highway = nn.Linear(self.hw * self.inputDimPerTimeSlice, self.totalOutputDim)
-            if hwCombine == 'plus':
+            if hw_combine == 'plus':
                 self.highwayCombine = self._plus
-            elif hwCombine == 'product':
+            elif hw_combine == 'product':
                 self.highwayCombine = self._product
-            elif hwCombine == 'bilinear':
+            elif hw_combine == 'bilinear':
                 self.highwayCombine = nn.Bilinear(self.totalOutputDim, self.totalOutputDim, self.totalOutputDim)
             else:
-                raise ValueError("Unknown highway combination function '%s'" % hwCombine)
+                raise ValueError("Unknown highway combination function '%s'" % hw_combine)
 
-        self.output = ActivationFunction.torch_function_from_any(outputActivation)
+        self.output = ActivationFunction.torch_function_from_any(output_activation)
+
+    def __setstate__(self, state):
+        if "isClassification" in state:
+            state["mode"] = self.Mode.CLASSIFICATION if state["isClassification"] else self.Mode.REGRESSION
+        setstate(LSTNetwork, self, state, removed_properties=["isClassification"])
+
+    @staticmethod
+    def compute_encoder_dim(hid_rnn: int, skip: int, hid_skip: int) -> int:
+        return hid_rnn + skip * hid_skip
+
+    def get_encoder_dim(self):
+        """
+        :return: the vector dimension that is output for the case where mode=ENCODER
+        """
+        return self.compute_encoder_dim(self.hidRNN, self.skip, self.hidSkip)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -160,6 +197,9 @@ class LSTNetwork(MCDropoutCapableNNModule):
                 s = dropout(s)
                 r = torch.cat((r, s), 1)  # (batch_size, hidR + skip * hidS)
 
+            if self.mode == self.Mode.ENCODER:
+                return r
+
             res = self.linear1(r)  # (batch_size, totalOutputDim)
 
         # auto-regressive highway model
@@ -176,7 +216,7 @@ class LSTNetwork(MCDropoutCapableNNModule):
             res = self.output(res)
 
         res = res.view(batch_size, self.numOutputTimeSlices, self.timeSeriesDimPerTimeSlice)
-        if self.isClassification:
+        if self.mode == self.Mode.CLASSIFICATION:
             res = res.permute(0, 2, 1)
         return res
 
