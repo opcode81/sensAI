@@ -492,7 +492,7 @@ class ModelEvaluation(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidato
         :param subtitle_prefix: a prefix to add to the subtitle (which itself is the model name)
         :param tracking_context: the experiment tracking context
         """
-        if not show_plots and result_writer is None:
+        if not show_plots and result_writer is None and tracking_context is None:
             return
         result_collector = EvaluationResultCollector(show_plots=show_plots, result_writer=result_writer,
             tracking_context=tracking_context)

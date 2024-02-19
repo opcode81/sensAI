@@ -15,7 +15,9 @@
 
 ### Fixes
 
-* `TagBuilder`: Fix return value of `with_component`  
+* `TagBuilder`: Fix return value of `with_component` 
+* `ModelEvaluation`: `create_plots` did not track plots with given tracking context
+   if `show_plots`=False and `result_writer`=None.
 
 ## v1.0.0 (2023-12-06) 
 
