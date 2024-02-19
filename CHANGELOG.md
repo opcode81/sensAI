@@ -12,12 +12,23 @@
   * `TorchVectorRegressionModel`: Add support for auto-regressive predictions
     by adding class `TorchAutoregressiveResultHandler` and method 
     `with_autogressive_result_handler`
+* `data`:
+  * Add `DataFrameSplitterColumnEquivalenceClass`, which splits a data frame
+    based on equivalence classes of a given column
+* `evaluation`:
+  * `ModelEvaluation` (and derived classes): Support direct specification of the test data  
+    (previously only indirect specification via a splitter was supported)
+
+#### Breaking Changes
+
+* `GridSearch`: Change return value to a result object for convenient retrieval
 
 ### Fixes
 
 * `TagBuilder`: Fix return value of `with_component` 
 * `ModelEvaluation`: `create_plots` did not track plots with given tracking context
-   if `show_plots`=False and `result_writer`=None.
+   if `show_plots`=False and `result_writer`=None. 
+* `ParametersMetricsCollection`: `csv_path` could not be None 
 
 ## v1.0.0 (2023-12-06) 
 

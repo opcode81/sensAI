@@ -1,4 +1,5 @@
 import logging
+import random
 from abc import ABC, abstractmethod
 from typing import Tuple, Sequence, TypeVar, Generic
 
@@ -221,3 +222,46 @@ class DataFrameSplitterFractional(DataFrameSplitter):
         indices_a = indices[:size_a]
         indices_b = indices[size_a:]
         return indices_a, indices_b
+
+
+class DataFrameSplitterColumnEquivalenceClass(DataFrameSplitter):
+    """
+    Performs a split that keeps together data points/rows that have the same value in a given column, i.e.
+    with respect to that column, the items having the same values are viewed as a unit; they form an equivalence class, and all
+    data points belonging to the same class are either in the first set or the second set.
+
+    The split is performed at the level of unique items in the column, i.e. the given fraction of equivalence
+    classes will end up in the first set and the rest in the second set.
+
+    The list if unique items in the column can be shuffled before applying the split. If no shuffling is applied,
+    the original order in the data frame is maintained, and if the items were grouped by equivalence class in the
+    original data frame, the split will correspond to a fractional split without shuffling where the split boundary
+    is adjusted to not separate an equivalence class.
+    """
+    def __init__(self, column: str, shuffle=True, random_seed=42):
+        """
+        :param column: the column which defines the equivalence classes (groups of data points/rows that must not be separated)
+        :param shuffle: whether to shuffle the list of unique values in the given column before applying the split
+        :param random_seed:
+        """
+        self.column = column
+        self.shuffle = shuffle
+        self.random_seed = random_seed
+
+    def compute_split_indices(self, df: pd.DataFrame, fractional_size_of_first_set: float) -> Tuple[Sequence[int], Sequence[int]]:
+        values = list(df[self.column].unique())
+        if self.shuffle:
+            rng = random.Random(self.random_seed)
+            rng.shuffle(values)
+
+        num_items_in_first_set = round(fractional_size_of_first_set * len(values))
+        first_set_values = set(values[:num_items_in_first_set])
+
+        first_set_indices = []
+        second_set_indices = []
+        for i, t in enumerate(df.itertuples()):
+            if getattr(t, self.column) in first_set_values:
+                first_set_indices.append(i)
+            else:
+                second_set_indices.append(i)
+        return first_set_indices, second_set_indices
