@@ -4,6 +4,16 @@
 
 ### Improvements/Changes
 
+TBD
+
+### Fixes
+
+TBD
+
+## v1.1.0 (2024-02-19)
+
+### Improvements/Changes
+
 * `vectoriser`:
   * `SequenceVectoriser`: 
     * Allow to inject a sequence item identifier provider
