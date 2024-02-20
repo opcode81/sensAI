@@ -403,7 +403,7 @@ class SAHyperOpt(TrackingMixin):
     log = log.getChild(__qualname__)
 
     class State(SAState):
-        def __init__(self, params, random_state: Random, results: Dict, compute_metric: Callable[[Dict[str, Any]], float]):
+        def __init__(self, params: Dict[str, Any], random_state: Random, results: Dict, compute_metric: Callable[[Dict[str, Any]], float]):
             self.compute_metric = compute_metric
             self.results = results
             self.params = dict(params)
@@ -445,13 +445,13 @@ class SAHyperOpt(TrackingMixin):
             ops_and_weights: List[Tuple[Callable[['SAHyperOpt.State'], 'SAHyperOpt.ParameterChangeOperator'], float]],
             initial_parameters: Dict[str, Any],
             metrics_evaluator: MetricsDictProvider,
-            metric_to_optimise,
-            minimise_metric=False,
-            collect_data_frame=True,
+            metric_to_optimise: str,
+            minimise_metric: bool = False,
+            collect_data_frame: bool = True,
             csv_results_path: Optional[str] = None,
             parameter_combination_equivalence_class_value_cache: ParameterCombinationEquivalenceClassValueCache = None,
-            p0=0.5,
-            p1=0.0):
+            p0: float = 0.5,
+            p1: float = 0.0):
         """
         :param model_factory: a factory for the generation of models which is called with the current parameter combination
             (all keyword arguments), initially initialParameters
@@ -521,7 +521,7 @@ class SAHyperOpt(TrackingMixin):
                 parameter_combination_equivalence_class_value_cache.set(params, metrics)
         return metrics
 
-    def _compute_metric(self, params):
+    def _compute_metric(self, params: Dict[str, Any]):
         metrics = self._eval_params(self.model_factory, self.evaluator_or_validator, self.parameters_metrics_collection,
             self.parameter_combination_equivalence_class_value_cache, self.tracked_experiment, **params)
         metric_value = metrics[self.metric_to_optimise]
@@ -529,7 +529,7 @@ class SAHyperOpt(TrackingMixin):
             return -metric_value
         return metric_value
 
-    def run(self, max_steps=None, duration=None, random_seed=42, collect_stats=True):
+    def run(self, max_steps: Optional[int] = None, duration: Optional[float] = None, random_seed: int = 42, collect_stats: bool = True):
         sa = SimulatedAnnealing(lambda: SAProbabilitySchedule(None, SAProbabilityFunctionLinear(p0=self.p0, p1=self.p1)),
             self.ops_and_weights, max_steps=max_steps, duration=duration, random_seed=random_seed, collect_stats=collect_stats)
         results = {}
