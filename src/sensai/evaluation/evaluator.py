@@ -266,7 +266,7 @@ class RegressionEvaluatorParams(EvaluatorParams):
             fractional split of the data
         :param fractional_split_shuffle: [if dataSplitter is None, test data must be obtained via split] whether to randomly (based on
             randomSeed) shuffle the dataset before splitting it
-
+        :param metrics: regression metrics to apply. If None, default regression metrics are used.
         :param additional_metrics: additional regression metrics to apply
         :param output_data_frame_transformer: a data frame transformer to apply to all output data frames (both model outputs and ground
             truth), such that evaluation metrics are computed on the transformed data frame

@@ -17,7 +17,7 @@ class FeatureGeneratorRegistry:
     """
     Represents a registry for (named) feature generator factories
     """
-    def __init__(self, use_singletons=False):
+    def __init__(self, use_singletons: bool = False):
         """
         :param use_singletons: if True, internally maintain feature generator singletons, such that there is at most one
             instance for each name/key
@@ -50,7 +50,7 @@ class FeatureGeneratorRegistry:
             raise ValueError(f"Generator for name '{name}' already registered")
         self._feature_generator_factories[name] = factory
 
-    def get_feature_generator(self, name) -> FeatureGenerator:
+    def get_feature_generator(self, name: str) -> FeatureGenerator:
         """
         Creates a feature generator from a name, which must have been previously registered.
         The name of the returned feature generator (as returned by getName()) is set to name.
