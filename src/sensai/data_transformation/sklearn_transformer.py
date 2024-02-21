@@ -30,7 +30,7 @@ class SkLearnTransformerProtocol(Protocol):
         pass
 
 
-class ManualScaler:
+class ManualScaler(SkLearnTransformerProtocol):
     """
     A scaler whose parameters are not learnt from data but manually defined
     """
