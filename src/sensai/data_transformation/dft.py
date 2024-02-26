@@ -491,6 +491,8 @@ class DFTNormalisation(DataFrameTransformer):
     DFTNormalisation ignores N/A values during fitting and application.
     """
 
+    # TODO: better explanation of independentColumns mechanism
+
     class RuleTemplate:
         def __init__(self,
                 skip=False,
@@ -510,28 +512,32 @@ class DFTNormalisation(DataFrameTransformer):
                     * a default transformer factory is specified in the :class:`DFTNormalisation` instance and its application
                       is suitable for the relevant set of features.
                       Otherwise, specify either ``transformer_factory`` or ``transformer``.
-                    * all relevant features are to be normalised in the same way.
-                      Otherwise, specify ``independent_columns=True``.
+                    * the resulting rule will match only a single column. Otherwise, ``independent_columns``
+                      must be specified to True or False.
 
             :param skip: flag indicating whether no transformation shall be performed on all of the columns (because they are already
                 normalised)
             :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if
                 attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+            :param transformer: a transformer instance (following the sklearn.preprocessing interface, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either
-                transformerFactory or the containing instance's default factory will be used.
-                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
-                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+                transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
+                fitted.
+                NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
+                same transformer instance to be used in multiple places - e.g., sharing it across several models that use the same
+                column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
-                `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing instance's default
+                `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
-            :param independent_columns: whether, for the case where the rule matches multiple columns, the columns are independent and a
-                separate transformation is to be learned for each of them (rather than using the same transformation for all columns and
-                learning the transformation from the data of all columns); must be specified for rules matching more than one column,
-                None is acceptable only for a single column
+            :param independent_columns: only relevant if the resulting rule matches multiple columns, in which case it is required.
+                If True, the columns are treated independent and a separate transformation is to be learned for each of them. Note that
+                this doesn't mean each column will get a separate transformer instance! Rather, the transformer will be fitted
+                on the array resulting from selecting the matched columns.
+                If False, all matching columns are treated as a single feature for the purpose of normalisation.
+                Thus, all columns will be concatenated before fitting the transformer.
             """
             if (skip or unsupported) and count_not_none(transformer, transformer_factory) > 0:
-                raise ValueError("Passed transformer or transformerFactory while skip=True or unsupported=True")
+                raise ValueError("Passed transformer or transformer_factory while skip=True or unsupported=True")
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
@@ -569,24 +575,26 @@ class DFTNormalisation(DataFrameTransformer):
             :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
             :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception
                 if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+            :param transformer: a transformer instance (following the sklearn.preprocessing interface, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either
-                transformerFactory or the containing instance's default factory will be used.
-                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
-                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+                transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
+                fitted.
+                NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
+                same transformer instance to be used in multiple places - e.g., sharing it across several models that use the same
+                column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
-                `transformer` is not given. If neither `transformer` nor `transformer_factory` are given, the containing instance's default
+                `transformer` is not given. If neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
             :param array_valued: whether the column values are not scalars but arrays (of arbitrary lengths).
                 It is assumed that all entries in such arrays are to be normalised in the same way.
                 If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
             :param fit: whether the rule's transformer shall be fitted
-            :param independent_columns: handles what should happen if the rule matches multiple columns. If that happens,
-                this param must be specified to True or False (with None an error will be raised during normalisation).
-                In that case, if True, a separate transformation will be learned for each of the columns.
-                If False, a single transformation will be learned from and applied to all matching columns.
-                For rules matching a single column,
-                the value of this parameter is irrelevant (and None is acceptable).
+            :param independent_columns: only relevant if the rule matches multiple columns, in which case it is required.
+                If True, the columns are treated independent and a separate transformation is to be learned for each of them. Note that
+                this doesn't mean each column will get a separate transformer instance! Rather, the transformer will be fitted
+                on the array resulting from selecting the matched columns.
+                If False, all matching columns are treated as a single feature for the purpose of normalisation.
+                Thus, all columns will be concatenated before fitting the transformer.
             """
             if skip and (transformer is not None or transformer_factory is not None):
                 raise ValueError("skip==True while transformer/transformerFactory is not None")
