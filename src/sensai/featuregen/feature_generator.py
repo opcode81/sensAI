@@ -115,7 +115,7 @@ class FeatureGenerator(ToStringMixin, ABC):
     def set_name(self, name: str) -> None:
         self._name = name
 
-    def get_names(self) -> list[str]:
+    def get_names(self) -> List[str]:
         """
         :return: the list of names of feature generators; will be a list with a single name for a regular feature generator
         """
