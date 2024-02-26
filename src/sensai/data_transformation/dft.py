@@ -491,8 +491,6 @@ class DFTNormalisation(DataFrameTransformer):
     DFTNormalisation ignores N/A values during fitting and application.
     """
 
-    # TODO: better explanation of independentColumns mechanism
-
     class RuleTemplate:
         def __init__(self,
                 skip=False,
@@ -515,9 +513,9 @@ class DFTNormalisation(DataFrameTransformer):
                     * the resulting rule will match only a single column. Otherwise, ``independent_columns``
                       must be specified to True or False.
 
-            :param skip: flag indicating whether no transformation shall be performed on all of the columns (because they are already
+            :param skip: flag indicating whether no transformation shall be performed on matched columns (because they are already
                 normalised)
-            :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if
+            :param unsupported: flag indicating whether normalisation of matched columns is unsupported (shall trigger an exception if
                 attempted)
             :param transformer: a transformer instance (following the sklearn.preprocessing interface, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either
@@ -596,8 +594,8 @@ class DFTNormalisation(DataFrameTransformer):
                 If False, all matching columns are treated as a single feature for the purpose of normalisation.
                 Thus, all columns will be concatenated before fitting the transformer.
             """
-            if skip and (transformer is not None or transformer_factory is not None):
-                raise ValueError("skip==True while transformer/transformerFactory is not None")
+            if (skip or unsupported) and count_not_none(transformer, transformer_factory) > 0:
+                raise ValueError("Passed transformer or transformer_factory while skip=True or unsupported=True")
             self.regex = re.compile(regex) if regex is not None else None
             self.skip = skip
             self.unsupported = unsupported
