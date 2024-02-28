@@ -112,6 +112,10 @@ class RegressionMetricMedianAE(RegressionMetric):
         return np.median(cls.compute_abs_errors(y_true, y_predicted))
 
 
+DEFAULT_REGRESSION_METRICS = (RegressionMetricRRSE(), RegressionMetricR2(), RegressionMetricMAE(),
+        RegressionMetricMSE(), RegressionMetricRMSE(), RegressionMetricStdDevAE())
+
+
 class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     """
     Collects data for the evaluation of predicted continuous values and computes corresponding metrics
@@ -126,21 +130,19 @@ class RegressionEvalStats(PredictionEvalStats["RegressionMetric"]):
     SCATTER_PLOT_POINT_COLOR = (0, 0, 1, 0.05)
 
     def __init__(self, y_predicted: Optional[PredictionArray] = None, y_true: Optional[PredictionArray] = None,
-            metrics: Sequence["RegressionMetric"] = None, additional_metrics: Sequence["RegressionMetric"] = None,
+            metrics: Optional[Sequence["RegressionMetric"]] = None, additional_metrics: Sequence["RegressionMetric"] = None,
             model: VectorRegressionModel = None, io_data: InputOutputData = None):
         """
         :param y_predicted: the predicted values
         :param y_true: the true values
-        :param metrics: the metrics to compute for evaluation; if None, use default metrics
+        :param metrics: the metrics to compute for evaluation; if None, will use DEFAULT_REGRESSION_METRICS
         :param additional_metrics: the metrics to additionally compute
         """
         self.model = model
         self.ioData = io_data
 
         if metrics is None:
-            metrics = [RegressionMetricRRSE(), RegressionMetricR2(),
-                       RegressionMetricMAE(), RegressionMetricMSE(), RegressionMetricRMSE(),
-                       RegressionMetricStdDevAE()]
+            metrics = DEFAULT_REGRESSION_METRICS
         metrics = list(metrics)
 
         super().__init__(y_predicted, y_true, metrics, additional_metrics=additional_metrics)
