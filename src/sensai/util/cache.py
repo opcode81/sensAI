@@ -570,8 +570,8 @@ class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
     Represents a value provider that can provide values associated with (hashable) keys via a cache or, if
     cached values are not yet present, by computing them.
     """
-    def __init__(self, cache: Optional[PersistentKeyValueCache[TKey, TValue]] = None,
-            cache_factory: Optional[Callable[[], PersistentKeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
+    def __init__(self, cache: Optional[KeyValueCache[TKey, TValue]] = None,
+            cache_factory: Optional[Callable[[], KeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
         """
         :param cache: the cache to use or None. If None, caching will be disabled
         :param cache_factory: a factory with which to create the cache (or recreate it after unpickling if `persistCache` is False, in which

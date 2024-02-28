@@ -343,7 +343,7 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
             neighbor_attributes: typing.List[str],
             distance_metric: DistanceMetric,
             neighbor_provider_factory: typing.Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
-            cache: util.cache.PersistentKeyValueCache = None,
+            cache: util.cache.KeyValueCache = None,
             categorical_feature_names: typing.Sequence[str] = (),
             normalisation_rules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         """

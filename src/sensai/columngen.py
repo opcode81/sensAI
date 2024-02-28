@@ -7,7 +7,7 @@ import pandas as pd
 
 from .data_transformation import DFTNormalisation
 from .featuregen import FeatureGeneratorFromColumnGenerator
-from .util.cache import PersistentKeyValueCache
+from .util.cache import KeyValueCache
 
 
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class IndexCachedColumnGenerator(ColumnGenerator):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, column_generator: ColumnGenerator, cache: PersistentKeyValueCache):
+    def __init__(self, column_generator: ColumnGenerator, cache: KeyValueCache):
         """
         :param column_generator: the column generator with which to generate values for keys not found in the cache
         :param cache: the cache in which to store key-value pairs
@@ -114,7 +114,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, generated_column_name: str, cache: Optional[PersistentKeyValueCache], persist_cache=False):
+    def __init__(self, generated_column_name: str, cache: Optional[KeyValueCache], persist_cache=False):
         """
         :param generated_column_name: the name of the column being generated
         :param cache: the cache in which to store key-value pairs. If None, caching will be disabled
