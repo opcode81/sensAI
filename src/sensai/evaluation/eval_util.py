@@ -577,7 +577,7 @@ class MultiDataModelEvaluation:
             meta_data_dict: Optional[Dict[str, Dict[str, Any]]] = None,
             evaluator_params: Optional[Union[RegressionEvaluatorParams, ClassificationEvaluatorParams, Dict[str, Any]]] = None,
             cross_validator_params: Optional[Union[VectorModelCrossValidatorParams, Dict[str, Any]]] = None,
-            test_io_data_dict: Optional[Dict[str, InputOutputData | None]] = None):
+            test_io_data_dict: Optional[Dict[str, Optional[InputOutputData]]] = None):
         """
         :param io_data_dict: a dictionary mapping from names to the data sets with which to evaluate models.
             For evaluation or cross-validation, these datasets will usually be split according to the rules
