@@ -92,7 +92,7 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache[Tuple[Union[str, int],
         except KeyError:
             return None
         result = self.distance_df.iloc[pos1, pos2]
-        if result is None or np.isnan(result):
+        if np.isnan(result):
             return None
         return result
 
