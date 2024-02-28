@@ -5,6 +5,8 @@ from typing import Any, Union, Optional
 import numpy as np
 import pandas as pd
 
+from .data_transformation import DFTNormalisation
+from .featuregen import FeatureGeneratorFromColumnGenerator
 from .util.cache import PersistentKeyValueCache
 
 
@@ -44,6 +46,26 @@ class ColumnGenerator:
         :return: a list/array of the same length as df or a series with the same index
         """
         pass
+
+    def to_feature_generator(self,
+            take_input_column_if_present: bool = False,
+            normalisation_rule_template: DFTNormalisation.RuleTemplate = None,
+            is_categorical: bool = False):
+        """
+        Transforms this column generator into a feature generator that can be used as part of a VectorModel.
+
+        :param take_input_column_if_present: if True, then if a column whose name corresponds to the column to generate exists
+            in the input data, simply copy it to generate the output (without using the column generator); if False, always
+            apply the columnGen to generate the output
+        :param is_categorical: whether the resulting column is categorical
+        :param normalisation_rule_template: template for a DFTNormalisation for the resulting column.
+            This should only be provided if is_categorical is False
+        :return:
+        """
+        return FeatureGeneratorFromColumnGenerator(self,
+            take_input_column_if_present=take_input_column_if_present,
+            normalisation_rule_template=normalisation_rule_template,
+            is_categorical=is_categorical)
 
 
 class IndexCachedColumnGenerator(ColumnGenerator):
