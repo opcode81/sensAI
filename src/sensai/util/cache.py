@@ -32,7 +32,7 @@ class BoxedValue(Generic[TValue]):
         self.value = value
 
 
-class PersistentKeyValueCache(Generic[TKey, TValue], ABC):
+class KeyValueCache(Generic[TKey, TValue], ABC):
     @abstractmethod
     def set(self, key: TKey, value: TValue):
         """
@@ -53,6 +53,40 @@ class PersistentKeyValueCache(Generic[TKey, TValue], ABC):
         :return: the cached value or None if no value is found
         """
         pass
+
+
+class InMemoryKeyValueCache(KeyValueCache[TKey, TValue], Generic[TKey, TValue]):
+    """A simple in-memory cache (which uses a dictionary internally).
+
+    This class can be instantiated directly, but for better typing support, one can instead
+    inherit from it and provide the types of the key and value as type arguments. For example for
+    a cache with string keys and integer values:
+
+    .. code-block:: python
+
+        class MyCache(InMemoryKeyValueCache[str, int]):
+            pass
+    """
+    def __init__(self):
+        self.cache = {}
+
+    def set(self, key: TKey, value: TValue):
+        self.cache[key] = value
+
+    def get(self, key: TKey) -> Optional[TValue]:
+        return self.cache.get(key)
+
+    def empty(self):
+        self.cache = {}
+
+    def __len__(self):
+        return len(self.cache)
+
+
+
+# mainly kept as a marker and for backwards compatibility, but may be extended in the future
+class PersistentKeyValueCache(KeyValueCache[TKey, TValue], Generic[TKey, TValue], ABC):
+    pass
 
 
 class PersistentList(Generic[TValue], ABC):
@@ -536,8 +570,8 @@ class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
     Represents a value provider that can provide values associated with (hashable) keys via a cache or, if
     cached values are not yet present, by computing them.
     """
-    def __init__(self, cache: Optional[PersistentKeyValueCache[TKey, TValue]] = None,
-            cache_factory: Optional[Callable[[], PersistentKeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
+    def __init__(self, cache: Optional[KeyValueCache[TKey, TValue]] = None,
+            cache_factory: Optional[Callable[[], KeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
         """
         :param cache: the cache to use or None. If None, caching will be disabled
         :param cache_factory: a factory with which to create the cache (or recreate it after unpickling if `persistCache` is False, in which

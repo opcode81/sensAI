@@ -326,6 +326,15 @@ class BinaryClassificationMetricRecallThreshold(BinaryClassificationMetric):
         return f if f is not None else self.zero_value
 
 
+DEFAULT_MULTICLASS_CLASSIFICATION_METRICS = (ClassificationMetricAccuracy(), ClassificationMetricBalancedAccuracy(),
+                                             ClassificationMetricGeometricMeanOfTrueClassProbability())
+
+
+def create_default_binary_classification_metrics(positive_class_label: Any) -> List[BinaryClassificationMetric]:
+    return [BinaryClassificationMetricPrecision(positive_class_label), BinaryClassificationMetricRecall(positive_class_label),
+            BinaryClassificationMetricF1Score(positive_class_label)]
+
+
 class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def __init__(self, y_predicted: Optional[PredictionArray] = None,
             y_true: Optional[PredictionArray] = None,
@@ -340,6 +349,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         :param y_predicted_class_probabilities: a data frame whose columns are the class labels and whose values are probabilities
         :param labels: the list of class labels
         :param metrics: the metrics to compute for evaluation; if None, use default metrics
+            (see DEFAULT_MULTICLASS_CLASSIFICATION_METRICS and :func:`create_default_binary_classification_metrics`)
         :param additional_metrics: the metrics to additionally compute
         :param binary_positive_label: the label of the positive class for the case where it is a binary classification, adding further
             binary metrics by default;
@@ -381,13 +391,9 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
         self.is_binary = binary_positive_label is not None
 
         if metrics is None:
-            metrics = [ClassificationMetricAccuracy(), ClassificationMetricBalancedAccuracy(),
-                ClassificationMetricGeometricMeanOfTrueClassProbability()]
+            metrics = list(DEFAULT_MULTICLASS_CLASSIFICATION_METRICS)
             if self.is_binary:
-                metrics.extend([
-                    BinaryClassificationMetricPrecision(self.binary_positive_label),
-                    BinaryClassificationMetricRecall(self.binary_positive_label),
-                    BinaryClassificationMetricF1Score(self.binary_positive_label)])
+                metrics.extend(create_default_binary_classification_metrics(self.binary_positive_label))
 
         metrics = list(metrics)
         if additional_metrics is not None:

@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from .. import util, data_transformation
-from ..columngen import ColumnGenerator
 from ..data_transformation import DFTNormalisation, DFTFromFeatureGenerator, DataFrameTransformer
 from ..util import flatten_arguments
 from ..util.string import or_regex_group, ToStringMixin, list_string
@@ -16,6 +15,8 @@ from ..util.typing import PandasNamedTuple
 
 if TYPE_CHECKING:
     from ..vector_model import VectorModel
+    from ..columngen import ColumnGenerator
+
 
 log = logging.getLogger(__name__)
 
@@ -392,7 +393,7 @@ class FeatureGeneratorFromNamedTuples(FeatureGenerator, ABC):
     Generates feature values for one data point at a time, creating a dictionary with
     feature values from each named tuple
     """
-    def __init__(self, cache: util.cache.PersistentKeyValueCache = None, categorical_feature_names: Sequence[str] = (),
+    def __init__(self, cache: util.cache.KeyValueCache = None, categorical_feature_names: Sequence[str] = (),
                  normalisation_rules: Sequence[data_transformation.DFTNormalisation.Rule] = (),
                  normalisation_rule_template: data_transformation.DFTNormalisation.RuleTemplate = None):
         super().__init__(categorical_feature_names=categorical_feature_names, normalisation_rules=normalisation_rules,
@@ -532,7 +533,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
     """
     log = log.getChild(__qualname__)
 
-    def __init__(self, column_gen: ColumnGenerator, take_input_column_if_present=False, is_categorical=False,
+    def __init__(self, column_gen: 'ColumnGenerator', take_input_column_if_present=False, is_categorical=False,
             normalisation_rule_template: data_transformation.DFTNormalisation.RuleTemplate = None):
         """
         :param column_gen: the underlying column generator
@@ -541,7 +542,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
             apply the columnGen to generate the output
         :param is_categorical: whether the resulting column is categorical
         :param normalisation_rule_template: template for a DFTNormalisation for the resulting column.
-            This should only be provided if isCategorical is False
+            This should only be provided if is_categorical is False
         """
         if is_categorical and normalisation_rule_template is not None:
             raise ValueError(f"normalisationRuleTemplate should be None when the generated column is categorical")

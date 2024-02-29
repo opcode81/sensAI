@@ -10,7 +10,6 @@ import sklearn
 from sklearn.preprocessing import OneHotEncoder
 
 from .sklearn_transformer import SkLearnTransformerProtocol
-from ..columngen import ColumnGenerator
 from ..util import flatten_arguments, count_not_none
 from ..util.pandas import DataFrameColumnChangeTracker
 from ..util.pickle import setstate
@@ -22,6 +21,8 @@ from ..util.version import Version
 
 if TYPE_CHECKING:
     from ..featuregen import FeatureGenerator
+    from ..columngen import ColumnGenerator
+
 
 log = logging.getLogger(__name__)
 
@@ -749,7 +750,7 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
     """
     Extends a data frame with columns generated from ColumnGenerator instances
     """
-    def __init__(self, column_generators: Sequence[ColumnGenerator], inplace=False):
+    def __init__(self, column_generators: Sequence['ColumnGenerator'], inplace=False):
         super().__init__()
         self.columnGenerators = column_generators
         self.inplace = inplace

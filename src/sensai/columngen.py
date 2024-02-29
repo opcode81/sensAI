@@ -5,7 +5,9 @@ from typing import Any, Union, Optional
 import numpy as np
 import pandas as pd
 
-from .util.cache import PersistentKeyValueCache
+from .data_transformation import DFTNormalisation
+from .featuregen import FeatureGeneratorFromColumnGenerator
+from .util.cache import KeyValueCache
 
 
 log = logging.getLogger(__name__)
@@ -45,6 +47,26 @@ class ColumnGenerator:
         """
         pass
 
+    def to_feature_generator(self,
+            take_input_column_if_present: bool = False,
+            normalisation_rule_template: DFTNormalisation.RuleTemplate = None,
+            is_categorical: bool = False):
+        """
+        Transforms this column generator into a feature generator that can be used as part of a VectorModel.
+
+        :param take_input_column_if_present: if True, then if a column whose name corresponds to the column to generate exists
+            in the input data, simply copy it to generate the output (without using the column generator); if False, always
+            apply the columnGen to generate the output
+        :param is_categorical: whether the resulting column is categorical
+        :param normalisation_rule_template: template for a DFTNormalisation for the resulting column.
+            This should only be provided if is_categorical is False
+        :return:
+        """
+        return FeatureGeneratorFromColumnGenerator(self,
+            take_input_column_if_present=take_input_column_if_present,
+            normalisation_rule_template=normalisation_rule_template,
+            is_categorical=is_categorical)
+
 
 class IndexCachedColumnGenerator(ColumnGenerator):
     """
@@ -57,7 +79,7 @@ class IndexCachedColumnGenerator(ColumnGenerator):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, column_generator: ColumnGenerator, cache: PersistentKeyValueCache):
+    def __init__(self, column_generator: ColumnGenerator, cache: KeyValueCache):
         """
         :param column_generator: the column generator with which to generate values for keys not found in the cache
         :param cache: the cache in which to store key-value pairs
@@ -92,7 +114,7 @@ class ColumnGeneratorCachedByIndex(ColumnGenerator, ABC):
 
     log = log.getChild(__qualname__)
 
-    def __init__(self, generated_column_name: str, cache: Optional[PersistentKeyValueCache], persist_cache=False):
+    def __init__(self, generated_column_name: str, cache: Optional[KeyValueCache], persist_cache=False):
         """
         :param generated_column_name: the name of the column being generated
         :param cache: the cache in which to store key-value pairs. If None, caching will be disabled
