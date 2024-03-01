@@ -557,6 +557,9 @@ class DFTNormalisation(DataFrameTransformer):
             self.arrayValued = array_valued
             self.fit = fit
 
+        def __setstate__(self, state):
+            setstate(DFTNormalisation.RuleTemplate, self, state, new_default_properties=dict(arrayValued=False, fit=True))
+
         def to_rule(self, regex: Optional[Union[str, re.Pattern]]):
             """
             Convert the template to a rule for all columns matching the regex
