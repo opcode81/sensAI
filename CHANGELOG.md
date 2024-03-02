@@ -7,6 +7,8 @@
 * `utils.cache`:
   * Add new base class `KeyValueCache` alongside `PersistentKeyValueCache`
   * Add `InMemoryKeyValueCache`
+  * Implement `PickleCached` via nested functions instead of a class to improve IDE support 
+    and rename to `pickle_cached`, keeping old name as alias
 * `columngen`:
   * `ColumnGenerator`: add method `to_feature_generator`
 * `evaluation`:
