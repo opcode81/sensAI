@@ -299,7 +299,7 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         self.knn_finder = None
 
     def _tostring_excludes(self) -> List[str]:
-        return super()._tostring_excludes() + ["neighborProviderFactory", "distanceMetric", "distanceMetricCache", "df", "y"]
+        return super()._tostring_excludes() + ["neighbor_provider_factory", "distance_metric", "distance_metric_cache", "df", "y"]
 
     # noinspection DuplicatedCode
     def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
