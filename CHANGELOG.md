@@ -4,7 +4,7 @@
 
 ### Improvements/Changes
 
-* `utils.cache`:
+* `util.cache`:
   * Add new base class `KeyValueCache` alongside `PersistentKeyValueCache`
   * Add `InMemoryKeyValueCache`
   * Implement `PickleCached` via nested functions instead of a class to improve IDE support 
@@ -15,6 +15,7 @@
   * `MultiDataEvaluationUtil`: Add option to supply test data (without using splitting)
 * `dft`:
   * `DFTNormalisation.RuleTemplate`: Add attributes `fit` and `array_valued`
+* `util.deprecation`: Apply `functools.wrap` to retain meta-data of wrapped function
 
 ### Fixes
 
