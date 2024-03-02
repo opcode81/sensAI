@@ -529,17 +529,17 @@ class DFTNormalisation(DataFrameTransformer):
                 transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
                 fitted.
                 NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
-                same transformer instance to be used in multiple places - e.g. sharing it across several models that use the same
-                column with associated rule/rule template (disabling `fit` where appropriate).
+                same transformer instance to be used in multiple places - e.g. sharing it across several feature generators or models that
+                use the same type of column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
                 `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
-            :param array_valued: only allowed if the rule matches a single column. If True, it expresses that
-                column values are not scalars but arrays (of arbitrary lengths).
-                It is then assumed that all entries in such arrays are to be normalised in the same way, i.e., the same
+            :param array_valued: whether the column values are not scalars but arrays (of some fixed but arbitrary length).
+                It is assumed that all entries in such arrays are to be normalised in the same way, i.e. the same
                 transformation will be applied to each entry in the array.
+                Only a single matching column is supported for array_valued=True, i.e. the rule must apply to at most one column.
             :param fit: whether the rule's transformer shall be fitted. One use case for setting this to False is
-                if a transformer instance instead of a factory is given and the transformer is already fitted.
+                if a transformer instance is provided (instead of a factory), which is already fitted.
             :param independent_columns: whether, for the case where the rule matches multiple columns, the columns are independent and a
                 separate transformation is to be learned for each of them (rather than using the same transformation for all columns and
                 learning the transformation from the data of all columns).
@@ -611,17 +611,17 @@ class DFTNormalisation(DataFrameTransformer):
                 transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
                 fitted.
                 NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
-                same transformer instance to be used in multiple places - e.g. sharing it across several models that use the same
-                column with associated rule/rule template (disabling `fit` where appropriate).
+                same transformer instance to be used in multiple places - e.g. sharing it across several feature generators or models that
+                use the same type of column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
                 `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
-            :param array_valued: only allowed if the rule matches a single column. If True, it expresses that
-                column values are not scalars but arrays (of arbitrary lengths).
-                It is then assumed that all entries in such arrays are to be normalised in the same way, i.e., the same
+            :param array_valued: whether the column values are not scalars but arrays (of some fixed but arbitrary length).
+                It is assumed that all entries in such arrays are to be normalised in the same way, i.e. the same
                 transformation will be applied to each entry in the array.
+                Only a single matching column is supported for array_valued=True, i.e. the regex must match at most one column.
             :param fit: whether the rule's transformer shall be fitted. One use case for setting this to False is
-                if a transformer instance instead of a factory is given and the transformer is already fitted.
+                if a transformer instance is provided (instead of a factory), which is already fitted.
             :param independent_columns: whether, for the case where the rule matches multiple columns, the columns are independent and a
                 separate transformation is to be learned for each of them (rather than using the same transformation for all columns and
                 learning the transformation from the data of all columns).
