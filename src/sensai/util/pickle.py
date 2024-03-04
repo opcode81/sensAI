@@ -2,11 +2,12 @@ import logging
 import os
 import pickle
 from pathlib import Path
-from typing import List, Dict, Any, Iterable, Union
+from typing import Any, Callable, Dict, Iterable, List, Union
 
+import cloudpickle
 import joblib
 
-from .io import is_s3_path, S3Object
+from .io import S3Object, is_s3_path
 
 log = logging.getLogger(__name__)
 
@@ -16,16 +17,21 @@ def load_pickle(path: Union[str, Path], backend="pickle"):
         path = str(path)
 
     def read_file(f):
-        if backend == "pickle":
+        def _load_with_error_log(loader: Callable):
             try:
-                return pickle.load(f)
-            except:
+                return loader(f)
+            except Exception as e:
                 log.error(f"Error loading {path}")
-                raise
+                raise e
+
+        if backend == "pickle":
+            return _load_with_error_log(pickle.load)
+        elif backend == "cloudpickle":
+            return _load_with_error_log(cloudpickle.load)
         elif backend == "joblib":
             return joblib.load(f)
         else:
-            raise ValueError(f"Unknown backend '{backend}'")
+            raise ValueError(f"Unknown backend '{backend}'. Supported backends are 'pickle', 'joblib' and 'cloudpickle'")
 
     if is_s3_path(path):
         return read_file(S3Object(path).open_file("rb"))
@@ -55,8 +61,10 @@ def dump_pickle(obj, pickle_path: Union[str, Path], backend="pickle", protocol=p
                 raise AttributeError(f"Cannot pickle paths {failing_paths} of {obj}: {str(e)}")
         elif backend == "joblib":
             joblib.dump(obj, f, protocol=protocol)
+        elif backend == "cloudpickle":
+            cloudpickle.dump(obj, f, protocol=protocol)
         else:
-            raise ValueError(f"Unknown backend '{backend}'")
+            raise ValueError(f"Unknown backend '{backend}'. Supported backends are 'pickle', 'joblib' and 'cloudpickle'")
 
 
 class PickleFailureDebugger:
@@ -76,7 +84,9 @@ class PickleFailureDebugger:
             pickle.dumps(obj)
         except:
             # determine dictionary of children to investigate (if any)
-            if hasattr(obj, '__dict__'):  # Because of strange behaviour of getstate, here try-except is used instead of if-else
+            if hasattr(
+                obj, '__dict__'
+            ):  # Because of strange behaviour of getstate, here try-except is used instead of if-else
                 try:  # Because of strange behaviour of getattr(_, '__getstate__'), we here use try-except
                     d = obj.__getstate__()
                     if type(d) != dict:
@@ -94,7 +104,9 @@ class PickleFailureDebugger:
             have_failed_child = False
             for key, child in d.items():
                 child_path = list(path) + [f"{key}[{child.__class__.__name__}]"]
-                have_failed_child = cls._debug_failure(child, child_path, failures, handled_object_ids) or have_failed_child
+                have_failed_child = cls._debug_failure(
+                    child, child_path, failures, handled_object_ids
+                ) or have_failed_child
 
             if not have_failed_child:
                 failures.append(path)
@@ -138,13 +150,15 @@ class PickleFailureDebugger:
                 log.info(f"{prefix}: is picklable")
 
 
-def setstate(cls,
-        obj,
-        state: Dict[str, Any],
-        renamed_properties: Dict[str, str] = None,
-        new_optional_properties: List[str] = None,
-        new_default_properties: Dict[str, Any] = None,
-        removed_properties: List[str] = None) -> None:
+def setstate(
+    cls,
+    obj,
+    state: Dict[str, Any],
+    renamed_properties: Dict[str, str] = None,
+    new_optional_properties: List[str] = None,
+    new_default_properties: Dict[str, Any] = None,
+    removed_properties: List[str] = None
+) -> None:
     """
     Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
     a parent class already implements __setstate__ and where it does not. Call this function whenever you would actually
@@ -185,12 +199,14 @@ def setstate(cls,
         obj.__dict__ = state
 
 
-def getstate(cls,
-        obj,
-        transient_properties: Iterable[str] = None,
-        excluded_properties: Iterable[str] = None,
-        override_properties: Dict[str, Any] = None,
-        excluded_default_properties: Dict[str, Any] = None) -> Dict[str, Any]:
+def getstate(
+    cls,
+    obj,
+    transient_properties: Iterable[str] = None,
+    excluded_properties: Iterable[str] = None,
+    override_properties: Dict[str, Any] = None,
+    excluded_default_properties: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
     Helper function for safe implementations of __getstate__ in classes, which appropriately handles the cases where
     a parent class already implements __getstate__ and where it does not. Call this function whenever you would actually

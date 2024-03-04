@@ -366,7 +366,7 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
 class ClassificationEvaluatorParams(EvaluatorParams):
     def __init__(self, data_splitter: DataSplitter = None, fractional_split_test_fraction: float = None, fractional_split_random_seed=42,
             fractional_split_shuffle=True, additional_metrics: Sequence[ClassificationMetric] = None,
-            compute_probabilities: bool = False, binary_positive_label=GUESS):
+            compute_probabilities: bool = False, binary_positive_label: Optional[str] = GUESS):
         """
         :param data_splitter: [if test data must be obtained via split] a splitter to use in order to obtain; if None, must specify
             fractionalSplitTestFraction for fractional split (default)

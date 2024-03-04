@@ -18,7 +18,7 @@ LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(m
 _logFormat = LOG_DEFAULT_FORMAT
 
 # User-configured callback which is called after logging is configured via function `configure`
-_configureCallback: Optional[Callable[[], None]] = None
+_configureCallbacks: List[Callable[[], None]] = []
 
 
 def remove_log_handlers():
@@ -38,17 +38,19 @@ def is_log_handler_active(handler):
     return handler in getLogger().handlers
 
 
-def set_configure_callback(callback: Callable[[], None]):
+def set_configure_callback(callback: Callable[[], None], append: bool = True) -> None:
     """
     Configures a function to be called when logging is configured, e.g. through :func:`configure, :func:`run_main` or
     :func:`run_cli`.
     A typical use for the callback is to configure the logging behaviour of packages, setting appropriate log levels.
 
-    :param callback: the function to cal
-    :return:
+    :param callback: the function to call
+    :param append: whether to append to the list of callbacks; if False, any existing callbacks will be removed
     """
-    global _configureCallback
-    _configureCallback = callback
+    global _configureCallbacks
+    if not append:
+        _configureCallbacks = []
+    _configureCallbacks.append(callback)
 
 
 # noinspection PyShadowingBuiltins
@@ -68,8 +70,8 @@ def configure(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     getLogger("urllib3").setLevel(lg.INFO)
     getLogger("msal").setLevel(lg.INFO)
     pd.set_option('display.max_colwidth', 255)
-    if _configureCallback:
-        _configureCallback()
+    for callback in _configureCallbacks:
+        callback()
 
 
 # noinspection PyShadowingBuiltins

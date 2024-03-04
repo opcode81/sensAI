@@ -659,7 +659,7 @@ class PickleCached(object):
     def __init__(self, cache_base_path: str, filename_prefix: str = None, filename: str = None, backend="pickle",
             protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None):
         """
-        :param cache_base_path: the directory where the pickle cache file will be stored
+        :param cache_base_path: the directory where the pickle cache file will be stored; if it does not exist, it will be created.
         :param filename_prefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
             a hash code of the function arguments will be appended and ".cache.pickle" will be appended; if None, use "" (if filename
             has not been provided)
@@ -670,6 +670,7 @@ class PickleCached(object):
         :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
         :param version: if not None, previously persisted data will only be returned if it was stored with the same version
         """
+        os.makedirs(cache_base_path, exist_ok=True)
         self.filename = filename
         self.cache_base_path = cache_base_path
         self.filename_prefix = filename_prefix
@@ -729,7 +730,7 @@ class PickleLoadSaveMixin(LoadSaveInterface):
         Saves the instance as pickle
 
         :param path:
-        :param backend: pickle or joblib
+        :param backend: pickle, cloudpickle, or joblib
         """
         dump_pickle(self, path, backend=backend)
 
@@ -739,7 +740,7 @@ class PickleLoadSaveMixin(LoadSaveInterface):
         Loads a class instance from pickle
 
         :param path:
-        :param backend: pickle or joblib
+        :param backend: pickle, cloudpickle, or joblib
         :return: instance of the present class
         """
         log.info(f"Loading instance of {cls} from {path}")

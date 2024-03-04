@@ -424,12 +424,12 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
     def get_misclassified_indices(self) -> List[int]:
         return [i for i, (predClass, trueClass) in enumerate(zip(self.y_predicted, self.y_true)) if predClass != trueClass]
 
-    def plot_confusion_matrix(self, normalize=True, title_add: str = None):
+    def plot_confusion_matrix(self, normalize=True, title_add: str = None) -> plt.Figure:
         # based on https://scikit-learn.org/0.20/auto_examples/model_selection/plot_confusion_matrix.html
         cm = self.get_confusion_matrix()
         return cm.plot(normalize=normalize, title_add=title_add)
 
-    def plot_precision_recall_curve(self, title_add: str = None):
+    def plot_precision_recall_curve(self, title_add: str = None) -> plt.Figure:
         from sklearn.metrics import PrecisionRecallDisplay  # only supported by newer versions of sklearn
         if not self.is_probabilities_available:
             raise Exception("Precision-recall curve requires probabilities")
