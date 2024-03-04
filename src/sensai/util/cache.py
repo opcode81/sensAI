@@ -9,6 +9,7 @@ import sqlite3
 import threading
 import time
 from abc import abstractmethod, ABC
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Iterator, List, Optional, TypeVar, Generic, Union
 
@@ -32,7 +33,7 @@ class BoxedValue(Generic[TValue]):
         self.value = value
 
 
-class PersistentKeyValueCache(Generic[TKey, TValue], ABC):
+class KeyValueCache(Generic[TKey, TValue], ABC):
     @abstractmethod
     def set(self, key: TKey, value: TValue):
         """
@@ -53,6 +54,40 @@ class PersistentKeyValueCache(Generic[TKey, TValue], ABC):
         :return: the cached value or None if no value is found
         """
         pass
+
+
+class InMemoryKeyValueCache(KeyValueCache[TKey, TValue], Generic[TKey, TValue]):
+    """A simple in-memory cache (which uses a dictionary internally).
+
+    This class can be instantiated directly, but for better typing support, one can instead
+    inherit from it and provide the types of the key and value as type arguments. For example for
+    a cache with string keys and integer values:
+
+    .. code-block:: python
+
+        class MyCache(InMemoryKeyValueCache[str, int]):
+            pass
+    """
+    def __init__(self):
+        self.cache = {}
+
+    def set(self, key: TKey, value: TValue):
+        self.cache[key] = value
+
+    def get(self, key: TKey) -> Optional[TValue]:
+        return self.cache.get(key)
+
+    def empty(self):
+        self.cache = {}
+
+    def __len__(self):
+        return len(self.cache)
+
+
+
+# mainly kept as a marker and for backwards compatibility, but may be extended in the future
+class PersistentKeyValueCache(KeyValueCache[TKey, TValue], Generic[TKey, TValue], ABC):
+    pass
 
 
 class PersistentList(Generic[TValue], ABC):
@@ -536,8 +571,8 @@ class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
     Represents a value provider that can provide values associated with (hashable) keys via a cache or, if
     cached values are not yet present, by computing them.
     """
-    def __init__(self, cache: Optional[PersistentKeyValueCache[TKey, TValue]] = None,
-            cache_factory: Optional[Callable[[], PersistentKeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
+    def __init__(self, cache: Optional[KeyValueCache[TKey, TValue]] = None,
+            cache_factory: Optional[Callable[[], KeyValueCache[TKey, TValue]]] = None, persist_cache=False, box_values=False):
         """
         :param cache: the cache to use or None. If None, caching will be disabled
         :param cache_factory: a factory with which to create the cache (or recreate it after unpickling if `persistCache` is False, in which
@@ -599,6 +634,11 @@ class CachedValueProviderMixin(Generic[TKey, TValue, TData], ABC):
 def cached(fn: Callable[[], T], pickle_path, function_name=None, validity_check_fn: Optional[Callable[[T], bool]] = None,
         backend="pickle", protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None) -> T:
     """
+    Calls the given function unless its result is already cached (in a pickle), in which case it will read the cached result
+    and return it.
+
+    Rather than directly calling this function, consider using the decorator variant :func:`pickle_cached`.
+
     :param fn: the function whose result is to be cached
     :param pickle_path: the path in which to store the cached result
     :param function_name: the name of the function fn (for the case where its __name__ attribute is not
@@ -651,66 +691,66 @@ def cached(fn: Callable[[], T], pickle_path, function_name=None, validity_check_
         return call_fn_and_cache_result()
 
 
-# TODO consider renaming to pickle_cached (in line with other decorators)
-class PickleCached(object):
+def pickle_cached(cache_base_path: str, filename_prefix: str = None, filename: str = None, backend="pickle",
+        protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None):
     """
-    Function decorator for caching function results via pickle
+    Function decorator for caching function results via pickle.
+
+    Add this decorator to any function to cache its results in pickle files.
+    The function may have arguments, in which case the cache will be specific to the actual arguments
+    by computing a hash code from their pickled representation.
+
+    :param cache_base_path: the directory where the pickle cache file will be stored
+    :param filename_prefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
+        a hash code of the function arguments as well as the extension ".cache.pickle" will be appended.
+        The prefix need not end in a separator, as "-" will automatically be added between filename components.
+    :param filename: the full file name of the cache file to be created; if the function takes arguments, the filename must
+        contain a placeholder '%s' for the argument hash
+    :param backend: the serialisation backend to use (see dumpPickle)
+    :param protocol: the pickle protocol version to use
+    :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
+    :param version: if not None, previously persisted data will only be returned if it was stored with the same version
     """
-    def __init__(self, cache_base_path: str, filename_prefix: str = None, filename: str = None, backend="pickle",
-            protocol=pickle.HIGHEST_PROTOCOL, load=True, version=None):
-        """
-        :param cache_base_path: the directory where the pickle cache file will be stored; if it does not exist, it will be created.
-        :param filename_prefix: a prefix of the name of the cache file to be created, to which the function name and, where applicable,
-            a hash code of the function arguments will be appended and ".cache.pickle" will be appended; if None, use "" (if filename
-            has not been provided)
-        :param filename: the full file name of the cache file to be created; if the function takes arguments, the filename must
-            contain a placeholder '%s' for the argument hash
-        :param backend: the serialisation backend to use (see dumpPickle)
-        :param protocol: the pickle protocol version to use
-        :param load: whether to load a previously persisted result; if False, do not load an old result but store the newly computed result
-        :param version: if not None, previously persisted data will only be returned if it was stored with the same version
-        """
-        os.makedirs(cache_base_path, exist_ok=True)
-        self.filename = filename
-        self.cache_base_path = cache_base_path
-        self.filename_prefix = filename_prefix
-        self.backend = backend
-        self.protocol = protocol
-        self.load = load
-        self.version = version
+    os.makedirs(cache_base_path, exist_ok=True)
 
-        if self.filename_prefix is None:
-            self.filename_prefix = ""
-        else:
-            self.filename_prefix += "-"
+    if filename_prefix is None:
+        filename_prefix = ""
+    else:
+        filename_prefix += "-"
 
-    def __call__(self, fn: Callable, *_args, **_kwargs):
+    def decorator(fn: Callable, *_args, **_kwargs):
 
+        @wraps(fn)
         def wrapped(*args, **kwargs):
             hash_code_str = None
             have_args = len(args) > 0 or len(kwargs) > 0
             if have_args:
                 hash_code_str = pickle_hash((args, kwargs))
-            if self.filename is None:
-                filename = self.filename_prefix + fn.__qualname__.replace(".<locals>.", ".")
+            if filename is None:
+                pickle_filename = filename_prefix + fn.__qualname__.replace(".<locals>.", ".")
                 if hash_code_str is not None:
-                    filename += "-" + hash_code_str
-                filename += ".cache.pickle"
+                    pickle_filename += "-" + hash_code_str
+                pickle_filename += ".cache.pickle"
             else:
                 if hash_code_str is not None:
-                    if "%s" not in self.filename:
+                    if "%s" not in filename:
                         raise Exception("Function called with arguments but full cache filename contains no placeholder (%s) "
                                         "for argument hash")
-                    filename = self.filename % hash_code_str
+                    pickle_filename = filename % hash_code_str
                 else:
-                    if "%s" in self.filename:
+                    if "%s" in filename:
                         raise Exception("Function without arguments but full cache filename with placeholder (%s) was specified")
-                    filename = self.filename
-            pickle_path = os.path.join(self.cache_base_path, filename)
-            return cached(lambda: fn(*args, **kwargs), pickle_path, function_name=fn.__name__, backend=self.backend, load=self.load,
-                version=self.version)
+                    pickle_filename = filename
+            pickle_path = os.path.join(cache_base_path, pickle_filename)
+            return cached(lambda: fn(*args, **kwargs), pickle_path, function_name=fn.__name__, backend=backend, load=load,
+                version=version, protocol=protocol)
 
         return wrapped
+
+    return decorator
+
+
+PickleCached = pickle_cached  # for backward compatibility
 
 
 class LoadSaveInterface(ABC):

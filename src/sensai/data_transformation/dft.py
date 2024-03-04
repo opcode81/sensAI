@@ -10,7 +10,6 @@ import sklearn
 from sklearn.preprocessing import OneHotEncoder
 
 from .sklearn_transformer import SkLearnTransformerProtocol
-from ..columngen import ColumnGenerator
 from ..util import flatten_arguments, count_not_none
 from ..util.pandas import DataFrameColumnChangeTracker
 from ..util.pickle import setstate
@@ -22,6 +21,8 @@ from ..util.version import Version
 
 if TYPE_CHECKING:
     from ..featuregen import FeatureGenerator
+    from ..columngen import ColumnGenerator
+
 
 log = logging.getLogger(__name__)
 
@@ -479,7 +480,7 @@ class DFTDRowFilterOnIndex(RuleBasedDataFrameTransformer):
         if self.keep is not None:
             df = df.loc[self.keep]
         if self.drop is not None:
-            df = df.drop(self.drop)
+            df = df.drop(self.drop)  # type: ignore
         return df
 
 
@@ -493,52 +494,73 @@ class DFTNormalisation(DataFrameTransformer):
 
     class RuleTemplate:
         def __init__(self,
-                skip=False,
-                unsupported=False,
+                skip: bool = False,
+                unsupported: bool = False,
                 transformer: Optional[SkLearnTransformerProtocol] = None,
                 transformer_factory: Callable[[], SkLearnTransformerProtocol] = None,
-                independent_columns: Optional[bool] = None):
+                independent_columns: Optional[bool] = None,
+                array_valued: bool = False,
+                fit: bool = True):
             """
-            Creates a rule template which applies to one or more features/columns (depending on context).
-            Use parameters as follows:
+            A template from which a rule which matches multiple columns can be created.
+            This is useful for the generation of rules which shall apply to all the (numerical) columns generated
+            by a :class:`FeatureGenerator` without specifically naming them.
 
-                * If the relevant features are already normalised, pass ``skip=True``
-                * If the relevant features cannot be normalised (e.g. because they are categorical), pass ``unsupported=True``
-                * If the relevant features shall be normalised, the other parameters apply.
-                  No parameters, i.e. ``RuleTemplate()``, are an option if ...
+            Use the parameters as follows:
 
-                    * a default transformer factory is specified in the :class:`DFTNormalisation` instance and its application
-                      is suitable for the relevant set of features.
-                      Otherwise, specify either ``transformerFactory`` or ``transformer``.
-                    * all relevant features are to be normalised in the same way.
-                      Otherwise, specify ``independentColumns=True``.
+            * If the relevant features are already normalised, pass ``skip=True``
+            * If the relevant features cannot be normalised (e.g. because they are categorical), pass ``unsupported=True``
+            * If the relevant features shall be normalised, the other parameters apply.
+              No parameters, i.e. ``RuleTemplate()``, are an option if ...
 
-            :param skip: flag indicating whether no transformation shall be performed on all of the columns (because they are already
-                normalised)
-            :param unsupported: flag indicating whether normalisation of all columns is unsupported (shall trigger an exception if
-                attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+                * a default transformer factory is specified in the :class:`DFTNormalisation` instance and its application
+                  is suitable for the relevant set of features.
+                  Otherwise, specify either ``transformer_factory`` or ``transformer``.
+                * the resulting rule will match only a single column. Otherwise, ``independent_columns``
+                  must be specified to True or False.
+
+            :param skip: flag indicating whether no transformation shall be performed on the matched columns (e.g. because they are already
+                normalised).
+            :param unsupported: flag indicating whether normalisation of matched columns is unsupported (shall trigger an exception if
+                attempted). Useful e.g. for preventing intermediate features that need further processing (like columns containing strings) from making
+                their way into the final dataframe that will be normalised and used for training a model.
+            :param transformer: a transformer instance (following the sklearn.preprocessing interface, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either
-                transformerFactory or the containing instance's default factory will be used.
-                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
-                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+                transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
+                fitted.
+                NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
+                same transformer instance to be used in multiple places - e.g. sharing it across several feature generators or models that
+                use the same type of column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
-                `transformer` is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default
+                `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
+            :param array_valued: whether the column values are not scalars but arrays (of some fixed but arbitrary length).
+                It is assumed that all entries in such arrays are to be normalised in the same way, i.e. the same
+                transformation will be applied to each entry in the array.
+                Only a single matching column is supported for array_valued=True, i.e. the rule must apply to at most one column.
+            :param fit: whether the rule's transformer shall be fitted. One use case for setting this to False is
+                if a transformer instance is provided (instead of a factory), which is already fitted.
             :param independent_columns: whether, for the case where the rule matches multiple columns, the columns are independent and a
                 separate transformation is to be learned for each of them (rather than using the same transformation for all columns and
-                learning the transformation from the data of all columns); must be specified for rules matching more than one column,
-                None is acceptable only for a single column
+                learning the transformation from the data of all columns).
+                This parameter must be specified for rules matching more than one column,
+                None is acceptable for rules matching a single column, in which case None, True, and False all have the same effect.
             """
+            # NOTE: keep in sync with Rule!
             if (skip or unsupported) and count_not_none(transformer, transformer_factory) > 0:
-                raise ValueError("Passed transformer or transformerFactory while skip=True or unsupported=True")
+                raise ValueError("Passed transformer or transformer_factory while skip=True or unsupported=True")
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
             self.transformerFactory = transformer_factory
             self.independentColumns = independent_columns
+            self.arrayValued = array_valued
+            self.fit = fit
 
-        def to_rule(self, regex: Optional[str]):
+        def __setstate__(self, state):
+            setstate(DFTNormalisation.RuleTemplate, self, state, new_default_properties=dict(arrayValued=False, fit=True))
+
+        def to_rule(self, regex: Optional[Union[str, re.Pattern]]):
             """
             Convert the template to a rule for all columns matching the regex
 
@@ -546,48 +568,72 @@ class DFTNormalisation(DataFrameTransformer):
             :return: the resulting Rule
             """
             return DFTNormalisation.Rule(regex, skip=self.skip, unsupported=self.unsupported, transformer=self.transformer,
-                transformer_factory=self.transformerFactory, independent_columns=self.independentColumns)
+                transformer_factory=self.transformerFactory, independent_columns=self.independentColumns, array_valued=self.arrayValued, fit=self.fit)
 
         def to_placeholder_rule(self):
             return self.to_rule(None)
 
     class Rule(ToStringMixin):
         def __init__(self,
-                regex: Optional[str],
-                skip=False, unsupported=False,
-                transformer: SkLearnTransformerProtocol = None,
-                transformer_factory: Callable[[], SkLearnTransformerProtocol] = None,
-                array_valued=False,
-                fit=True,
+                regex: Optional[Union[str, re.Pattern]],
+                skip: bool = False,
+                unsupported: bool = False,
+                transformer: Optional[SkLearnTransformerProtocol] = None,
+                transformer_factory: Optional[Callable[[], SkLearnTransformerProtocol]] = None,
+                array_valued: bool = False,
+                fit: bool = True,
                 independent_columns: Optional[bool] = None):
             """
+            Use the parameters as follows:
+
+                * If the relevant features are already normalised, pass ``skip=True``
+                * If the relevant features cannot be normalised (e.g. because they are categorical), pass ``unsupported=True``
+                * If the relevant features shall be normalised, the other parameters apply.
+                  No parameters other than regex, i.e. ``Rule(regex)``, are an option if ...
+
+                    * a default transformer factory is specified in the :class:`DFTNormalisation` instance and its application
+                      is suitable for the relevant set of features.
+                      Otherwise, specify either ``transformer_factory`` or ``transformer``.
+                    * the resulting rule will match only a single column. Otherwise, ``independent_columns``
+                      must be specified to True or False.
+
             :param regex: a regular expression defining the column(s) the rule applies to.
-                If it applies to multiple columns, these columns will be normalised in the same way (using the same normalisation
-                process for each column) unless independentColumns=True.
-                If None, the rule is a placeholder rule and the regex must be set later via setRegex or the rule will not be applicable.
-            :param skip: flag indicating whether no transformation shall be performed on the matching column(s)
-            :param unsupported: flag indicating whether normalisation of the matching column(s) is unsupported (shall trigger an exception
-                if attempted)
-            :param transformer: a transformer instance (from sklearn.preprocessing, e.g. StandardScaler) to apply to the matching column(s)
+                If it matches multiple columns, these columns will be normalised in the same way (using the same normalisation
+                process for each column) unless independent_columns=True.
+                If None, the rule is a placeholder rule and the regex must be set later via set_regex or the rule will not be applicable.
+            :param skip: flag indicating whether no transformation shall be performed on the matched columns (e.g. because they are already
+                normalised).
+            :param unsupported: flag indicating whether normalisation of matched columns is unsupported (shall trigger an exception if
+                attempted). Useful e.g. for preventing intermediate features that need further processing (like columns containing strings) from making
+                their way into the final dataframe that will be normalised and used for training a model.
+            :param transformer: a transformer instance (following the sklearn.preprocessing interface, e.g. StandardScaler) to apply to the matching column(s)
                 for the case where a transformation is necessary (skip=False, unsupported=False). If None is given, either
-                transformerFactory or the containing instance's default factory will be used.
-                NOTE: Use an instance only if you want, in particular, the instance to be shared across several models that use the same
-                feature with associated rule/rule template (disabling `fit` where appropriate). Otherwise, use a factory.
+                transformer_factory or the containing ``DFTNormalisation`` instance's default factory will be used when the normaliser is
+                fitted.
+                NOTE: Using a transformer_factory is usually preferred. Use an instance only if you want the
+                same transformer instance to be used in multiple places - e.g. sharing it across several feature generators or models that
+                use the same type of column with associated rule/rule template (disabling `fit` where appropriate).
             :param transformer_factory: a factory for the generation of the transformer instance, which will only be applied if
-                `transformer` is not given; if neither `transformer` nor `transformerInstance` are given, the containing instance's default
+                `transformer` is not given; if neither `transformer` nor `transformer_factory` are given, the containing ``DFTNormalisation`` instance's default
                 factory will be used. See :class:`SkLearnTransformerFactoryFactory` for convenient construction options.
-            :param array_valued: whether the column values are not scalars but arrays (of arbitrary lengths).
-                It is assumed that all entries in such arrays are to be normalised in the same way.
-                If arrayValued is True, only a single matching column is supported, i.e. the regex must match at most one column.
-            :param fit: whether the rule's transformer shall be fitted
+            :param array_valued: whether the column values are not scalars but arrays (of some fixed but arbitrary length).
+                It is assumed that all entries in such arrays are to be normalised in the same way, i.e. the same
+                transformation will be applied to each entry in the array.
+                Only a single matching column is supported for array_valued=True, i.e. the regex must match at most one column.
+            :param fit: whether the rule's transformer shall be fitted. One use case for setting this to False is
+                if a transformer instance is provided (instead of a factory), which is already fitted.
             :param independent_columns: whether, for the case where the rule matches multiple columns, the columns are independent and a
                 separate transformation is to be learned for each of them (rather than using the same transformation for all columns and
-                learning the transformation from the data of all columns); must be specified for rules matching more than one column, None
-                is acceptable only for single-column rules
+                learning the transformation from the data of all columns).
+                This parameter must be specified to for rules matching more than one column,
+                None is acceptable for rules matching a single column, in which case None, True, and False all have the same effect.
             """
-            if skip and (transformer is not None or transformer_factory is not None):
-                raise ValueError("skip==True while transformer/transformerFactory is not None")
-            self.regex = re.compile(regex) if regex is not None else None
+            if (skip or unsupported) and count_not_none(transformer, transformer_factory) > 0:
+                raise ValueError("Passed transformer or transformer_factory while skip=True or unsupported=True")
+            if isinstance(regex, str):
+                regex = re.compile(regex)
+            self.regex = regex
+            # NOTE: keep in sync with RuleTemplate!
             self.skip = skip
             self.unsupported = unsupported
             self.transformer = transformer
@@ -624,18 +670,21 @@ class DFTNormalisation(DataFrameTransformer):
         def matching_columns(self, columns: Sequence[str]) -> List[str]:
             return [col for col in columns if self.matches(col)]
 
-    def __init__(self, rules: Sequence[Rule], default_transformer_factory=None, require_all_handled=True, inplace=False):
+    def __init__(self, rules: Sequence[Rule], default_transformer_factory: Optional[Callable[[], SkLearnTransformerProtocol]] = None,
+            require_all_handled: bool = True, inplace: bool = False):
         """
-        :param rules: the set of rules; rules are always fitted and applied in the given order.
+        :param rules: the set of rules; rules (i.e., their transformers) are always fitted and applied in the given order.
             A convenient way to obtain a set of rules in the :class:`sensai.vector_model.VectorModel` context is from a
             :class:`sensai.featuregen.FeatureCollector` or :class:`sensai.featuregen.MultiFeatureGenerator`.
+            Generally, it is often a good idea to associate rules (or a rule template) with a feature generator.
+            Then the rules can be obtained from it using `get_normalisation_rules`.
         :param default_transformer_factory: a factory for the creation of transformer instances (which implements the
             API used by sklearn.preprocessing, e.g. StandardScaler) that shall be used to create a transformer for all
             rules that do not specify a particular transformer.
             The default transformer will only be applied to columns matched by such rules, unmatched columns will
             not be transformed.
-            Use SkLearnTransformerFactoryFactory to conveniently create a factory.
-        :param require_all_handled: whether to raise an exception if not all columns are matched by a rule
+            Use :class:`SkLearnTransformerFactoryFactory` to conveniently create a factory.
+        :param require_all_handled: whether to raise an exception if any column is not matched by a rule
         :param inplace: whether to apply data frame transformations in-place
         """
         super().__init__()
@@ -656,6 +705,10 @@ class DFTNormalisation(DataFrameTransformer):
     def _fit(self, df: pd.DataFrame):
         matched_rules_by_column = {}
         self._rules = []
+        # For rules matching multiple columns, if independent_columns is False, the columns
+        # will be concatenated and treated as a single column for fitting the transformer.
+        # Note that transformers follow sklearn interfaces, thus just passing an array
+        # to them will learn a per-column-transformation. This will be the case for independent_columns=True.
         for rule in self._userRules:
             matching_columns = rule.matching_columns(df.columns)
             for c in matching_columns:
@@ -749,7 +802,7 @@ class DFTFromColumnGenerators(RuleBasedDataFrameTransformer):
     """
     Extends a data frame with columns generated from ColumnGenerator instances
     """
-    def __init__(self, column_generators: Sequence[ColumnGenerator], inplace=False):
+    def __init__(self, column_generators: Sequence['ColumnGenerator'], inplace=False):
         super().__init__()
         self.columnGenerators = column_generators
         self.inplace = inplace

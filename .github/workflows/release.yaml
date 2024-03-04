@@ -21,6 +21,8 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
+          body: |
+            See [change log](https://github.com/aai-institute/sensAI/blob/develop/CHANGELOG.md)
           draft: false
           prerelease: false
   deploy:

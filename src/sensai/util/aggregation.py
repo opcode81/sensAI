@@ -92,7 +92,7 @@ class WeightedMean(ToStringMixin):
 
     def add(self, value, weight=1) -> None:
         """
-        Adds the given value with the the given weight to the calculation
+        Adds the given value with the given weight to the calculation
 
         :param value: the value
         :param weight: the weight with which to consider the value

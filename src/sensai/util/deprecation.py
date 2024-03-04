@@ -1,6 +1,6 @@
 import warnings
 import logging
-
+from functools import wraps
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ def deprecated(message):
     :return: decorated function
     """
     def deprecated_decorator(func):
+        @wraps(func)
         def deprecated_func(*args, **kwargs):
             msg = "{} is a deprecated function. {}".format(func.__name__, message)
             if logging.Logger.root.hasHandlers():

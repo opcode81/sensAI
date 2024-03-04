@@ -2,13 +2,13 @@ import logging
 import math
 import os
 from abc import abstractmethod, ABC
-from typing import Sequence, Tuple, List, Union
+from typing import Generic, Sequence, Tuple, List, Union
 
 import numpy as np
 import pandas as pd
 
 from .util import cache
-from .util.cache import DelayedUpdateHook
+from .util.cache import DelayedUpdateHook, TValue
 from .util.string import object_repr
 from .util.typing import PandasNamedTuple
 
@@ -42,8 +42,9 @@ class SingleColumnDistanceMetric(DistanceMetric, ABC):
         return self._distance(value_a, value_b)
 
 
-class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
-    def __init__(self, pickle_path, save_on_update=True, deferred_save_delay_secs=1.0):
+class DistanceMatrixDFCache(cache.PersistentKeyValueCache[Tuple[Union[str, int], Union[str, int]], TValue], Generic[TValue]):
+    """A cache for distance matrices, which are stored as dataframes with identifiers as both index and columns"""
+    def __init__(self, pickle_path: str, save_on_update: bool = True, deferred_save_delay_secs: float = 1.0):
         self.deferred_save_delay_secs = deferred_save_delay_secs
         self.save_on_update = save_on_update
         self.pickle_path = pickle_path
@@ -65,7 +66,7 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
     def _assert_tuple(key):
         assert isinstance(key, tuple) and len(key) == 2, f"Expected a tuple of two identifiers, instead got {key}"
 
-    def set(self, key: Tuple[Union[str, int], Union[str, int]], value):
+    def set(self, key: Tuple[Union[str, int], Union[str, int]], value: TValue):
         self._assert_tuple(key)
         for identifier in key:
             if identifier not in self.distance_df.columns:
@@ -83,7 +84,7 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
         os.makedirs(os.path.dirname(self.pickle_path), exist_ok=True)
         self.distance_df.to_pickle(self.pickle_path)
 
-    def get(self, key: Tuple[Union[str, int], Union[str, int]]):
+    def get(self, key: Tuple[Union[str, int], Union[str, int]]) -> TValue:
         self._assert_tuple(key)
         i1, i2 = key
         try:
@@ -91,7 +92,7 @@ class DistanceMatrixDFCache(cache.PersistentKeyValueCache):
         except KeyError:
             return None
         result = self.distance_df.iloc[pos1, pos2]
-        if result is None or np.isnan(result):
+        if np.isnan(result):
             return None
         return result
 
@@ -108,7 +109,7 @@ class CachedDistanceMetric(DistanceMetric, cache.CachedValueProviderMixin):
     value for the given pair of identifiers is not found within the persistent cache
     """
 
-    def __init__(self, distance_metric: DistanceMetric, key_value_cache: cache.PersistentKeyValueCache, persist_cache=False):
+    def __init__(self, distance_metric: DistanceMetric, key_value_cache: cache.KeyValueCache, persist_cache=False):
         cache.CachedValueProviderMixin.__init__(self, key_value_cache, persist_cache=persist_cache)
         self.metric = distance_metric
 

@@ -299,7 +299,7 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         self.knn_finder = None
 
     def _tostring_excludes(self) -> List[str]:
-        return super()._tostring_excludes() + ["neighborProviderFactory", "distanceMetric", "distanceMetricCache", "df", "y"]
+        return super()._tostring_excludes() + ["neighbor_provider_factory", "distance_metric", "distance_metric_cache", "df", "y"]
 
     # noinspection DuplicatedCode
     def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
@@ -343,7 +343,7 @@ class FeatureGeneratorNeighbors(FeatureGeneratorFromNamedTuples):
             neighbor_attributes: typing.List[str],
             distance_metric: DistanceMetric,
             neighbor_provider_factory: typing.Callable[[pd.DataFrame], NeighborProvider] = AllNeighborsProvider,
-            cache: util.cache.PersistentKeyValueCache = None,
+            cache: util.cache.KeyValueCache = None,
             categorical_feature_names: typing.Sequence[str] = (),
             normalisation_rules: typing.Sequence[data_transformation.DFTNormalisation.Rule] = ()):
         """

@@ -4,6 +4,27 @@
 
 ### Improvements/Changes
 
+* `util.cache`:
+  * Add new base class `KeyValueCache` alongside `PersistentKeyValueCache`
+  * Add `InMemoryKeyValueCache`
+  * Implement `PickleCached` via nested functions instead of a class to improve IDE support 
+    and rename to `pickle_cached`, keeping old name as alias
+* `columngen`:
+  * `ColumnGenerator`: add method `to_feature_generator`
+* `evaluation`:
+  * `MultiDataEvaluationUtil`: Add option to supply test data (without using splitting)
+* `dft`:
+  * `DFTNormalisation.RuleTemplate`: Add attributes `fit` and `array_valued`
+* `util.deprecation`: Apply `functools.wrap` to retain meta-data of wrapped function
+
+### Fixes
+
+TBD
+
+## v1.1.0 (2024-02-19)
+
+### Improvements/Changes
+
 * `vectoriser`:
   * `SequenceVectoriser`: 
     * Allow to inject a sequence item identifier provider

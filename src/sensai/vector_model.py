@@ -184,7 +184,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
                 self._featureTransformerChain.append(t)
         return self
 
-    @deprecated("Use withFeatureTransformers instead; this method will be removed in a future sensAI release.")
+    @deprecated("Use with_feature_transformers instead; this method will be removed in a future sensAI release.")
     def with_input_transformers(self: TVectorModel,
             *input_transformers: Union[DataFrameTransformer, List[DataFrameTransformer]]) -> TVectorModel:
         """
