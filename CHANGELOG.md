@@ -7,8 +7,11 @@
 * `util.cache`:
   * Add new base class `KeyValueCache` alongside `PersistentKeyValueCache`
   * Add `InMemoryKeyValueCache`
-  * Implement `PickleCached` via nested functions instead of a class to improve IDE support 
-    and rename to `pickle_cached`, keeping old name as alias
+  * `PickleCached` 
+    * Rename to `pickle_cached`, keeping old name as alias  
+    * Change implementation to use nested functions instead of a class to improve IDE support 
+    * Auto-create the storage directory if it does not yet exist
+  * Support `cloudpickle` as a backend 
 * `columngen`:
   * `ColumnGenerator`: add method `to_feature_generator`
 * `evaluation`:
@@ -16,6 +19,8 @@
 * `dft`:
   * `DFTNormalisation.RuleTemplate`: Add attributes `fit` and `array_valued`
 * `util.deprecation`: Apply `functools.wrap` to retain meta-data of wrapped function
+* `util.logging`: 
+  * Support multiple configuration callbacks in `set_configure_callback` 
 
 ### Fixes
 
