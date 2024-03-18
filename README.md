@@ -1,5 +1,7 @@
 <p align="center" style="text-align:center">
-  <img src="resources/sensai-logo.svg" style="width:400px"><br>
+  <img src="resources/sensai-logo.svg#gh-light-mode-only" style="width:400px">
+  <img src="resources/sensai-logo-dark-mode.svg#gh-dark-mode-only" style="width:400px">
+  <br>
   the Python library for sensible AI
 
   <div align="center" style="text-align:center">
