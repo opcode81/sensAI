@@ -15,7 +15,7 @@
 * `columngen`:
   * `ColumnGenerator`: add method `to_feature_generator`
 * `evaluation`:
-  * `MultiDataEvaluationUtil`: Add option to supply test data (without using splitting)
+  * `MultiDataEvaluation`: Add option to supply test data (without using splitting)
 * `dft`:
   * `DFTNormalisation.RuleTemplate`: Add attributes `fit` and `array_valued`
 * `util.deprecation`: Apply `functools.wrap` to retain meta-data of wrapped function
