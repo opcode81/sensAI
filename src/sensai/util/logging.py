@@ -11,7 +11,7 @@ import pandas as pd
 
 log = getLogger(__name__)
 
-LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s - %(message)s'
+LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s'
 
 # Holds the log format that is configured by the user (using function `configure`), such
 # that it can be reused in other places
@@ -36,6 +36,13 @@ def remove_log_handler(handler):
 
 def is_log_handler_active(handler):
     return handler in getLogger().handlers
+
+
+def is_enabled() -> bool:
+    """
+    :return: True if logging is enabled (at least one log handler exists)
+    """
+    return getLogger().hasHandlers()
 
 
 def set_configure_callback(callback: Callable[[], None], append: bool = True) -> None:
@@ -96,6 +103,7 @@ def run_main(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEB
         log.error("Exception during script execution", exc_info=e)
 
 
+# noinspection PyShadowingBuiltins
 def run_cli(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     """
     Configures logging with the given parameters and runs the given main function as a
@@ -334,3 +342,22 @@ class FileLoggerContext:
     def __exit__(self, exc_type, exc_value, traceback):
         if self._log_handler is not None:
             remove_log_handler(self._log_handler)
+
+
+class LoggingDisabledContext:
+    """
+    A context manager that will temporarily disable logging
+    """
+    def __init__(self, highest_level=CRITICAL):
+        """
+        :param highest_level: the highest level to disable
+        """
+        self._highest_level = highest_level
+        self._previous_level = None
+
+    def __enter__(self):
+        self._previous_level = lg.root.manager.disable
+        lg.disable(self._highest_level)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        lg.disable(self._previous_level)

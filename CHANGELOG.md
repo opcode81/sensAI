@@ -16,11 +16,22 @@
   * `ColumnGenerator`: add method `to_feature_generator`
 * `evaluation`:
   * `MultiDataEvaluation`: Add option to supply test data (without using splitting)
+  * `VectorRegressionModelEvaluator`: Handle output column mismatch between model output and ground truth 
+    for the case where there is only a single column, avoiding the exception and issuing a
+    warning instead
 * `dft`:
   * `DFTNormalisation.RuleTemplate`: Add attributes `fit` and `array_valued`
 * `util.deprecation`: Apply `functools.wrap` to retain meta-data of wrapped function
 * `util.logging`: 
   * Support multiple configuration callbacks in `set_configure_callback` 
+  * Add line number to default format (`LOG_DEFAULT_FORMAT`)
+  * Add function `is_enabled` to check whether a log handler is registered
+  * Add context manager `LoggingDisabledContext` to temporarily disable logging
+* `util.io`:
+  * `ResultWriter`:
+    * Allow to disable an instance such that no results are written (constructor parameter `enabled`)
+    * Add default configuration for closing figures after writing them (constructor parameter `close_figures`)
+    * `write_image`: Improve layout in written images by setting `bbox_inches='tight'`
 
 ### Fixes
 
