@@ -1,7 +1,7 @@
 import io
 import logging
 import os
-from typing import Sequence, Optional, Tuple, List
+from typing import Sequence, Optional, Tuple, List, Any
 
 import matplotlib.figure
 from matplotlib import pyplot as plt
@@ -13,10 +13,19 @@ log = logging.getLogger(__name__)
 class ResultWriter:
     log = log.getChild(__qualname__)
 
-    def __init__(self, result_dir, filename_prefix=""):
+    def __init__(self, result_dir, filename_prefix="", enabled: bool = True, close_figures: bool = False):
+        """
+        :param result_dir:
+        :param filename_prefix:
+        :param enabled: whether the result writer is enabled; if it is not, it will create neither files nor directories
+        :param close_figures: whether to close figures that are passed by default
+        """
         self.result_dir = result_dir
-        os.makedirs(result_dir, exist_ok=True)
         self.filename_prefix = filename_prefix
+        self.enabled = enabled
+        self.close_figures_default = close_figures
+        if self.enabled:
+            os.makedirs(result_dir, exist_ok=True)
 
     def child_with_added_prefix(self, prefix: str) -> "ResultWriter":
         """
@@ -26,14 +35,15 @@ class ResultWriter:
         :param prefix: the prefix to append
         :return: a new writer instance
         """
-        return ResultWriter(self.result_dir, filename_prefix=self.filename_prefix + prefix)
+        return ResultWriter(self.result_dir, filename_prefix=self.filename_prefix + prefix, enabled=self.enabled,
+            close_figures=self.close_figures_default)
 
-    def child_for_subdirectory(self, dir_name: str):
+    def child_for_subdirectory(self, dir_name: str) -> "ResultWriter":
         result_dir = os.path.join(self.result_dir, dir_name)
-        os.makedirs(result_dir, exist_ok=True)
-        return ResultWriter(result_dir, filename_prefix=self.filename_prefix)
+        return ResultWriter(result_dir, filename_prefix=self.filename_prefix, enabled=self.enabled,
+            close_figures=self.close_figures_default)
 
-    def path(self, filename_suffix: str, extension_to_add=None, valid_other_extensions: Optional[Sequence[str]] = None):
+    def path(self, filename_suffix: str, extension_to_add=None, valid_other_extensions: Optional[Sequence[str]] = None) -> str:
         """
         :param filename_suffix: the suffix to add (which may or may not already include a file extension)
         :param extension_to_add: if not None, the file extension to add (without the leading ".") unless
@@ -56,55 +66,62 @@ class ResultWriter:
         path = os.path.join(self.result_dir, f"{self.filename_prefix}{filename_suffix}")
         return path
 
-    def write_text_file(self, filename_suffix, content):
+    def write_text_file(self, filename_suffix: str, content: str):
         p = self.path(filename_suffix, extension_to_add="txt")
-        self.log.info(f"Saving text file {p}")
-        with open(p, "w") as f:
-            f.write(content)
+        if self.enabled:
+            self.log.info(f"Saving text file {p}")
+            with open(p, "w") as f:
+                f.write(content)
         return p
 
-    def write_text_file_lines(self, filename_suffix, lines: List[str]):
+    def write_text_file_lines(self, filename_suffix: str, lines: List[str]):
         p = self.path(filename_suffix, extension_to_add="txt")
-        self.log.info(f"Saving text file {p}")
-        write_text_file_lines(lines, p)
+        if self.enabled:
+            self.log.info(f"Saving text file {p}")
+            write_text_file_lines(lines, p)
         return p
 
-    def write_data_frame_text_file(self, filename_suffix, df: pd.DataFrame):
+    def write_data_frame_text_file(self, filename_suffix: str, df: pd.DataFrame):
         p = self.path(filename_suffix, extension_to_add="df.txt", valid_other_extensions="txt")
-        self.log.info(f"Saving data frame text file {p}")
-        with open(p, "w") as f:
-            f.write(df.to_string())
+        if self.enabled:
+            self.log.info(f"Saving data frame text file {p}")
+            with open(p, "w") as f:
+                f.write(df.to_string())
         return p
 
-    def write_data_frame_csv_file(self, filename_suffix, df: pd.DataFrame, index=True, header=True):
+    def write_data_frame_csv_file(self, filename_suffix: str, df: pd.DataFrame, index=True, header=True):
         p = self.path(filename_suffix, extension_to_add="csv")
-        self.log.info(f"Saving data frame CSV file {p}")
-        df.to_csv(p, index=index, header=header)
+        if self.enabled:
+            self.log.info(f"Saving data frame CSV file {p}")
+            df.to_csv(p, index=index, header=header)
         return p
 
-    def write_figure(self, filename_suffix, fig, close_figure=False):
+    def write_figure(self, filename_suffix: str, fig: plt.Figure, close_figure: Optional[bool] = None):
         """
         :param filename_suffix: the filename suffix, which may or may not include a file extension, valid extensions being {"png", "jpg"}
         :param fig: the figure to save
-        :param close_figure: whether to close the figure after having saved it
-        :return: the path to the file that was written
+        :param close_figure: whether to close the figure after having saved it; if None, use default passed at construction
+        :return: the path to the file that was written (or would have been written if the writer was enabled)
         """
         p = self.path(filename_suffix, extension_to_add="png", valid_other_extensions=("jpg",))
-        self.log.info(f"Saving figure {p}")
-        fig.savefig(p)
-        if close_figure:
-            plt.close(fig)
+        if self.enabled:
+            self.log.info(f"Saving figure {p}")
+            fig.savefig(p, bbox_inches="tight")
+            must_close_figure = close_figure if close_figure is not None else self.close_figures_default
+            if must_close_figure:
+                plt.close(fig)
         return p
 
     def write_figures(self, figures: Sequence[Tuple[str, matplotlib.figure.Figure]], close_figures=False):
         for name, fig in figures:
             self.write_figure(name, fig, close_figure=close_figures)
 
-    def write_pickle(self, filename_suffix, obj):
+    def write_pickle(self, filename_suffix: str, obj: Any):
         from .pickle import dump_pickle
         p = self.path(filename_suffix, extension_to_add="pickle")
-        self.log.info(f"Saving pickle {p}")
-        dump_pickle(obj, p)
+        if self.enabled:
+            self.log.info(f"Saving pickle {p}")
+            dump_pickle(obj, p)
         return p
 
 

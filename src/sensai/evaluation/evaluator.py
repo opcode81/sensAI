@@ -317,7 +317,16 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
         eval_stats_by_var_name = {}
         predictions, ground_truth = self._compute_outputs(model, data)
         for predictedVarName in predictions.columns:
-            eval_stats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=ground_truth[predictedVarName],
+            if predictedVarName in ground_truth.columns:
+                y_true = ground_truth[predictedVarName]
+            else:
+                if len(predictions.columns) == 1 and len(ground_truth.columns) == 1:
+                    log.warning(f"Model output column '{predictedVarName}' does not match ground truth column '{ground_truth.columns[0]}'; "
+                        f"assuming that this is not a problem since there is but a single column available")
+                    y_true = ground_truth.iloc[:, 0]
+                else:
+                    raise Exception(f"Model output column '{predictedVarName}' not found in ground truth columns {ground_truth.columns}")
+            eval_stats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=y_true,
                 metrics=self.params.metrics,
                 additional_metrics=self.params.additional_metrics,
                 model=model,
