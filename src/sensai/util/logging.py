@@ -361,3 +361,23 @@ class LoggingDisabledContext:
 
     def __exit__(self, exc_type, exc_value, traceback):
         lg.disable(self._previous_level)
+
+
+# noinspection PyShadowingBuiltins
+class FallbackHandler(Handler):
+    """
+    A log handler which applies the given handler only if the root logger has no defined handlers (or no handlers other than
+    this fallback handler itself)
+    """
+    def __init__(self, handler: Handler, level=NOTSET):
+        """
+        :param handler: the handler to which messages shall be passed on
+        :param level: the minimum level to output; if NOTSET, pass on everything
+        """
+        super().__init__(level=level)
+        self._handler = handler
+
+    def emit(self, record):
+        root_handlers = getLogger().handlers
+        if len(root_handlers) == 0 or (len(root_handlers) == 1 and root_handlers[0] == self):
+            self._handler.emit(record)

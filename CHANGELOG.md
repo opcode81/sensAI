@@ -27,6 +27,7 @@
   * Add line number to default format (`LOG_DEFAULT_FORMAT`)
   * Add function `is_enabled` to check whether a log handler is registered
   * Add context manager `LoggingDisabledContext` to temporarily disable logging
+  * Add `FallbackHandler` to support logging to a fallback destination (if no other handlers are defined) 
 * `util.io`:
   * `ResultWriter`:
     * Allow to disable an instance such that no results are written (constructor parameter `enabled`)
