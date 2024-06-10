@@ -1,6 +1,6 @@
 # Changelog
 
-## Next Release
+## v1.2.0 (2024-06-10)
 
 ### Improvements/Changes
 
@@ -34,9 +34,6 @@
     * Add default configuration for closing figures after writing them (constructor parameter `close_figures`)
     * `write_image`: Improve layout in written images by setting `bbox_inches='tight'`
 
-### Fixes
-
-TBD
 
 ## v1.1.0 (2024-02-19)
 
