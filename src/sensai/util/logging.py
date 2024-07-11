@@ -5,13 +5,14 @@ import time
 from datetime import datetime
 from io import StringIO
 from logging import *
-from typing import List, Callable, Any, Optional
+from typing import List, Callable, Any, Optional, TypeVar
 
 import pandas as pd
 
 log = getLogger(__name__)
 
 LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s'
+T = TypeVar("T")
 
 # Holds the log format that is configured by the user (using function `configure`), such
 # that it can be reused in other places
@@ -82,7 +83,7 @@ def configure(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
 
 
 # noinspection PyShadowingBuiltins
-def run_main(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
+def run_main(main_fn: Callable[..., T], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG) -> T:
     """
     Configures logging with the given parameters, ensuring that any exceptions that occur during
     the execution of the given function are logged.
@@ -104,7 +105,7 @@ def run_main(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEB
 
 
 # noinspection PyShadowingBuiltins
-def run_cli(main_fn: Callable[[], Any], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
+def run_cli(main_fn: Callable[..., T], format: str = LOG_DEFAULT_FORMAT, level: int = lg.DEBUG) -> Optional[T]:
     """
     Configures logging with the given parameters and runs the given main function as a
     CLI using `jsonargparse` (which is configured to also parse attribute docstrings, such

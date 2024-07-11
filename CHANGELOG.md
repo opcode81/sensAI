@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Improvements/Changes
+
+* `util.logging`:
+  * Fix type annotations of `run_main` and `run_cli` 
+
 ## v1.2.0 (2024-06-10)
 
 ### Improvements/Changes
