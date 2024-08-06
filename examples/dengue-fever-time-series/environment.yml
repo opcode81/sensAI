@@ -1,0 +1,19 @@
+name: dengai
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - scikit-learn
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - xgboost
+  - mlflow
+  - hyperopt
+  - pip:
+      - jupyter

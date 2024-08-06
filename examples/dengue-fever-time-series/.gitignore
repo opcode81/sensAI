@@ -1,0 +1,10 @@
+*.pyc
+__pycache__
+*.bak
+*.orig
+/data
+/temp
+/.idea
+/results
+/temp*.py
+/mlruns
