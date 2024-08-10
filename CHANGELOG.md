@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.2.1 (2024-08-10)
 
 ### Improvements/Changes
 
