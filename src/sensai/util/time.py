@@ -1,9 +1,11 @@
 from datetime import time
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 
-def ts_next_month(ts: pd.Timestamp) -> pd.Timestamp:
+def ts_next_month(ts: "pd.Timestamp") -> "pd.Timestamp":
     m = ts.month
     if m == 12:
         return ts.replace(year=ts.year+1, month=1)
@@ -11,7 +13,7 @@ def ts_next_month(ts: pd.Timestamp) -> pd.Timestamp:
         return ts.replace(month=m+1)
 
 
-def time_of_day(ts: pd.Timestamp) -> float:
+def time_of_day(ts: "pd.Timestamp") -> float:
     """
     :param ts: the timestamp
     :return: the time of day as a floating point number in [0, 24)
@@ -20,11 +22,11 @@ def time_of_day(ts: pd.Timestamp) -> float:
 
 
 class TimeInterval:
-    def __init__(self, start: pd.Timestamp, end: pd.Timestamp):
+    def __init__(self, start: "pd.Timestamp", end: "pd.Timestamp"):
         self.start = start
         self.end = end
 
-    def contains(self, t: pd.Timestamp):
+    def contains(self, t: "pd.Timestamp"):
         return self.start <= t <= self.end
 
     def contains_time(self, t: time):
@@ -45,9 +47,21 @@ class TimeInterval:
     def intersection(self, other: "TimeInterval") -> "TimeInterval":
         return TimeInterval(max(self.start, other.start), min(self.end, other.end))
 
-    def time_delta(self) -> pd.Timedelta:
+    def time_delta(self) -> "pd.Timedelta":
         return self.end - self.start
 
-    def mid_timestamp(self) -> pd.Timestamp:
+    def mid_timestamp(self) -> "pd.Timestamp":
         midTime: pd.Timestamp = self.start + 0.5 * self.time_delta()
         return midTime
+
+
+def format_duration(seconds: float):
+    if seconds < 60:
+        return f"{seconds:.1f} seconds"
+    elif seconds < 3600:
+        minutes, secs = divmod(seconds, 60)
+        return f"{int(minutes)} minutes, {secs:.1f} seconds"
+    else:
+        hours, remainder = divmod(seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+        return f"{int(hours)} hours, {int(minutes)} minutes, {secs:.1f} seconds"

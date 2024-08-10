@@ -4,6 +4,8 @@
 
 ### Improvements/Changes
 
+* `util`
+  * Minimise required dependencies for all modules in this package in preparation of the release of *sensAI-utils* 
 * `util.logging`:
   * Fix type annotations of `run_main` and `run_cli` 
 

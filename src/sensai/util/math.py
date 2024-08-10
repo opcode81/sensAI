@@ -1,8 +1,6 @@
 import math
 from typing import List
 
-import scipy.stats
-
 from .string import object_repr, ToStringMixin
 
 
@@ -13,6 +11,7 @@ class NormalDistribution(ToStringMixin):
         :param std: the standard deviation
         :param unit_max: if True, scales the distribution's pdf such that its maximum value becomes 1
         """
+        import scipy.stats
         self.unitMax = unit_max
         self.mean = mean
         self.std = std

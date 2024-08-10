@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any
-
-import pandas as pd
+from typing import Sequence, Optional, TypeVar, Generic, Tuple, Dict, Any, TYPE_CHECKING
 
 from . import sequences as array_util
 from .string import ToStringMixin, dict_string
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 TKey = TypeVar("TKey")
 TValue = TypeVar("TValue")
@@ -303,7 +304,7 @@ class SortedKeysAndValues(Generic[TKey, TValue], SortedKeyValueStructure[TKey, T
         return len(self.keys)
 
     @classmethod
-    def from_series(cls, s: pd.Series):
+    def from_series(cls, s: "pd.Series"):
         """
         Creates an instance from a pandas Series, using the series' index as the keys and its values as the values
 

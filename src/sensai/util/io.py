@@ -1,11 +1,11 @@
 import io
 import logging
 import os
-from typing import Sequence, Optional, Tuple, List, Any
+from typing import Sequence, Optional, Tuple, List, Any, TYPE_CHECKING
 
-import matplotlib.figure
-from matplotlib import pyplot as plt
-import pandas as pd
+if TYPE_CHECKING:
+    from matplotlib import pyplot as plt
+    import pandas as pd
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class ResultWriter:
             write_text_file_lines(lines, p)
         return p
 
-    def write_data_frame_text_file(self, filename_suffix: str, df: pd.DataFrame):
+    def write_data_frame_text_file(self, filename_suffix: str, df: "pd.DataFrame"):
         p = self.path(filename_suffix, extension_to_add="df.txt", valid_other_extensions="txt")
         if self.enabled:
             self.log.info(f"Saving data frame text file {p}")
@@ -89,20 +89,21 @@ class ResultWriter:
                 f.write(df.to_string())
         return p
 
-    def write_data_frame_csv_file(self, filename_suffix: str, df: pd.DataFrame, index=True, header=True):
+    def write_data_frame_csv_file(self, filename_suffix: str, df: "pd.DataFrame", index=True, header=True):
         p = self.path(filename_suffix, extension_to_add="csv")
         if self.enabled:
             self.log.info(f"Saving data frame CSV file {p}")
             df.to_csv(p, index=index, header=header)
         return p
 
-    def write_figure(self, filename_suffix: str, fig: plt.Figure, close_figure: Optional[bool] = None):
+    def write_figure(self, filename_suffix: str, fig: "plt.Figure", close_figure: Optional[bool] = None):
         """
         :param filename_suffix: the filename suffix, which may or may not include a file extension, valid extensions being {"png", "jpg"}
         :param fig: the figure to save
         :param close_figure: whether to close the figure after having saved it; if None, use default passed at construction
         :return: the path to the file that was written (or would have been written if the writer was enabled)
         """
+        from matplotlib import pyplot as plt
         p = self.path(filename_suffix, extension_to_add="png", valid_other_extensions=("jpg",))
         if self.enabled:
             self.log.info(f"Saving figure {p}")
@@ -112,7 +113,7 @@ class ResultWriter:
                 plt.close(fig)
         return p
 
-    def write_figures(self, figures: Sequence[Tuple[str, matplotlib.figure.Figure]], close_figures=False):
+    def write_figures(self, figures: Sequence[Tuple[str, "plt.Figure"]], close_figures=False):
         for name, fig in figures:
             self.write_figure(name, fig, close_figure=close_figures)
 

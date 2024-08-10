@@ -5,9 +5,13 @@ import time
 from datetime import datetime
 from io import StringIO
 from logging import *
-from typing import List, Callable, Any, Optional, TypeVar
+from typing import List, Callable, Optional, TypeVar, TYPE_CHECKING
 
-import pandas as pd
+from .time import format_duration
+
+if TYPE_CHECKING:
+    import pandas as pd
+
 
 log = getLogger(__name__)
 
@@ -77,7 +81,11 @@ def configure(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG):
     getLogger("matplotlib").setLevel(lg.INFO)
     getLogger("urllib3").setLevel(lg.INFO)
     getLogger("msal").setLevel(lg.INFO)
-    pd.set_option('display.max_colwidth', 255)
+    try:
+        import pandas as pd
+        pd.set_option('display.max_colwidth', 255)
+    except ImportError:
+        pass
     for callback in _configureCallbacks:
         callback()
 
@@ -230,7 +238,7 @@ class StopWatch:
         """
         return self._elapsed_secs + self._get_elapsed_time_since_last_start()
 
-    def get_elapsed_timedelta(self) -> pd.Timedelta:
+    def get_elapsed_timedelta(self) -> "pd.Timedelta":
         """
         :return: the elapsed time as a pandas.Timedelta object
         """
@@ -244,7 +252,11 @@ class StopWatch:
         if secs < 60:
             return f"{secs:.3f} seconds"
         else:
-            return str(pd.Timedelta(secs, unit="s"))
+            try:
+                import pandas as pd
+                return str(pd.Timedelta(secs, unit="s"))
+            except ImportError:
+                return format_duration(secs)
 
 
 class StopWatchManager:

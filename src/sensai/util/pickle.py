@@ -4,8 +4,6 @@ import pickle
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Union
 
-import joblib
-
 from .io import S3Object, is_s3_path
 
 log = logging.getLogger(__name__)
@@ -29,6 +27,7 @@ def load_pickle(path: Union[str, Path], backend="pickle"):
             import cloudpickle
             return _load_with_error_log(cloudpickle.load)
         elif backend == "joblib":
+            import joblib
             return joblib.load(f)
         else:
             raise ValueError(f"Unknown backend '{backend}'. Supported backends are 'pickle', 'joblib' and 'cloudpickle'")
@@ -60,6 +59,7 @@ def dump_pickle(obj, pickle_path: Union[str, Path], backend="pickle", protocol=p
                 failing_paths = PickleFailureDebugger.debug_failure(obj)
                 raise AttributeError(f"Cannot pickle paths {failing_paths} of {obj}: {str(e)}")
         elif backend == "joblib":
+            import joblib
             joblib.dump(obj, f, protocol=protocol)
         elif backend == "cloudpickle":
             import cloudpickle
