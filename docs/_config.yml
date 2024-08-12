@@ -139,6 +139,7 @@ sphinx:
     github_username: thu-ml
     github_repository: tianshou
     nb_execution_mode: "off"
+    nb_merge_streams: True  # This is important for cell outputs to appear as single blocks rather than one block per line
     python_use_unqualified_type_names: True
     nb_mime_priority_overrides: [
       [ 'html', 'application/vnd.jupyter.widget-view+json', 10 ],
