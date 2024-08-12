@@ -25,3 +25,19 @@ class Version:
             elif actual_version > desired_min_version:
                 return True
         return True
+
+    def is_at_most(self, *components: int):
+        """
+        Checks this version against the given version components.
+        This version object must contain at least the respective number of components
+
+        :param components: version components in order (i.e. major, minor, patch, etc.)
+        :return: True if the version is at most the given version, False otherwise
+        """
+        for i, desired_max_version in enumerate(components):
+            actual_version = int(self.components[i])
+            if actual_version > desired_max_version:
+                return False
+            elif actual_version < desired_max_version:
+                return True
+        return True
