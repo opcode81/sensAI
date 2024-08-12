@@ -29,8 +29,10 @@ dependencies:
   # for tests
   - pytest
   # for docs build
-  - sphinx 
+  - sphinx
   - sphinx_rtd_theme>=0.5.1
+  - sphinx-toolbox
+  - jupyter-book
   - nbsphinx
   # for release process
   - bump2version
