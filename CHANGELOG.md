@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Improvements/Changes
+
+* `util`:
+  * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
+
 ## v1.2.1 (2024-08-10)
 
 ### Improvements/Changes
