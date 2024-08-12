@@ -51,7 +51,7 @@ jobs:
       - name: Prepare Pages
         if: github.ref == 'refs/heads/develop'
         run: |
-          mv docs/_build/html/* public/docs
+          mv docs/build/* public/docs
           mv htmlcov/* public/coverage
       - name: Deploy Pages
         uses: JamesIves/github-pages-deploy-action@3.7.1
