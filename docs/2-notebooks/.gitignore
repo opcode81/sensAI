@@ -1,0 +1,2 @@
+# notebooks are copied here from the /notebooks folder via test_notebooks.py
+*.ipynb
