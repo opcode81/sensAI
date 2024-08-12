@@ -29,7 +29,7 @@ def index_template(package_name: str, doc_references: Optional[List[str]] = None
     dirname = package_name.split(".")[-1]
     title = dirname.replace("_", r"\_")
     if title == TOP_LEVEL_PACKAGE:
-        title = f"{PROJECT_NAME} API Reference"
+        title = "API Reference"
     return f"{title}\n{'=' * len(title)}" + text_prefix + doc_references
 
 
