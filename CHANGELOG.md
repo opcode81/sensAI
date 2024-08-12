@@ -6,6 +6,15 @@
 
 * `util`:
   * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
+* `evaluation`:
+  * `EvaluationResultCollector`: Add method `is_plot_creation_enabled` 
+
+### Fixes:
+
+* `evaluation`:
+  * `ModelEvaluation` (and subclasses): Fix plots being shown if no `ResultWriter` is used
+  even though `show_plots=False`
+
 
 ## v1.2.1 (2024-08-10)
 

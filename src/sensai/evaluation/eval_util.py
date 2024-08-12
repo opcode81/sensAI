@@ -148,11 +148,16 @@ class EvaluationResultCollector:
         self.result_writer = result_writer
         self.tracking_context = tracking_context
 
+    def is_plot_creation_enabled(self) -> bool:
+        return self.show_plots or self.result_writer is not None or self.tracking_context is not None
+
     def add_figure(self, name: str, fig: matplotlib.figure.Figure):
         if self.result_writer is not None:
-            self.result_writer.write_figure(name, fig, close_figure=not self.show_plots)
+            self.result_writer.write_figure(name, fig, close_figure=False)
         if self.tracking_context is not None:
             self.tracking_context.track_figure(name, fig)
+        if not self.show_plots:
+            plt.close(fig)
 
     def add_data_frame_csv_file(self, name: str, df: pd.DataFrame):
         if self.result_writer is not None:
@@ -500,11 +505,10 @@ class ModelEvaluation(ABC, Generic[TModel, TEvaluator, TEvalData, TCrossValidato
         :param subtitle_prefix: a prefix to add to the subtitle (which itself is the model name)
         :param tracking_context: the experiment tracking context
         """
-        if not show_plots and result_writer is None and tracking_context is None:
-            return
         result_collector = EvaluationResultCollector(show_plots=show_plots, result_writer=result_writer,
             tracking_context=tracking_context)
-        self._create_plots(data, result_collector, subtitle=subtitle_prefix + data.model_name)
+        if result_collector.is_plot_creation_enabled():
+            self._create_plots(data, result_collector, subtitle=subtitle_prefix + data.model_name)
 
     def _create_plots(self, data: Union[TEvalData, TCrossValData], result_collector: EvaluationResultCollector, subtitle=None):
 
