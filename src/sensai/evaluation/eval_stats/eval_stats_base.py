@@ -258,17 +258,17 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
             self.add_all(y_predicted, y_true)
         super().__init__(metrics, additional_metrics=additional_metrics)
 
-    def add(self, y_predicted, y_true):
+    def add(self, y_predicted, y_true) -> None:
         """
         Adds a single pair of values to the evaluation
-        Parameters:
-            y_predicted: the value predicted by the model
-            y_true: the true value
+
+        :param y_predicted: the value predicted by the model
+        :param y_true: the true value
         """
         self.y_true.append(y_true)
         self.y_predicted.append(y_predicted)
 
-    def add_all(self, y_predicted: PredictionArray, y_true: PredictionArray):
+    def add_all(self, y_predicted: PredictionArray, y_true: PredictionArray) -> None:
         """
         :param y_predicted: sequence of predicted values, or, in case of multi-dimensional predictions, either a data frame with
             one column per dimension or a nested sequence of values
