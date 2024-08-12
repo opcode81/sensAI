@@ -17,6 +17,7 @@ NOTEBOOKS_NOT_TESTED = [  # filenames of notebooks that are skipped in testing
     "tensor_models_pytorch_lightning.ipynb",
     "clustering_evaluation.ipynb",
     "coordinate_clustering.ipynb",
+    "temp.ipynb",
 ]  # TODO fix notebooks and remove these exclusions
 log = logging.getLogger(__name__)
 
