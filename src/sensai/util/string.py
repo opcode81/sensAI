@@ -140,23 +140,23 @@ class ToStringMixin:
     of the class, including private ones starting with an underscore (though the underscore will be dropped in the string
     representation).
 
-        * To exclude private properties, override :meth:`_toStringExcludePrivate` to return True. If there are exceptions
-          (and some private properties shall be retained), additionally override :meth:`_toStringExcludeExceptions`.
-        * To exclude a particular set of properties, override :meth:`_toStringExcludes`.
-        * To include only select properties (introducing inclusion semantics), override :meth:`_toStringIncludes`.
+        * To exclude private properties, override :meth:`_tostring_exclude_private` to return True. If there are exceptions
+          (and some private properties shall be retained), additionally override :meth:`_tostring_exclude_exceptions`.
+        * To exclude a particular set of properties, override :meth:`_tostring_excludes`.
+        * To include only select properties (introducing inclusion semantics), override :meth:`_tostring_includes`.
         * To add values to the properties list that aren't actually properties of the object (i.e. derived properties),
-          override :meth:`_toStringAdditionalEntries`.
+          override :meth:`_tostring_additional_entries`.
         * To define a fully custom representation for ``<object info>`` which is not based on the above principles, override
-          :meth:`_toStringObjectInfo`.
+          :meth:`_tostring_object_info`.
 
     For well-defined string conversions within a class hierarchy, it can be a good practice to define additional
     inclusions/exclusions by overriding the respective method once more and basing the return value on an extended
     version of the value returned by superclass.
     In some cases, the requirements of a subclass can be at odds with the definitions in the superclass: The superclass
     may make use of exclusion semantics, but the subclass may want to use inclusion semantics (and include
-    only some of the many properties it adds). In this case, if the subclass used :meth:`_toStringInclude`, the exclusion semantics
+    only some of the many properties it adds). In this case, if the subclass used :meth:`_tostring_includes`, the exclusion semantics
     of the superclass would be void and none of its properties would actually be included.
-    In such cases, override :meth:`_toStringIncludesForced` to add inclusions regardless of the semantics otherwise used along
+    In such cases, override :meth:`_tostring_includes_forced` to add inclusions regardless of the semantics otherwise used along
     the class hierarchy.
 
     .. document private functions
@@ -257,7 +257,7 @@ class ToStringMixin:
         Makes the string representation exclude the returned attributes.
         This method can be conveniently overridden by subclasses which can call super and extend the list returned.
 
-        This method will only have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
+        This method will only have no effect if :meth:`_tostring_object_info` is overridden to not use its result.
 
         :return: a list of attribute names
         """
@@ -273,9 +273,9 @@ class ToStringMixin:
         to be extended; the marker element will be ignored and only the user-added elements will be considered as included.
 
         Note: To add an included attribute in a sub-class, regardless of any super-classes using exclusion or inclusion semantics,
-        use _toStringIncludesForced instead.
+        use :meth:`_tostring_includes_forced` instead.
 
-        This method will have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
+        This method will have no effect if :meth:`_tostring_object_info` is overridden to not use its result.
 
         :return: a list of attribute names to be included in the string representation
         """
@@ -287,7 +287,7 @@ class ToStringMixin:
         Defines a list of attribute names that are required to be present in the string representation, regardless of the
         instance using include semantics or exclude semantics, thus facilitating added inclusions in sub-classes.
 
-        This method will have no effect if :meth:`_toStringObjectInfo` is overridden to not use its result.
+        This method will have no effect if :meth:`_tostring_object_info` is overridden to not use its result.
 
         :return: a list of attribute names
         """
@@ -302,14 +302,14 @@ class ToStringMixin:
     def _tostring_exclude_private(self) -> bool:
         """
         :return: whether to exclude properties that are private (start with an underscore); explicitly included attributes
-            will still be considered - as will properties exempt from the rule via :meth:`toStringExcludeException`.
+            will still be considered - as will properties exempt from the rule via :meth:`_tostring_exclude_exceptions`.
         """
         return False
 
     def _tostring_exclude_exceptions(self) -> List[str]:
         """
         Defines attribute names which should not be excluded even though other rules (particularly the exclusion of private members
-        via :meth:`_toStringExcludePrivate`) would otherwise exclude them.
+        via :meth:`_tostring_exclude_private`) would otherwise exclude them.
 
         :return: a list of attribute names
         """
@@ -369,11 +369,11 @@ class ToStringMixin:
             """
             A proxy object which wraps a ToStringMixin to ensure that the converter is applied when creating the properties string.
             The proxy is to achieve that all ToStringMixin methods that aren't explicitly overwritten are bound to this proxy
-            (rather than the original object), such that the transitive call to _toStringProperties will call the new
+            (rather than the original object), such that the transitive call to `_tostring_properties` will call the new
             implementation.
             """
 
-            # methods where we assume that they could transitively call _toStringProperties (others are assumed not to)
+            # methods where we assume that they could transitively call `_tostring_properties` (others are assumed not to)
             TOSTRING_METHODS_TRANSITIVELY_CALLING_TOSTRINGPROPERTIES = {"_tostring_object_info"}
 
             def __init__(self, x: "ToStringMixin", converter):
