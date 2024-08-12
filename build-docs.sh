@@ -1,4 +1,4 @@
-export PYTHONPATH=$PYTHONPATH:src
+export PYTHONPATH="$PYTHONPATH:$(pwd)/src"
 rm -rf docs/build
 rm -rf docs/jupyter_execute
 jupyter-book config sphinx docs/
