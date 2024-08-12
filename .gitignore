@@ -7,8 +7,6 @@
 *.old
 *.orig
 .tox
-docs/_build
-docs/sensai
 /sync.py
 dist
 *.egg-info*
@@ -21,10 +19,8 @@ dist
 data
 .coverage
 /*.env
-/docs-build
 /code.sh
 /lightning_logs
 *.code-workspace
 /TODO.txt
 notebooks/temp.ipynb
-/docs/build
