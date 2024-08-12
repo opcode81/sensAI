@@ -44,6 +44,8 @@ jobs:
             ~/.cache/pip
             .tox
           key: ${{runner.os}}-${{github.ref}}-${{hashFiles('requirements.txt', 'setup.py', 'tox.ini')}}
+      - name: Free disk space
+        run: sh build_scripts/free_disk_space.sh
       - name: Install Tox and Python Packages
         run: pip install tox
       - name: Run Tox
