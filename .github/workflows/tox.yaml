@@ -42,11 +42,7 @@ jobs:
         with:
           python-version: "3.8"
 
-      - name: Cache Tox Envs
-        uses: actions/cache@v2
-        with:
-          path: .tox
-          key: ${{runner.os}}-${{github.ref}}-${{hashFiles('requirements*.txt', 'setup.py', 'tox.ini')}}
+      # NOTE: Using a cache action is not worth it: Creating/restoring the cache takes longer than installing the packages
 
       - name: Free disk space
         run: sh build_scripts/free_disk_space.sh
@@ -73,14 +69,5 @@ jobs:
           TARGET_FOLDER: .
           CLEAN: true
           SINGLE_COMMIT: true
-
-      # free disk space to allow post-cache action to zip the contents of .tox
-      - name: Free Disk Space for Post Cache Action
-        if: github.ref == 'refs/heads/develop'
-        run: |
-          df -h
-          rm -rf ~/.cache
-          rm -rf /opt/hostedtoolcache
-          df -h
 
       # post-cache action is executed at the end
