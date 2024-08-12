@@ -22,7 +22,9 @@ def test_classification_model_backward_compatibility_v0_0_4(testResources, irisC
 @pytest.mark.parametrize("pickle_file", glob(f"{RESOURCE_DIR}/backward_compatibility/regression_model_*.v0.2.0.pickle"))
 def test_regression_model_backward_compatibility_v0_2_0(pickle_file, diabetesRegressionTestCase):
     """
-    Tests for compatibility with models created with v0.2.0 using create_test_models.py
+    Tests for compatibility with models created with v0.2.0 using create_test_models.py.
+    This test should be run with sklearn 1.0.2, which is, for this reason, the pinned version in tox environment
+    py_backwardscompat (see tox.ini).
     """
     sklearn_version = Version(sklearn)
 
