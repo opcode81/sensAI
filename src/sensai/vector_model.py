@@ -222,8 +222,8 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
         :param feature_collector: the feature collector from which to obtain the multi-feature generator
         :param shared: whether the given feature collector is shared between models (i.e. whether
             the same instance is passed to multiple models).
-            Passing `shared=False` ensures that models using the same collector do not end up
-            using the same multi-feature collector.
+            Passing `shared=True` ensures that models using the same collector do not end up
+            using the same multi-feature collector instance and instead receive an independent instance.
         :return: self
         """
         if shared:
