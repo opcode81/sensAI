@@ -141,7 +141,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
     def _tostring_exclude_exceptions(self) -> List[str]:
         e = super()._tostring_exclude_exceptions()
         if self.TOSTRING_INCLUDE_PREPROCESSORS:
-            e += ["_featureGenerator", "_inputTransformerChain"]
+            e += ["_rawInputTransformerChain", "_featureGenerator", "_featureTransformerChain"]
         return e
 
     def _tostring_additional_entries(self) -> Dict[str, Any]:

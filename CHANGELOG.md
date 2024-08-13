@@ -14,6 +14,8 @@
 * `evaluation`:
   * `ModelEvaluation` (and subclasses): Fix plots being shown if no `ResultWriter` is used
   even though `show_plots=False`
+* `vector_model`:
+  * `VectorModel`: Fix data frame transformers not appearing in string representations
 
 
 ## v1.2.1 (2024-08-10)
