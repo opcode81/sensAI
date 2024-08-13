@@ -20,6 +20,8 @@
   even though `show_plots=False`
 * `vector_model`:
   * `VectorModel`: Fix data frame transformers not appearing in string representations
+* `data_transformation`:
+  * `DFTOneHotEncoder`: Fitting failed in the presence of missing values
 
 
 ## v1.2.1 (2024-08-10)

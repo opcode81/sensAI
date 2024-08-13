@@ -410,8 +410,13 @@ class DFTOneHotEncoder(DataFrameTransformer):
             if len(self._columnsToEncode) == 0:
                 log.warning(f"{self} does not apply to any columns, transformer has no effect; regex='{self._columnNameRegex}'")
         if self.oneHotEncoders is None:
-            self.oneHotEncoders = {column: OneHotEncoder(categories=[np.sort(df[column].unique())], handle_unknown=self.handleUnknown,
-                **self._sparse_kwargs()) for column in self._columnsToEncode}
+            self.oneHotEncoders = {}
+            sparse_kwargs = self._sparse_kwargs()
+            for column in self._columnsToEncode:
+                values = df[column].dropna().unique()
+                categories = [np.sort(values)]
+                self.oneHotEncoders[column] = OneHotEncoder(categories=categories, handle_unknown=self.handleUnknown,
+                    **sparse_kwargs)
         for columnName in self._columnsToEncode:
             self.oneHotEncoders[columnName].fit(df[[columnName]])
 
