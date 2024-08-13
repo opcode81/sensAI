@@ -462,7 +462,7 @@ sensAI's `util` package contains a wide range of general utilities, including
 
 # Documentation
 
- * [Reference documentation and tutorials](https://aai-institute.github.io/sensAI/docs/)
+ * [Reference documentation and tutorials](https://opcode81.github.io/sensAI/docs/)
 
    At this point, the documentation is still limited, but we plan to add 
    further tutorials and overview documentation in the future.
