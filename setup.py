@@ -19,6 +19,8 @@ DEPS_VERSION_LOWER_BOUND = [
     "lightgbm",
     # extra "geoanalytics"
     "networkx", "Shapely", "geopandas", "utm",
+    # extra "xgboost"
+    "xgboost",
 ]
 # upper bound: map dependency name to lowest exluded version
 DEPS_VERSION_UPPER_BOUND_EXCLUSIVE: Dict[str, str] = {}

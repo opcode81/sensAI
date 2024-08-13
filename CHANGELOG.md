@@ -5,6 +5,9 @@
 
 ### Improvements/Changes
 
+* Add extra `xgboost` on PyPI. sensAI supports a wide range of XGBoost versions (dating back to 2020), 
+  but with the extra, we opted to use 1.7 as a lower bound, as compatibility with this version 
+  is well-tested. 
 * `util`:
   * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
 * `evaluation`:
