@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pathlib
+from glob import glob
 from typing import Dict, Tuple
 
 import nbformat
@@ -32,7 +33,7 @@ def notebooksUsedInDocs() -> Tuple[Dict[str, str], str]:
                 for notebook_filename in notebooks_to_copy:
                     if not os.path.exists(NOTEBOOKS_DIR / notebook_filename):
                         raise FileNotFoundError(f"Notebook {notebook_filename} does not exist in notebooks directory")
-                return notebooks_to_copy, str(path)
+                return notebooks_to_copy, str(path.absolute())
     raise Exception("Could not find notebooks directory in docs")
 
 
@@ -49,22 +50,58 @@ class LoggingExecutePreprocessor(ExecutePreprocessor):
         return super().preprocess_cell(cell, resources, index)
 
 
+def execute_notebook(notebook_path):
+    """
+    Execute a jupyter notebook and return the executed notebook
+
+    :param notebook_path: path to the notebook
+    :return: the notebook with output cells added
+    """
+    log.info(f"Reading jupyter notebook from {notebook_path}")
+    with open(notebook_path) as f:
+        nb = nbformat.read(f, as_version=4)
+    ep = LoggingExecutePreprocessor(notebook_path, timeout=600)
+    ep.preprocess(nb, resources={"metadata": {"path": str(NOTEBOOKS_DIR)}})
+    return nb
+
+
 @pytest.mark.parametrize(
     "notebook", [file for file in os.listdir(NOTEBOOKS_DIR) if file.endswith(".ipynb") and file not in NOTEBOOKS_NOT_TESTED]
 )
 def test_notebook(notebook):
+    """
+    Tests notebooks in the /notebooks folder, optionally copying the executed notebook to the /docs folder
+
+    :param notebook:
+    :return:
+    """
     notebook_path = NOTEBOOKS_DIR / notebook
-    log.info(f"Reading jupyter notebook from {notebook_path}")
-    with open(notebook_path) as f:
-        nb = nbformat.read(f, as_version=4)
-    ep = LoggingExecutePreprocessor(notebook, timeout=600)
-    ep.preprocess(nb, resources={"metadata": {"path": str(NOTEBOOKS_DIR)}})
+    nb = execute_notebook(notebook_path)
 
     # saving the executed notebook to docs
     if notebook in NOTEBOOKS_TO_COPY:
         output_path = os.path.join(DOCS_NOTEBOOKS_DIR, NOTEBOOKS_TO_COPY[notebook])
-        log.info(f"Saving executed notebook to {output_path} for documentation purposes")
+        log.info(f"Saving executed notebook to {output_path}")
         with open(output_path, "w", encoding="utf-8") as f:
             nbformat.write(nb, f)
     else:
         log.info(f"Notebook {notebook} is not used in docs; not copied")
+
+
+@pytest.mark.parametrize(
+    "notebook_path", [p for p in [os.path.abspath(g) for g in glob(f"{DOCS_DIR}/**/*.ipynb")] if not p.startswith(DOCS_NOTEBOOKS_DIR)]
+)
+def test_build_docs_notebook_non_tutorial(notebook_path):
+    """
+    Process all notebooks in the docs/ folder that are purely documentation, i.e. ones that aren't tutorials which
+    have been copied to DOCS_NOTEBOOKS_DIR by the other test above.
+
+    Runs each notebook and saves it with output cells in-place.
+
+    :param notebook_path:
+    :return:
+    """
+    nb = execute_notebook(notebook_path)
+    with open(notebook_path, "w", encoding="utf-8") as f:
+        log.info(f"Saving executed notebook with outputs to {notebook_path}")
+        nbformat.write(nb, f)

@@ -20,7 +20,9 @@ only_build_toc_files        : true
 #######################################################################################
 # Execution settings
 execute:
-  execute_notebooks         : "auto"  # NOTE: Repeat below in `nb_execution_mode`. Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
+  # NOTE: Notebooks are not executed, because test_notebooks.py executes them and stores them with outputs in the docs/ folder
+  # NOTE: If changed, repeat below in `nb_execution_mode`.
+  execute_notebooks         : "off"  # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
   cache                     : ""    # A path to the jupyter cache that will be used to store execution artifacts. Defaults to `_build/.jupyter_cache/`
   exclude_patterns          : []    # A list of patterns to *skip* in execution (e.g. a notebook that takes a really long time)
   timeout                   : 1000    # The maximum time (in seconds) each notebook cell is allowed to run.
@@ -139,7 +141,7 @@ sphinx:
     add_module_names: False
     github_username: thu-ml
     github_repository: tianshou
-    nb_execution_mode: "auto"
+    nb_execution_mode: "off"
     nb_merge_streams: True  # This is important for cell outputs to appear as single blocks rather than one block per line
     python_use_unqualified_type_names: True
     nb_mime_priority_overrides: [
