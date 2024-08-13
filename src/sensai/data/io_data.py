@@ -8,7 +8,7 @@ import pandas as pd
 import scipy.stats
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from .util.string import ToStringMixin
+from ..util.string import ToStringMixin
 
 log = logging.getLogger(__name__)
 
