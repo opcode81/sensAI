@@ -1,5 +1,6 @@
 # Changelog
 
+
 ## Unreleased
 
 ### Improvements/Changes
@@ -10,6 +11,7 @@
   * `EvaluationResultCollector`: Add method `is_plot_creation_enabled`
 * `data`:
   * `InputOutputData`: Add method `to_df`
+  * Add module `data.dataset` containing sample datasets (mainly for demonstration purposes)
 
 ### Fixes:
 
@@ -28,6 +30,7 @@
   * Minimise required dependencies for all modules in this package in preparation of the release of *sensAI-utils* 
 * `util.logging`:
   * Fix type annotations of `run_main` and `run_cli` 
+
 
 ## v1.2.0 (2024-06-10)
 
@@ -111,6 +114,7 @@
 * `LSTNetworkVectorClassificationModel` is now functional in v1,
   improving the representation (no more dictionaries).
   This breaks compatibility with sensAI v0.x representations of this class.
+
 
 ## v1.0.0 (2023-12-06) 
 
@@ -213,6 +217,7 @@
   * Combined eval stats were not logged
 * `EvalStatsClassification`: Do not attempt to create precision/recall plots if
   class probabilities are unavailable
+
 
 ## v0.2.0 (2023-07-20)
 
