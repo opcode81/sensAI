@@ -7,7 +7,9 @@
 * `util`:
   * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
 * `evaluation`:
-  * `EvaluationResultCollector`: Add method `is_plot_creation_enabled` 
+  * `EvaluationResultCollector`: Add method `is_plot_creation_enabled`
+* `data`:
+  * `InputOutputData`: Add method `to_df`
 
 ### Fixes:
 

@@ -103,6 +103,9 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
                 correlations[outputCol][inputCol] = pcc
         return correlations
 
+    def to_df(self) -> pd.DataFrame:
+        return pd.concat((self.inputs, self.outputs), axis=1)
+
 
 TInputOutputData = TypeVar("TInputOutputData", bound=BaseInputOutputData)
 
