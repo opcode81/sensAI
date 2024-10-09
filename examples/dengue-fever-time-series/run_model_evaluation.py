@@ -27,19 +27,19 @@ def eval_models(city_only: Optional[str] = None, use_cross_validation=False):
 
     # define models to evaluate
     model_factories = []
-    #model_factories.append(lambda: ModelFactory.create_baseline())
-    #model_factories.append(lambda: ModelFactory.create_glm_benchmark())
+    model_factories.append(lambda: ModelFactory.create_baseline())
+    model_factories.append(lambda: ModelFactory.create_glm_benchmark())
     #model_factories.append(lambda: ModelFactory.create_rnn_mlp(week_window_size, batch_size=64))
     #model_factories.append(lambda: ModelFactory.create_rnn_mlp_autoreg(week_window_size))
     #model_factories.append(lambda: ModelFactory.create_rnn_mlp(week_window_size, feature_columns=ModelFactory.COLS_FEATURES_SEL))
     model_factories.append(lambda: ModelFactory.create_lstnet_encoder_decoder(week_window_size))
     #model_factories.append(lambda: ModelFactory.create_mlp(week_window_size))
-    #model_factories.append(lambda: ModelFactory.create_xgb())
+    model_factories.append(lambda: ModelFactory.create_xgb())
     #model_factories.append(lambda: ModelFactory.create_xgb_fsel())
     #model_factories.append(lambda: ModelFactory.create_xgb_window(week_window_size, min_child_weight=1))
     #model_factories.append(lambda: ModelFactory.create_xgb_window(week_window_size, min_child_weight=1, feature_columns=ModelFactory.COLS_FEATURES_SEL))
-    #model_factories.append(lambda: ModelFactory.create_xgb_window_opt(week_window_size))
-    #model_factories.append(lambda: ModelFactory.create_mean_past_year_week())
+    model_factories.append(lambda: ModelFactory.create_xgb_window_opt(week_window_size))
+    model_factories.append(lambda: ModelFactory.create_mean_past_year_week())
 
     # evaluate models
     ev = pred.create_multi_data_evaluator()
