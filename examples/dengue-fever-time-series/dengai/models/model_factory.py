@@ -62,7 +62,7 @@ class ModelFactory:
         encoder_factory = LSTNetworkEncoderFactory(week_window_size-1, 100, 4, 32, 0, 0)
         decoder_factory = SingleTargetDecoderFactory(LinearPredictorFactory())
         # decoder_factory = SingleTargetDecoderFactory(MLPPredictorFactory(output_activation_fn=ActivationFunction.RELU))
-        nn_optimiser_params = NNOptimiserParams(batch_size=64, shuffle=True)
+        nn_optimiser_params = NNOptimiserParams(batch_size=64, shuffle=True, early_stopping_epochs=50)
         latent_dim = encoder_factory.get_latent_dim()
         return EncoderDecoderVectorRegressionModel(False,
                     COL_FGEN_HISTORY_WINDOW, history_sequence_vectoriser, False,
