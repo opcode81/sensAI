@@ -2,7 +2,6 @@
 __pycache__
 *.bak
 *.orig
-/data
 /temp
 /.idea
 /results
