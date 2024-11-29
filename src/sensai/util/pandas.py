@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from copy import copy
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -208,7 +208,7 @@ def query_data_frame(df: pd.DataFrame, sql: str):
 
 
 class SeriesInterpolation(ABC):
-    def interpolate(self, series: pd.Series, inplace: bool = False) -> pd.Series | None:
+    def interpolate(self, series: pd.Series, inplace: bool = False) -> Optional[pd.Series]:
         if not inplace:
             series = series.copy()
         self._interpolate_in_place(series)
@@ -251,7 +251,7 @@ class SeriesInterpolationLinearIndex(SeriesInterpolation):
         self.ffill = ffill
         self.bfill = bfill
 
-    def _interpolate_in_place(self, series: pd.Series) -> pd.Series | None:
+    def _interpolate_in_place(self, series: pd.Series) -> None:
         series.interpolate(method="index", inplace=True)
         if self.ffill:
             series.interpolate(method="ffill", limit_direction="forward")
@@ -266,7 +266,7 @@ class SeriesInterpolationRepeatPreceding(SeriesInterpolation):
         """
         self.bfill = bfill
 
-    def _interpolate_in_place(self, series: pd.Series) -> pd.Series | None:
+    def _interpolate_in_place(self, series: pd.Series) -> None:
         series.interpolate(method="pad", limit_direction="forward", inplace=True)
         if self.bfill:
             series.interpolate(method="bfill", limit_direction="backward")
