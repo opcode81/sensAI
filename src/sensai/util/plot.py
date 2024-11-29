@@ -1,12 +1,16 @@
+import collections
 import logging
-from typing import Sequence, Callable, TypeVar, Tuple, Optional, List, Any
+from typing import Sequence, Callable, TypeVar, Tuple, Optional, List, Any, Union, Dict
 
 import matplotlib.figure
 import matplotlib.ticker as plticker
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+
+from sensai.util.pandas import SeriesInterpolation
 
 log = logging.getLogger(__name__)
 
@@ -136,18 +140,22 @@ TPlot = TypeVar("TPlot", bound="Plot")
 
 
 class Plot:
-    def __init__(self, draw: Callable[[], None] = None, name=None):
+    def __init__(self, draw: Callable[[plt.Axes], None] = None, name=None, ax: Optional[plt.Axes] = None):
         """
         :param draw: function which returns a matplotlib.Axes object to show
         :param name: name/number of the figure, which determines the window caption; it should be unique, as any plot
             with the same name will have its contents rendered in the same window. By default, figures are number
             sequentially.
+        :param ax: the axes to draw to
         """
-        fig, ax = plt.subplots(num=name)
+        if ax is not None:
+            fig = None
+        else:
+            fig, ax = plt.subplots(num=name)
         self.fig: plt.Figure = fig
         self.ax: plt.Axes = ax
         if draw is not None:
-            draw()
+            draw(ax)
 
     def xlabel(self: TPlot, label) -> TPlot:
         self.ax.set_xlabel(label)
@@ -207,7 +215,8 @@ class ScatterPlot(Plot):
     MAX_OPACITY = 0.5
     MIN_OPACITY = 0.05
 
-    def __init__(self, x, y, c=None, c_base: Tuple[float, float, float] = (0, 0, 1), c_opacity=None, x_label=None, y_label=None, **kwargs):
+    def __init__(self, x, y, c=None, c_base: Tuple[float, float, float] = (0, 0, 1), c_opacity=None, x_label=None,
+            y_label=None, add_diagonal=False, **kwargs):
         """
         :param x: the x values; if has name (e.g. pd.Series), will be used as axis label
         :param y: the y values; if has name (e.g. pd.Series), will be used as axis label
@@ -238,12 +247,15 @@ class ScatterPlot(Plot):
         if y_label is None and hasattr(y, "name"):
             y_label = y.name
 
-        def draw():
+        def draw(ax):
             if x_label is not None:
                 plt.xlabel(x_label)
             if x_label is not None:
                 plt.ylabel(y_label)
+            value_range = [min(min(x), min(y)), max(max(x), max(y))]
             plt.scatter(x, y, c=c, **kwargs)
+            if add_diagonal:
+                plt.plot(value_range, value_range, '-', lw=1, label="_not in legend", color="green", zorder=1)
 
         super().__init__(draw)
 
@@ -273,7 +285,7 @@ class HeatMapPlot(Plot):
         if y_label is None and hasattr(y, "name"):
             y_label = y.name
 
-        def draw():
+        def draw(ax):
             nonlocal cmap
             x_range = [min(x), max(x)]
             y_range = [min(y), max(y)]
@@ -312,7 +324,7 @@ class HistogramPlot(Plot):
         :param kwargs: arguments to pass on to sns.histplot
         """
 
-        def draw():
+        def draw(ax):
             nonlocal cdf_secondary_axis
             sns.histplot(values, bins=bins, kde=kde, binwidth=binwidth, stat=stat, **kwargs)
             plt.ylabel(stat)
@@ -344,3 +356,60 @@ class HistogramPlot(Plot):
                 self.xlabel(xlabel)
 
         super().__init__(draw)
+
+
+class AverageSeriesLinePlot(Plot):
+    """
+    Plots the average of a collection of series or the averages of several collections of series,
+    establishing a common index (the unification of all indices) for each collection via interpolation.
+    The standard deviation is additionally shown as a shaded area around each line.
+    """
+    def __init__(self,
+            series_collection: Union[List[pd.Series], Dict[str, List[pd.Series]]],
+            interpolation: SeriesInterpolation,
+            collection_name="collection",
+            ax: Optional[plt.Axes] = None,
+            hue_order=None, palette=None):
+        """
+        :param series_collection: either a list of series to average or a dictionary mapping the name of a collection
+            to a list of series to average
+        :param interpolation: the interpolation with which to obtain series values for the unified index of a collection of series
+        :param collection_name: a name indicating what a key in `series_collection` refers to, which will appear in the legend
+            for the case where more than one collection is passed
+        :param ax: the axis to plot to; if None, create a new figure and axis
+        :param hue_order: the hue order (for the case where there is more than one collection of series)
+        :param palette: the colour palette to use
+        """
+        if isinstance(series_collection, dict):
+            series_dict = series_collection
+        else:
+            series_dict = {"_": series_collection}
+
+        series_list = next(iter(series_dict.values()))
+        x_name = series_list[0].index.name or "x"
+        y_name = series_list[0].name or "y"
+
+        # build data frame with all series, interpolating each sub-collection
+        dfs = []
+        for name, series_list in series_dict.items():
+            interpolated_series_list = interpolation.interpolate_all_with_combined_index(series_list)
+            for series in interpolated_series_list:
+                df = pd.DataFrame({y_name: series, x_name: series.index})
+                df["series_id"] = id(series)
+                df[collection_name] = name
+                dfs.append(df)
+        full_df = pd.concat(dfs, axis=0).reset_index(drop=True)
+
+        def draw(ax):
+            sns.lineplot(
+                data=full_df,
+                x=x_name,
+                y=y_name,
+                estimator="mean",
+                hue=collection_name if len(series_dict) > 1 else None,
+                hue_order=hue_order,
+                palette=palette,
+                ax=ax,
+            )
+
+        super().__init__(draw, ax=ax)

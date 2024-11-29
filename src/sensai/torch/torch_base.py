@@ -608,7 +608,8 @@ class TorchVectorRegressionModel(VectorRegressionModel):
         return factory.create_data_set_provider(inputs, outputs, self, self._trainingContext, input_tensoriser=self.inputTensoriser,
             output_tensoriser=self.outputTensoriser, data_frame_splitter=self.dataFrameSplitter)
 
-    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
+    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series] = None) -> None:
+        self._warn_sample_weights_unsupported(False, weights)
         if self.inputTensoriser is not None:
             log.info(f"Fitting {self.inputTensoriser} ...")
             self.inputTensoriser.fit(inputs, model=self)
@@ -772,7 +773,8 @@ class TorchVectorClassificationModel(VectorClassificationModel):
         return factory.create_data_set_provider(inputs, outputs, self, self._trainingContext, input_tensoriser=self.inputTensoriser,
             output_tensoriser=self.outputTensoriser, data_frame_splitter=self.dataFrameSplitter)
 
-    def _fit_classifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame) -> None:
+    def _fit_classifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series] = None) -> None:
+        self._warn_sample_weights_unsupported(False, weights)
         if len(outputs.columns) != 1:
             raise ValueError("Expected one output dimension: the class labels")
 

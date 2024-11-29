@@ -1,8 +1,9 @@
 import logging
 import os
 import pickle
+from copy import copy
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Union
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 from .io import S3Object, is_s3_path
 
@@ -151,14 +152,32 @@ class PickleFailureDebugger:
                 log.info(f"{prefix}: is picklable")
 
 
+class PersistableObject:
+    """
+    Base class which can be used for objects that shall support being persisted via pickle.
+
+    IMPORTANT:
+    The implementations correspond to the default behaviour of pickle for the case where an object has a non-empty
+    set of attributes. However, for the case where the set of attributes can be empty adding the explicit
+    implementation of `__getstate__` is crucial in ensuring that `__setstate__` will be called upon unpickling.
+    So if an object initially has no attributes and is persisted in that state, then any future refactorings
+    cannot be handled via `__setstate__` by default, but they can when using this class.
+    """
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+
+
 def setstate(
     cls,
     obj,
     state: Dict[str, Any],
-    renamed_properties: Dict[str, str] = None,
+    renamed_properties: Dict[str, Union[str, Tuple[str, Callable[[Dict[str, Any]], Any]]]] = None,
     new_optional_properties: List[str] = None,
     new_default_properties: Dict[str, Any] = None,
-    removed_properties: List[str] = None
+    removed_properties: List[str] = None,
 ) -> None:
     """
     Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
@@ -169,17 +188,26 @@ def setstate(
     :param cls: the class in which you are implementing __setstate__
     :param obj: the instance of cls
     :param state: the state dictionary
-    :param renamed_properties: a mapping from old property names to new property names
+    :param renamed_properties: can be used for renaming as well as for assigning new values.
+        If passed must map an old property name to either a new property name or
+        to tuple of a new property name and a function that computes the new value from the state dictionary.
     :param new_optional_properties: a list of names of new property names, which, if not present, shall be initialised with None
     :param new_default_properties: a dictionary mapping property names to their default values, which shall be added if they are not present
     :param removed_properties: a list of names of properties that are no longer being used
     """
     # handle new/changed properties
     if renamed_properties is not None:
-        for mOld, mNew in renamed_properties.items():
-            if mOld in state:
-                state[mNew] = state[mOld]
-                del state[mOld]
+        # `new` can either be a string or a tuple of a string and a function
+        for old_name, new in renamed_properties.items():
+            if old_name in state:
+                if isinstance(new, str):
+                    new_name, new_value = new, state[old_name]
+                else:
+                    new_name, new_value = new[0], new[1](state)
+
+                del state[old_name]
+                state[new_name] = new_value
+
     if new_optional_properties is not None:
         for mNew in new_optional_properties:
             if mNew not in state:
@@ -228,7 +256,8 @@ def getstate(
     if hasattr(s, '__getstate__'):
         d = s.__getstate__()
     else:
-        d = obj.__dict__.copy()
+        d = obj.__dict__
+    d = copy(d)
     if transient_properties is not None:
         for p in transient_properties:
             if p in d:

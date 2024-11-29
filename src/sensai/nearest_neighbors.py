@@ -233,7 +233,8 @@ class KNearestNeighboursClassificationModel(VectorClassificationModel):
         return super()._tostring_excludes() + ["neighbor_provider_factory", "distance_metric", "distance_metric_cache", "df", "y"]
 
     # noinspection DuplicatedCode
-    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = x.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y
@@ -302,7 +303,8 @@ class KNearestNeighboursRegressionModel(VectorRegressionModel):
         return super()._tostring_excludes() + ["neighbor_provider_factory", "distance_metric", "distance_metric_cache", "df", "y"]
 
     # noinspection DuplicatedCode
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         assert len(y.columns) == 1, "Expected exactly one column in label set Y"
         self.df = x.merge(y, how="inner", left_index=True, right_index=True)
         self.y = y

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import logging
 import os
 import tempfile
+from typing import Optional
 
 import pandas as pd
 import tensorflow as tf
@@ -89,7 +90,8 @@ class KerasVectorRegressionModel(VectorRegressionModel, ABC):
         """
         pass
 
-    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series]):
+        self._warn_sample_weights_unsupported(False, weights)
         # normalise data
         self.input_scaler = normalisation.VectorDataScaler(inputs, self.normalisation_mode)
         self.output_scaler = normalisation.VectorDataScaler(outputs, self.normalisation_mode)

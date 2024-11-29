@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+from ...util.pickle import setstate
 from ...util.plot import ScatterPlot, HistogramPlot, Plot, HeatMapPlot
 from ...util.string import ToStringMixin, dict_string
 from ...vector_model import VectorModel
@@ -18,6 +19,7 @@ from ...vector_model import VectorModel
 TMetric = TypeVar("TMetric", bound="Metric")
 TVectorModel = TypeVar("TVectorModel", bound=VectorModel)
 
+Array = Union[np.ndarray, pd.Series, list]
 PredictionArray = Union[np.ndarray, pd.Series, pd.DataFrame, list]
 
 
@@ -242,23 +244,29 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
     and computes corresponding metrics
     """
     def __init__(self, y_predicted: Optional[PredictionArray], y_true: Optional[PredictionArray],
-                 metrics: List[TMetric], additional_metrics: List[TMetric] = None):
+            metrics: List[TMetric], additional_metrics: List[TMetric] = None,
+            weights: Optional[Array] = None):
         """
         :param y_predicted: sequence of predicted values, or, in case of multi-dimensional predictions, either a data frame with
             one column per dimension or a nested sequence of values
         :param y_true: sequence of ground truth labels of same shape as y_predicted
         :param metrics: list of metrics to be computed on the provided data
         :param additional_metrics: the metrics to additionally compute. This should only be provided if metrics is None
+        :param weights: weights for each data point contained in `y_predicted` and `y_true`
         """
         self.y_true = []
         self.y_predicted = []
+        self.weights: Optional[List[float]] = None
         self.y_true_multidim = None
         self.y_predicted_multidim = None
         if y_predicted is not None:
-            self.add_all(y_predicted, y_true)
+            self.add_all(y_predicted=y_predicted, y_true=y_true, weights=weights)
         super().__init__(metrics, additional_metrics=additional_metrics)
 
-    def add(self, y_predicted, y_true) -> None:
+    def __setstate__(self, state):
+        return setstate(PredictionEvalStats, self, state, new_optional_properties=["weights"])
+
+    def add(self, y_predicted, y_true, weight: Optional[float] = None) -> None:
         """
         Adds a single pair of values to the evaluation
 
@@ -267,12 +275,17 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
         """
         self.y_true.append(y_true)
         self.y_predicted.append(y_predicted)
+        if weight is not None:
+            if self.weights is None:
+                self.weights = []
+            self.weights.append(weight)
 
-    def add_all(self, y_predicted: PredictionArray, y_true: PredictionArray) -> None:
+    def add_all(self, y_predicted: PredictionArray, y_true: PredictionArray, weights: Optional[Array] = None) -> None:
         """
         :param y_predicted: sequence of predicted values, or, in case of multi-dimensional predictions, either a data frame with
             one column per dimension or a nested sequence of values
         :param y_true: sequence of ground truth labels of same shape as y_predicted
+        :param weights: optional weights of data points
         """
         def is_sequence(x):
             return isinstance(x, pd.Series) or isinstance(x, list) or isinstance(x, np.ndarray)
@@ -313,6 +326,12 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
         else:
             raise Exception(f"Unhandled data types: {type(y_predicted)}, {type(y_true)}")
 
+        if weights is not None:
+            if self.weights is None:
+                self.weights = []
+            assert len(weights) == len(self.y_predicted) - len(self.weights), "Length of weights does not match"
+            self.weights.extend(weights)
+
     def _tostring_object_info(self) -> str:
         return f"{super()._tostring_object_info()}, N={len(self.y_predicted)}"
 
@@ -336,3 +355,6 @@ class EvalStatsPlot(Generic[TEvalStats], ABC):
         :return: the figure or None if this plot is not applicable/cannot be created
         """
         pass
+
+    def is_applicable(self, eval_stats: TEvalStats) -> bool:
+        return True

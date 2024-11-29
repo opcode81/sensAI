@@ -19,6 +19,9 @@ class SkLearnDecisionTreeVectorClassificationModel(AbstractSkLearnVectorClassifi
         super().__init__(DecisionTreeClassifier,
             min_samples_leaf=min_samples_leaf, random_state=random_state, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassificationModel,
         FeatureImportanceProviderSkLearnClassification):
@@ -27,6 +30,9 @@ class SkLearnRandomForestVectorClassificationModel(AbstractSkLearnVectorClassifi
             random_state=random_state, min_samples_leaf=min_samples_leaf, n_estimators=n_estimators,
             use_balanced_class_weights=use_balanced_class_weights,
             **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
@@ -50,20 +56,32 @@ class SkLearnMLPVectorClassificationModel(AbstractSkLearnVectorClassificationMod
             random_state=random_state, solver=solver, batch_size=batch_size, max_iter=max_iter, early_stopping=early_stopping,
             n_iter_no_change=n_iter_no_change, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return False
+
 
 class SkLearnMultinomialNBVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, **model_args):
         super().__init__(sklearn.naive_bayes.MultinomialNB, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnSVCVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, random_state=42, **model_args):
         super().__init__(sklearn.svm.SVC, random_state=random_state, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnLogisticRegressionVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
     def __init__(self, random_state=42, **model_args):
         super().__init__(sklearn.linear_model.LogisticRegression, random_state=random_state, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnKNeighborsVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
@@ -76,3 +94,6 @@ class SkLearnKNeighborsVectorClassificationModel(AbstractSkLearnVectorClassifica
         inputs = np.ascontiguousarray(input_values)
 
         return super()._predict_sklearn(inputs)
+
+    def is_sample_weight_supported(self) -> bool:
+        return False

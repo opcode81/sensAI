@@ -52,6 +52,9 @@ class ResultWriter:
             relevant if extensionToAdd is specified
         :return: the full path
         """
+        # replace forbidden characters
+        filename_suffix = filename_suffix.replace(">=", "gte").replace(">", "gt")
+
         if extension_to_add is not None:
             add_ext = True
             valid_extensions = set(valid_other_extensions) if valid_other_extensions is not None else set()
@@ -201,3 +204,19 @@ class S3Object:
         session = boto3.session.Session(profile_name=os.getenv("AWS_PROFILE"))
         s3 = session.resource("s3")
         return s3.Bucket(self.bucket).Object(self.object)
+
+
+def create_path(root: str, *path_elems: str, is_dir: bool, make_dirs: bool = False) -> str:
+    path = os.path.join(root, *path_elems)
+    if make_dirs:
+        dir_path = path if is_dir else os.path.dirname(path)
+        os.makedirs(dir_path, exist_ok=True)
+    return path
+
+
+def create_file_path(root, *path_elems, make_dirs: bool = False) -> str:
+    return create_path(root, *path_elems, is_dir=False, make_dirs=make_dirs)
+
+
+def create_dir_path(root, *path_elems, make_dirs: bool = False) -> str:
+    return create_path(root, *path_elems, is_dir=True, make_dirs=make_dirs)

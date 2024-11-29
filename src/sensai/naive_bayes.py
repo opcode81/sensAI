@@ -1,5 +1,6 @@
 import collections
 from math import log, exp
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,8 @@ class CategoricalNaiveBayesVectorClassificationModel(VectorClassificationModel):
         self.conditionals = None
         self.pseudoCount = pseudo_count
 
-    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         self.prior = collections.defaultdict(lambda: 0)
         self.conditionals = collections.defaultdict(lambda: [collections.defaultdict(lambda: 0) for _ in range(x.shape[1])])
         increment = 1

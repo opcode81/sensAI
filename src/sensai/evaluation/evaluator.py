@@ -3,19 +3,21 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Dict, Any, Generator, Generic, TypeVar, Sequence, Optional, List, Union, Callable
 
+import numpy as np
 import pandas as pd
 
 from .eval_stats import GUESS
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
+from .result_set import RegressionResultSet
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..data_transformation import DataFrameTransformer
 from ..tracking import TrackingMixin, TrackedExperiment
 from ..util.deprecation import deprecated
 from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
-from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorModelFittableBase, VectorRegressionModel
+from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorRegressionModel
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +120,60 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
     def get_eval_stats_collection(self):
         return RegressionEvalStatsCollection(list(self.eval_stats_by_var_name.values()))
 
+    def to_data_frame(self, modify_input_df: bool = False, output_col_name_override: Optional[str] = None):
+        """
+        Creates a data frame with all inputs, predictions and prediction errors.
+        For each predicted variable "y", there will be columns "y_predicted", "y_true", "y_error" and
+        "y_abs_error".
+        If there is only a single predicted variable, the variable can be renamed for convenience.
+
+        The resulting data frame can be conveniently queried and analysed using class ResultSet.
+
+        :param modify_input_df: whether to modify the input data frame in-place to generate the data frame
+            (instead of copying it). This can be reasonable in cases where the data is very large.
+        :param output_col_name_override: overrides the output column name. For example, if this is set to "y",
+            then the columns named in the description above will be present in the data frame.
+        :return: a data frame containing all inputs, outputs and prediction errors
+        """
+        df = self.io_data.inputs
+        if not modify_input_df:
+            df = df.copy()
+        for predicted_var_name, eval_stats in self.eval_stats_by_var_name.items():
+            y_predicted = np.array(eval_stats.y_predicted)
+            y_true = np.array(eval_stats.y_true)
+            if output_col_name_override is not None:
+                assert(len(self.eval_stats_by_var_name)) == 1, "Column name override is only valid for a single output variable"
+                predicted_var_name = output_col_name_override
+            df[RegressionResultSet.col_name_predicted(predicted_var_name)] = y_predicted
+            df[RegressionResultSet.col_name_ground_truth(predicted_var_name)] = y_true
+            error = y_predicted - y_true
+            df[RegressionResultSet.col_name_error(predicted_var_name)] = error
+            df[RegressionResultSet.col_name_abs_error(predicted_var_name)] = np.abs(error)
+        return df
+
+    def create_result_set(self, modify_input_df: bool = False, output_col_name_override: Optional[str] = None,
+            regression_result_set_factory: Callable[[pd.DataFrame, List[str]], RegressionResultSet] = RegressionResultSet) \
+            -> RegressionResultSet:
+        """
+        Creates a queryable result set from the prediction results which can be used, in particular, for interactive analyses.
+
+        The result set will contain a data frame, and for each predicted variable "y",
+        there will be columns "y_predicted", "y_true", "y_error" and "y_abs_error" in this data frame.
+        If there is only a single predicted variable, the variable can be renamed for convenience.
+
+        The resulting data frame can be conveniently queried and analysed using class ResultSet.
+
+        :param modify_input_df: whether to modify the input data frame in-place to generate the data frame
+            (instead of copying it). This can be reasonable in cases where the data is very large.
+        :param output_col_name_override: overrides the output column name. For example, if this is set to "y",
+            then the columns named in the description above will be present in the data frame.
+        :return: a data frame containing all inputs, outputs and prediction errors
+
+        :return: the result set
+        """
+        return RegressionResultSet.from_regression_eval_data(self, modify_input_df=modify_input_df,
+            output_col_name_override=output_col_name_override)
+
 
 TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
 
@@ -195,7 +251,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         """
         super().set_tracked_experiment(tracked_experiment)
 
-    def eval_model(self, model: Union[VectorModelBase, VectorModelFittableBase], on_training_data=False, track=True,
+    def eval_model(self, model: Union[VectorModelBase, VectorModel], on_training_data=False, track=True,
             fit=False) -> TEvalData:
         """
         Evaluates the given model
@@ -241,11 +297,11 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
         """
         return MetricsDictProviderFromFunction(functools.partial(self._compute_metrics_for_var_name, predictedVarName=predicted_var_name))
 
-    def fit_model(self, model: VectorModelFittableBase):
+    def fit_model(self, model: VectorModel):
         """Fits the given model's parameters using this evaluator's training data"""
         if self.training_data is None:
             raise Exception(f"Cannot fit model with evaluator {self.__class__.__name__}: no training data provided")
-        model.fit(self.training_data.inputs, self.training_data.outputs)
+        model.fit_input_output_data(self.training_data)
 
 
 class RegressionEvaluatorParams(EvaluatorParams):
@@ -327,6 +383,7 @@ class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelE
                 else:
                     raise Exception(f"Model output column '{predictedVarName}' not found in ground truth columns {ground_truth.columns}")
             eval_stats = RegressionEvalStats(y_predicted=predictions[predictedVarName], y_true=y_true,
+                weights=data.weights,
                 metrics=self.params.metrics,
                 additional_metrics=self.params.additional_metrics,
                 model=model,
@@ -502,7 +559,7 @@ class RuleBasedVectorRegressionModelEvaluator(VectorRegressionModelEvaluator):
     def __init__(self, data: InputOutputData):
         super().__init__(data, test_data=data)
 
-    def eval_model(self, model: Union[VectorModelBase, VectorModelFittableBase], on_training_data=False, track=True,
+    def eval_model(self, model: Union[VectorModelBase, VectorModel], on_training_data=False, track=True,
             fit=False) -> VectorRegressionModelEvaluationData:
         """
         Evaluate the rule based model. The training data and test data coincide, thus fitting the model
