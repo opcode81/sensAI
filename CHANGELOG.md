@@ -5,23 +5,62 @@
 
 ### Improvements/Changes
 
+* `vector_model`:
+  * Add option to provide sample `weights` when training a `VectorModel`, adjusting all subclasses accordingly. Models that do not support weighting will log a warning if weights are specified.
+  * Remove unnecessary intermediate base class `VectorModelFittableBase`
+  * Add helper function `get_predicted_var_name`
 * Add extra `xgboost` on PyPI. sensAI supports a wide range of XGBoost versions (dating back to 2020), 
   but with the extra, we opted to use 1.7 as a lower bound, as compatibility with this version 
   is well-tested. 
 * `util`:
   * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
   * `util.logging`: 
-    * `add_memory_logger` now returns the logger instance, which can be queried to retrieve the log (see breacking
-      change below)
+    * `add_memory_logger` now returns the logger instance, which can be queried to retrieve the log (see breaking change below)
     * Add class `MemoryLoggerContext`, which be used in conjunction with Python's `with` statement to record logs
+    * Allow to control 'append' mode in `add_file_logger` and `FileLoggerContext`
+  * `util.pickle`:
+    * Add class `PersistableObject` as a marker for classes that can be persisted via pickle. 
+      This is useful for classes which initially have no state but may have state in the future.
+      Note that if a stateless class is unpickled, it will not call `__setstate__` upon unpickling, thus making it impossible to add
+      required state if it has been refactored to have state. 
+    * `setstate`: Allow `renamed_properties` parameter to alternatively accept a tuple providing the new name and a function computing the new value
+  * `util.cache`: Add class `LRUCache` as a simple least-recently-used (LRU) cache implementation implementing the `KeyValueCache` interface
+  * `util.io`: 
+    * Add util functions for path creation: `create_path`, `create_dir_path`, `create_file_path`
+  * `util.pandas`:
+    * Add `SeriesInterpolation` abstraction for the interpolation of `pd.Series` objects
+      * Method `interpolate_all_with_combined_index` allows to bring multiple series into a common index, filling in missing values 
+        in each series via interpolation
+      * Implementation `SeriesInterpolationRepeatPreceding` (to fill gaps by repeating the last value)
+      * Implementation `SeriesInterpolationLinearIndex` (to interpolate linearly based on an index)
+    * Add function `average_series` to compute the average of multiple series based on interpolation
+    * Add function `query_data_frame` to support SQL-like queries via `duckdb` (see changes pertaining to `ResultSet`)
+  * `util.plot`:
+    * Add `AverageSeriesLinePlot`  
+    * `ScatterPlot`: add option `add_diagonal`
+  * `util.helper`:
+    * Add function `contains_any` 
 * `evaluation`:
+  * Introduce `ResultSet` to support interactive querying and analysis of prediction results 
+    * Specialised for regression via `RegressionResultSet`; can be created from a `VectorRegressionModelEvaluationData` object via new method `create_result_set`
+    * Supports filtering based on `duckdb` using SQL queries (optional dependency; tested with v0.10.1)
+  * Support weighted data points ...
+    * in `RegressionEvalStats` (including the heat map plot generation)
+    * in all applicable `RegressionMetric` subclasses (to support this, implementations were partly switched to sklearn-based implementations which already support weighting).
+    * in `RegressionEvalStatsPlotHeatmapGroundTruthPredictions`
+    * but NOT yet for classification evaluation.
   * `EvaluationResultCollector`: Add method `is_plot_creation_enabled`
+  * `VectorRegressionModelEvaluationData`: Add methods `create_result_set` and `to_data_frame`
 * `data`:
-  * `InputOutputData`: Add method `to_df`
+  * `InputOutputData`: 
+    * Add method `to_data_frame` and alias `to_df`
   * Add module `data.dataset` containing sample datasets (mainly for demonstration purposes)
+  * Add abstraction `DataPointWeighting`, reifying the data point weighting process (which is now supported in `VectorModel`; see above)
+    * Add specialisation `DataPointWeightingRegressionTargetIntervalTotalWeight` (which allows to apply a total weight to intervals in the regression target's range, distributing the weight of data points in respective intervals accordingly)
 * `tracking`:
   * `mlflow_tracking`: Option `add_log_to_all_contexts` now stores only the logs of each model's training process (instead of the entire 
     process beginning with the instantiation of the experiment) 
+
 ### Breaking Changes:
 
 * `util.logging`: Change `add_memory_logger` to no longer define a global logger, but return the handler (an instance of  
