@@ -10,11 +10,23 @@
   is well-tested. 
 * `util`:
   * `util.version`: Add methods `Version.is_at_most` and `Version.is_equal` 
+  * `util.logging`: 
+    * `add_memory_logger` now returns the logger instance, which can be queried to retrieve the log (see breacking
+      change below)
+    * Add class `MemoryLoggerContext`, which be used in conjunction with Python's `with` statement to record logs
 * `evaluation`:
   * `EvaluationResultCollector`: Add method `is_plot_creation_enabled`
 * `data`:
   * `InputOutputData`: Add method `to_df`
   * Add module `data.dataset` containing sample datasets (mainly for demonstration purposes)
+* `tracking`:
+  * `mlflow_tracking`: Option `add_log_to_all_contexts` now stores only the logs of each model's training process (instead of the entire 
+    process beginning with the instantiation of the experiment) 
+### Breaking Changes:
+
+* `util.logging`: Change `add_memory_logger` to no longer define a global logger, but return the handler (an instance of  
+  `MemoryStramHandler`) instead. Consequently removed method `get_memory_log` as it is no longer needed (use the handler's method 
+  `get_log` instead). 
 
 ### Fixes:
 
