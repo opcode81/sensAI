@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from io import StringIO
 from logging import *
-from typing import List, Callable, Optional, TypeVar, TYPE_CHECKING
+from typing import List, Callable, Optional, TypeVar, TYPE_CHECKING, Generic
 
 from .time import format_duration
 
@@ -18,6 +18,7 @@ log = getLogger(__name__)
 
 LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s'
 T = TypeVar("T")
+THandler = TypeVar("THandler", bound=Handler)
 
 # Holds the log format that is configured by the user (using function `configure`), such
 # that it can be reused in other places
@@ -337,7 +338,7 @@ class LogTime:
         return self
 
 
-class LoggerContext(ABC):
+class LoggerContext(Generic[THandler], ABC):
     """
     Base class for context handlers to be used in conjunction with Python's `with` statement.
     """
@@ -351,19 +352,20 @@ class LoggerContext(ABC):
         self._log_handler = None
 
     @abstractmethod
-    def _create_log_handler(self) -> Handler:
+    def _create_log_handler(self) -> THandler:
         pass
 
-    def __enter__(self):
+    def __enter__(self) -> Optional[THandler]:
         if self.enabled:
             self._log_handler = self._create_log_handler()
+        return self._log_handler
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._log_handler is not None:
             remove_log_handler(self._log_handler)
 
 
-class FileLoggerContext(LoggerContext):
+class FileLoggerContext(LoggerContext[FileHandler]):
     """
     A context handler to be used in conjunction with Python's `with` statement which enables file-based logging.
     """
@@ -379,11 +381,11 @@ class FileLoggerContext(LoggerContext):
         self.append = append
         super().__init__(enabled=enabled)
 
-    def _create_log_handler(self) -> Handler:
+    def _create_log_handler(self) -> FileHandler:
         return add_file_logger(self.path, append=self.append, register_atexit=False)
 
 
-class MemoryLoggerContext(LoggerContext):
+class MemoryLoggerContext(LoggerContext[MemoryStreamHandler]):
     """
     A context handler to be used in conjunction with Python's `with` statement which enables in-memory logging.
     """
