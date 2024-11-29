@@ -1,0 +1,1718 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>Models with Modular Data Pipelines &#8212; sensAI Documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" href="../_static/styles/sphinx-book-theme.css?digest=14f4ca6b54d191a8c7657f6c759bf11a5fb86285" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/sphinx-toolbox.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/design-style.4045f2051d55cab465a707391d5b2007.min.css" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
+  <script src="../_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?digest=5a5c038af52cf7bc1a1ec88eea08e6366ee68824"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js"></script>
+    <script src="../_static/js/vega@5.js"></script>
+    <script src="../_static/js/vega-lite@5.js"></script>
+    <script src="../_static/js/vega-embed@5.js"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../_static/design-tabs.js"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"
+const thebe_selector = ".thebe,.cell"
+const thebe_selector_input = "pre"
+const thebe_selector_output = ".output, .cell_output"
+</script>
+    <script async="async" src="../_static/sphinx-thebe.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '1-supervised-learning/1-vector-models';</script>
+    <link rel="canonical" href="https://tianshou.readthedocs.io/en/master/1-supervised-learning/1-vector-models.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Notebook Tutorials" href="../2-notebooks/0_intro.html" />
+    <link rel="prev" title="Welcome to sensAI!" href="../index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>
+    Back to top
+  </button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__primary"
+          id="__primary"/>
+  <label class="overlay overlay-primary" for="__primary"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          name="__secondary"
+          id="__secondary"/>
+  <label class="overlay overlay-secondary" for="__secondary"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+  
+    <nav class="bd-header navbar navbar-expand-lg bd-navbar">
+    </nav>
+  
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/sensai-logo.png" class="logo__image only-light" alt="sensAI Documentation - Home"/>
+    <script>document.write(`<img src="../_static/sensai-logo.png" class="logo__image only-dark" alt="sensAI Documentation - Home"/>`);</script>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item"><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Welcome to sensAI!
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Models with Modular Data Pipelines</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../2-notebooks/0_intro.html">Notebook Tutorials</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-1"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../2-notebooks/1-classification.html">Introduction to sensAI: Supervised Learning with VectorModels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../2-notebooks/2-neural_networks.html">Neural Networks</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../sensai/index.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-2"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/catboost.html">catboost</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/columngen.html">columngen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/distance_metric.html">distance_metric</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/feature_importance.html">feature_importance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/hyperopt.html">hyperopt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/lightgbm.html">lightgbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/local_search.html">local_search</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/minizinc.html">minizinc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/multi_model.html">multi_model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/naive_bayes.html">naive_bayes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/nearest_neighbors.html">nearest_neighbors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/normalisation.html">normalisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/sklearn_quantile.html">sklearn_quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/tensor_model.html">tensor_model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/vector_model.html">vector_model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/vectoriser.html">vectoriser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sensai/xgboost.html">xgboost</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/clustering/index.html">clustering</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-3"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/clustering/clustering_base.html">clustering_base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/clustering/greedy_clustering.html">greedy_clustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/clustering/sklearn_clustering.html">sklearn_clustering</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/data/index.html">data</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-4"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/data/dataset.html">dataset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/data/io_data.html">io_data</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/data_transformation/index.html">data_transformation</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-5"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/data_transformation/dft.html">dft</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/data_transformation/sklearn_transformer.html">sklearn_transformer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/data_transformation/value_transformation.html">value_transformation</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/ensemble/index.html">ensemble</a><input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-6"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/ensemble/ensemble_base.html">ensemble_base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/ensemble/models.html">models</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/evaluation/index.html">evaluation</a><input class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-7"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/crossval.html">crossval</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/eval_util.html">eval_util</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/evaluator.html">evaluator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/evaluator_clustering.html">evaluator_clustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/metric_computation.html">metric_computation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/evaluation/result_set.html">result_set</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../sensai/evaluation/eval_stats/index.html">eval_stats</a><input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-8"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/evaluation/eval_stats/eval_stats_base.html">eval_stats_base</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/evaluation/eval_stats/eval_stats_classification.html">eval_stats_classification</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/evaluation/eval_stats/eval_stats_clustering.html">eval_stats_clustering</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/evaluation/eval_stats/eval_stats_regression.html">eval_stats_regression</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/feature_selection/index.html">feature_selection</a><input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-9"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/feature_selection/rfe.html">rfe</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/featuregen/index.html">featuregen</a><input class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-10"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/featuregen/feature_generator.html">feature_generator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/featuregen/feature_generator_registry.html">feature_generator_registry</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/geoanalytics/index.html">geoanalytics</a><input class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-11"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/geoanalytics/geo_clustering.html">geo_clustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/geoanalytics/geo_coords.html">geo_coords</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/geoanalytics/local_coords.html">local_coords</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/geoanalytics/map_tiles.html">map_tiles</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../sensai/geoanalytics/geopandas/index.html">geopandas</a><input class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-12"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/geoanalytics/geopandas/coordinate_clustering.html">coordinate_clustering</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/geoanalytics/geopandas/coordinate_clustering_ground_truth.html">coordinate_clustering_ground_truth</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/geoanalytics/geopandas/coordinates.html">coordinates</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/geoanalytics/geopandas/geometry.html">geometry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/geoanalytics/geopandas/graph.html">graph</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/pytorch_lightning/index.html">pytorch_lightning</a><input class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-13"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/pytorch_lightning/pl_models.html">pl_models</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/sklearn/index.html">sklearn</a><input class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-14"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/sklearn/sklearn_base.html">sklearn_base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/sklearn/sklearn_classification.html">sklearn_classification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/sklearn/sklearn_regression.html">sklearn_regression</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/tensorflow/index.html">tensorflow</a><input class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-15"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tensorflow/tf_base.html">tf_base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tensorflow/tf_mlp.html">tf_mlp</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/torch/index.html">torch</a><input class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-16"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_base.html">torch_base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_data.html">torch_data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_enums.html">torch_enums</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_eval_util.html">torch_eval_util</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_modules.html">torch_modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torch_opt.html">torch_opt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/torch/torchtext.html">torchtext</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../sensai/torch/torch_models/index.html">torch_models</a><input class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-17"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/torch/torch_models/lstnet/index.html">lstnet</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/torch/torch_models/mlp/index.html">mlp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/torch/torch_models/residualffn/index.html">residualffn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../sensai/torch/torch_models/seq/index.html">seq</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/tracking/index.html">tracking</a><input class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-18"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tracking/azure_tracking.html">azure_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tracking/clearml_tracking.html">clearml_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tracking/mlflow_tracking.html">mlflow_tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/tracking/tracking_base.html">tracking_base</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../sensai/util/index.html">util</a><input class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" type="checkbox"/><label class="toctree-toggle" for="toctree-checkbox-19"><i class="fa-solid fa-chevron-down"></i></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/aggregation.html">aggregation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/cache.html">cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/cache_azure.html">cache_azure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/cache_mysql.html">cache_mysql</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/datastruct.html">datastruct</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/deprecation.html">deprecation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/dtype.html">dtype</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/hash.html">hash</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/helper.html">helper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/io.html">io</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/jscode.html">jscode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/logging.html">logging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/math.html">math</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/multiprocessing.html">multiprocessing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/pandas.html">pandas</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/pickle.html">pickle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/plot.html">plot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/profiling.html">profiling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/sequences.html">sequences</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/string.html">string</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/test.html">test</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/time.html">time</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/typing.html">typing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sensai/util/version.html">version</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</label></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://colab.research.google.com/github/thu-ml/tianshou/blob/master/docs/1-supervised-learning/1-vector-models.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch onColab"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img src="../_static/images/logo_colab.png">
+  </span>
+<span class="btn__text-container">Colab</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/1-supervised-learning/1-vector-models.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
+    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<label class="sidebar-toggle secondary-toggle btn btn-sm" for="__secondary"title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</label>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Models with Modular Data Pipelines</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vectormodel">VectorModel</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-vectormodel-class-hierarchy">The VectorModel Class Hierarchy</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dataframe-based-interfaces">DataFrame-Based Interfaces</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementing-custom-models">Implementing Custom Models</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#modular-pipelines">Modular Pipelines</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-dataset-titanic-survival">Example Dataset: Titanic Survival</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#raw-input-transformers">Raw Input Transformers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#feature-generation-and-transformation">Feature Generation and Transformation</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-feature-pipelines-for-titanic-survival">Simple Feature Pipelines for Titanic Survival</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article" role="main">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="models-with-modular-data-pipelines">
+<h1>Models with Modular Data Pipelines<a class="headerlink" href="#models-with-modular-data-pipelines" title="Permalink to this heading">#</a></h1>
+<div class="cell tag_hide-cell docutils container">
+<details class="hide above-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell content</span>
+<span class="expanded">Hide code cell content</span>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="k">load_ext</span> autoreload
+<span class="o">%</span><span class="k">autoreload</span> 2
+
+<span class="kn">import</span> <span class="nn">sys</span><span class="p">;</span> <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;../../src&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<div class="cell tag_hide-cell docutils container">
+<details class="hide above-input">
+<summary aria-label="Toggle hidden content">
+<span class="collapsed">Show code cell content</span>
+<span class="expanded">Hide code cell content</span>
+</summary>
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">sensai</span>
+<span class="kn">import</span> <span class="nn">sensai.xgboost</span>
+<span class="kn">import</span> <span class="nn">sensai.torch</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+</pre></div>
+</div>
+</div>
+</details>
+</div>
+<section id="vectormodel">
+<h2>VectorModel<a class="headerlink" href="#vectormodel" title="Permalink to this heading">#</a></h2>
+<p>The backbone of supervised learning implementations is the <code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> abstraction.
+It is so named, because, in computer science, a <em>vector</em> corresponds to an array of data,
+and vector models map such vectors to the desired outputs, i.e. regression targets or
+classes.</p>
+<p>It is important to note that this does <em>not</em> limit vector models to tabular data, because the data within
+a vector can take arbitrary forms (in contrast to vectors as they are defined in mathematics).
+Every element of an input vector could itself be arbitrary
+complex, and could, in the most general sense, be any kind of object.</p>
+<section id="the-vectormodel-class-hierarchy">
+<h3>The VectorModel Class Hierarchy<a class="headerlink" href="#the-vectormodel-class-hierarchy" title="Permalink to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> is an abstract base class.
+From it, abstract base classes for classification (<code class="docutils literal notranslate"><span class="pre">VectorClassificationModel</span></code>) and regression (<code class="docutils literal notranslate"><span class="pre">VectorRegressionModel</span></code>) are derived. And we furthermore provide base classes for rule-based models, facilitating the implementation of models that do not require learning (<code class="docutils literal notranslate"><span class="pre">RuleBasedVectorClassificationModel</span></code>, <code class="docutils literal notranslate"><span class="pre">RuleBasedVectorRegressionModel</span></code>).</p>
+<p>These base classes are, in turn, specialised in order to provide direct access to model implementations based on widely used machine learning libraries such as scikit-learn, XGBoost, PyTorch, etc.
+Use your IDE’s hierarchy view to inspect them.</p>
+<!-- TODO: hierarchical bullet item list with hierarchy (or maybe auto-generate?) -->
+</section>
+<section id="dataframe-based-interfaces">
+<h3>DataFrame-Based Interfaces<a class="headerlink" href="#dataframe-based-interfaces" title="Permalink to this heading">#</a></h3>
+<p>Vector models use pandas DataFrames as the fundmental input and output data structures.
+Every row in a data frame corresponds to a vector of data, and an entire data frame can thus be viewed as a dataset or batch of data. Data frames are a good base representation for input data because</p>
+<ul class="simple">
+<li><p>they provide rudimentary meta-data in the form of column names, avoiding ambiguity.</p></li>
+<li><p>they can contain arbitrarily complex data, yet in the simplest of cases, they can directly be mapped to a data matrix (2D array) of features that simple models can directly process.</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">fit</span></code> and <code class="docutils literal notranslate"><span class="pre">predict</span></code> methods of <code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> take data frames as input, and the latter furthermore returns its predictions as a data frame.
+It is important to note that the DataFrame-based interface does not limit the scope of the models that can be applied, as one of the key principles of vector models is that they may define arbitrary model-specific transformations of the data originally contained in a data frame (e.g. a conversion from complex objects in data frames to one or more tensors for neural networks), as we shall see below.</p>
+<p>Here’s the particularly simple Iris dataset for flower species classification, where the features are measurements of petals and sepals:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">DataSetClassificationIris</span><span class="p">()</span>
+<span class="n">io_data</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_io_data</span><span class="p">()</span>
+<span class="n">io_data</span><span class="o">.</span><span class="n">to_df</span><span class="p">()</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>sepal length (cm)</th>
+      <th>sepal width (cm)</th>
+      <th>petal length (cm)</th>
+      <th>petal width (cm)</th>
+      <th>class</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>25</th>
+      <td>5.0</td>
+      <td>3.0</td>
+      <td>1.6</td>
+      <td>0.2</td>
+      <td>setosa</td>
+    </tr>
+    <tr>
+      <th>49</th>
+      <td>5.0</td>
+      <td>3.3</td>
+      <td>1.4</td>
+      <td>0.2</td>
+      <td>setosa</td>
+    </tr>
+    <tr>
+      <th>106</th>
+      <td>4.9</td>
+      <td>2.5</td>
+      <td>4.5</td>
+      <td>1.7</td>
+      <td>virginica</td>
+    </tr>
+    <tr>
+      <th>119</th>
+      <td>6.0</td>
+      <td>2.2</td>
+      <td>5.0</td>
+      <td>1.5</td>
+      <td>virginica</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>5.4</td>
+      <td>3.9</td>
+      <td>1.7</td>
+      <td>0.4</td>
+      <td>setosa</td>
+    </tr>
+    <tr>
+      <th>62</th>
+      <td>6.0</td>
+      <td>2.2</td>
+      <td>4.0</td>
+      <td>1.0</td>
+      <td>versicolor</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>4.4</td>
+      <td>2.9</td>
+      <td>1.4</td>
+      <td>0.2</td>
+      <td>setosa</td>
+    </tr>
+    <tr>
+      <th>121</th>
+      <td>5.6</td>
+      <td>2.8</td>
+      <td>4.9</td>
+      <td>2.0</td>
+      <td>virginica</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>Here, <code class="docutils literal notranslate"><span class="pre">io_data</span></code> is an instance of <code class="docutils literal notranslate"><span class="pre">InputOutputData</span></code>, which contains two data frames, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> and <code class="docutils literal notranslate"><span class="pre">outputs</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">to_df</span></code> method merges the two data frames into one for easier visualisation.</p>
+<p>Let’s split the dataset and apply a model to it:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># load and split a dataset</span>
+<span class="n">splitter</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">DataSplitterFractional</span><span class="p">(</span><span class="mf">0.8</span><span class="p">)</span>
+<span class="n">train_io_data</span><span class="p">,</span> <span class="n">test_io_data</span> <span class="o">=</span> <span class="n">splitter</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">io_data</span><span class="p">)</span>
+
+<span class="c1"># train a model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">sklearn</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">SkLearnRandomForestVectorClassificationModel</span><span class="p">(</span>
+    <span class="n">n_estimators</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit_input_output_data</span><span class="p">(</span><span class="n">train_io_data</span><span class="p">)</span>
+
+<span class="c1"># make predictions</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_io_data</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">fit_input_output_data</span></code> method is just a convenience method to pass an <code class="docutils literal notranslate"><span class="pre">InputOutputData</span></code> instance instead of two data frames. It is equivalent to</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_io_data</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="n">train_io_data</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>where the two data frames containing inputs and outputs are passed separately.</p>
+<p>Now let’s compare the ground truth to some of the predictions:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">((</span><span class="n">test_io_data</span><span class="o">.</span><span class="n">outputs</span><span class="p">,</span> <span class="n">predictions</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>class</th>
+      <th>class</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>99</th>
+      <td>versicolor</td>
+      <td>versicolor</td>
+    </tr>
+    <tr>
+      <th>87</th>
+      <td>versicolor</td>
+      <td>versicolor</td>
+    </tr>
+    <tr>
+      <th>58</th>
+      <td>versicolor</td>
+      <td>versicolor</td>
+    </tr>
+    <tr>
+      <th>102</th>
+      <td>virginica</td>
+      <td>virginica</td>
+    </tr>
+    <tr>
+      <th>144</th>
+      <td>virginica</td>
+      <td>virginica</td>
+    </tr>
+    <tr>
+      <th>116</th>
+      <td>virginica</td>
+      <td>virginica</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>setosa</td>
+      <td>setosa</td>
+    </tr>
+    <tr>
+      <th>124</th>
+      <td>virginica</td>
+      <td>virginica</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+</section>
+<section id="implementing-custom-models">
+<h3>Implementing Custom Models<a class="headerlink" href="#implementing-custom-models" title="Permalink to this heading">#</a></h3>
+<p>It is straightforward to implement your own model. Simply subclass the appropriate base class depending on the type of model you want to implement.</p>
+<p>For example, let us implement a simple classifier where we always return the a priori probability of each class in the training data, ignoring the input data for predictions. For this case, we inherit from <code class="docutils literal notranslate"><span class="pre">VectorClassificationModel</span></code> and implement the two abstract methods it defines.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">PriorProbabilityVectorClassificationModel</span><span class="p">(</span><span class="n">sensai</span><span class="o">.</span><span class="n">VectorClassificationModel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_fit_classifier</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prior_probabilities</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_predict_class_probabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_prior_probabilities</span><span class="p">[</span><span class="bp">cls</span><span class="p">]</span> <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_class_labels</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">([</span><span class="n">values</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">get_class_labels</span><span class="p">(),</span> <span class="n">index</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Adapting a model implementation from another machine learning library is typically just a few lines. For models that adhere to the scikit-learn interfaces for learning and prediction, there are abstract base classes that make the adaptation particularly straightforward.</p>
+</section>
+<section id="configuration">
+<h3>Configuration<a class="headerlink" href="#configuration" title="Permalink to this heading">#</a></h3>
+<p>Apart from the parameters passed at construction, which are specific to the type of model in question, all vector models can be flexibly configured via methods that can be called post-construction.
+These methods all have the <code class="docutils literal notranslate"><span class="pre">with_</span></code> prefix, indicating that they return the instance itself (akin to the builder pattern), allowing calls to be chained in a single statement.</p>
+<p>The most relevant such methods are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">with_name</span></code> to name the model (for reporting purposes)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with_raw_input_transformer</span></code> for adding an initial input transformation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with_feature_generator</span></code> and <code class="docutils literal notranslate"><span class="pre">with_feature_collector</span></code> for specifying how to generate features from the input data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">with_feature_transformers</span></code> for specifying how the generated features shall be transformed</p></li>
+</ul>
+<p>The latter three points are essential for defining modular input pipelines and will be addressed in detail below.</p>
+<p>All configured options are fully reflected in the model’s string representation, which can be pretty-printed with the <code class="docutils literal notranslate"><span class="pre">pprint</span></code> method.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">str</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;RandomForest&quot;</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_plain highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>&#39;SkLearnRandomForestVectorClassificationModel[featureGenerator=None, rawInputTransformerChain=DataFrameTransformerChain[dataFrameTransformers=[]], featureTransformerChain=DataFrameTransformerChain[dataFrameTransformers=[]], fitArgs={}, useBalancedClassWeights=False, useLabelEncoding=False, name=RandomForest, model=RandomForestClassifier(n_estimators=15, random_state=42)]&#39;
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">pprint</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>SkLearnRandomForestVectorClassificationModel[
+    featureGenerator=None, 
+    rawInputTransformerChain=DataFrameTransformerChain[dataFrameTransformers=[]], 
+    featureTransformerChain=DataFrameTransformerChain[dataFrameTransformers=[]], 
+    fitArgs={}, 
+    useBalancedClassWeights=False, 
+    useLabelEncoding=False, 
+    name=RandomForest, 
+    model=RandomForestClassifier(
+        n_estimators=15, 
+        random_state=42)]
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="modular-pipelines">
+<h2>Modular Pipelines<a class="headerlink" href="#modular-pipelines" title="Permalink to this heading">#</a></h2>
+<p>A key principle of sensAI’s vector models is that data pipelines</p>
+<ul class="simple">
+<li><p>can be <strong>strongly associated with a model</strong>. This is critically important of several heterogeneous models shall be applied to the same use case. Typically, every model has different requirements regarding the data it can process and the representation it requires to process it optimally.</p></li>
+<li><p>are to be <strong>modular</strong>, meaning that a pipeline can be composed from reusable and user-definable components.</p></li>
+</ul>
+<p>An input pipeline typically serves the purpose of answering the following questions:</p>
+<ul>
+<li><p><strong>How shall the data be pre-processed?</strong></p>
+<p>It might be necessary to process the data before we can use it and extract data from it.
+We may need to filter or clean the data;
+we may need to establish a usable representation from raw data (e.g. convert a string-based representation of a date into a proper data structure);
+or we may need to infer/impute missing data.</p>
+<p>The relevant abstraction for this task is <code class="docutils literal notranslate"><span class="pre">DataFrameTransformer</span></code>, which, as the name suggests, can arbitrarily transform a data frame.
+All non-abstract class implementations have the prefix <code class="docutils literal notranslate"><span class="pre">DFT</span></code> in sensAI and thus are easily discovered through auto-completion.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> can be configured to apply a pre-processing transformation via method <code class="docutils literal notranslate"><span class="pre">with_raw_input_transformers</span></code>.</p>
+</li>
+<li><p><strong>What is the data used by the model?</strong></p>
+<p>The relevant abstraction is <code class="docutils literal notranslate"><span class="pre">FeatureGenerator</span></code>. Via <code class="docutils literal notranslate"><span class="pre">FeatureGenerator</span></code> instances, a model can define which set of features is to be used. Moreover, these instances can hold meta-data on the respective features, which can be leveraged for downstream representation.
+In sensAI, the class names of all feature generator implementations use the prefix <code class="docutils literal notranslate"><span class="pre">FeatureGenerator</span></code>.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> can be configured to answer this question via method <code class="docutils literal notranslate"><span class="pre">with_feature_generator</span></code> (or <code class="docutils literal notranslate"><span class="pre">with_feature_collector</span></code>).</p>
+</li>
+<li><p><strong>How does that data need to be represented?</strong></p>
+<p>Different models can require different representations of the same data. For example, some models might require all features to be numeric, thus requiring categorical features to be encoded, while others might work better with the original representation.
+Furthermore, some models might work better with numerical features normalised or scaled in a certain way while it makes no difference to others.
+We can address these requirements by adding model-specific transformations.</p>
+<p>The relevant abstraction is, once again, <code class="docutils literal notranslate"><span class="pre">DataFrameTransformer</span></code>.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">VectorModel</span></code> can be configured to apply a transformation to its features via method <code class="docutils literal notranslate"><span class="pre">with_feature_transformers</span></code>.</p>
+</li>
+</ul>
+<p>The three pipeline stages are applied in the order presented above, and all components are optional, i.e. if a model does not define any raw input transformers, then the original data remains unmodified. If a model defines no feature generator, then the set of features is given by the full input data frame, etc.</p>
+<section id="example-dataset-titanic-survival">
+<h3>Example Dataset: Titanic Survival<a class="headerlink" href="#example-dataset-titanic-survival" title="Permalink to this heading">#</a></h3>
+<p>Let us consider the well-known Titanic Survival data set as an example.</p>
+<p>Every data point holds data on a passenger. The data set has the following potentially predictive columns,</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Pclass</span></code>: the passenger ticket class as an integer (1=first, 2=second, 3=third)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Sex</span></code>: the passenger’s sex (male or female)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Age</span></code>: the passenger’s age in years (integer); this feature is frequently missing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SibSp</span></code>: the number of siblings and spouses of the passenger</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Parch</span></code>: the number of parents and children of the passenger</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Fare</span></code>: the fare price paid</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Embark</span></code>: the port of embarkation (C=Cherbourg, Q=Queenstown, S=Southampton); this feature is missing for two passengers</p></li>
+</ul>
+<p>and some further meta-data columns (Name, Cabin).</p>
+<p>The goal is to predict the column ‘Survived’ indicating whether the passenger survived (1) or not (0).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">DataSetClassificationTitanicSurvival</span><span class="p">()</span>
+<span class="n">io_data</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">load_io_data</span><span class="p">()</span>
+<span class="n">io_data</span><span class="o">.</span><span class="n">to_df</span><span class="p">()</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Pclass</th>
+      <th>Name</th>
+      <th>Sex</th>
+      <th>Age</th>
+      <th>SibSp</th>
+      <th>Parch</th>
+      <th>Ticket</th>
+      <th>Fare</th>
+      <th>Cabin</th>
+      <th>Embarked</th>
+      <th>Survived</th>
+    </tr>
+    <tr>
+      <th>PassengerId</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>1</th>
+      <td>3</td>
+      <td>Braund, Mr. Owen Harris</td>
+      <td>male</td>
+      <td>22.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>A/5 21171</td>
+      <td>7.2500</td>
+      <td>NaN</td>
+      <td>S</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>1</td>
+      <td>Cumings, Mrs. John Bradley (Florence Briggs Th...</td>
+      <td>female</td>
+      <td>38.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>PC 17599</td>
+      <td>71.2833</td>
+      <td>C85</td>
+      <td>C</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>3</td>
+      <td>Heikkinen, Miss. Laina</td>
+      <td>female</td>
+      <td>26.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>STON/O2. 3101282</td>
+      <td>7.9250</td>
+      <td>NaN</td>
+      <td>S</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>1</td>
+      <td>Futrelle, Mrs. Jacques Heath (Lily May Peel)</td>
+      <td>female</td>
+      <td>35.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>113803</td>
+      <td>53.1000</td>
+      <td>C123</td>
+      <td>S</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>3</td>
+      <td>Allen, Mr. William Henry</td>
+      <td>male</td>
+      <td>35.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>373450</td>
+      <td>8.0500</td>
+      <td>NaN</td>
+      <td>S</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>Let us define an evaluation object for this data set, which will allow us to evaluate model performance later.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">evaluator_params</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">evaluation</span><span class="o">.</span><span class="n">ClassificationEvaluatorParams</span><span class="p">(</span><span class="n">fractional_split_test_fraction</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="n">titanic_evaluation</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">evaluation</span><span class="o">.</span><span class="n">ClassificationModelEvaluation</span><span class="p">(</span><span class="n">io_data</span><span class="p">,</span> <span class="n">evaluator_params</span><span class="o">=</span><span class="n">evaluator_params</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="raw-input-transformers">
+<h3>Raw Input Transformers<a class="headerlink" href="#raw-input-transformers" title="Permalink to this heading">#</a></h3>
+<p>We shall now add pipeline components to an XGBoost model, as it can straightforwardly deal with missing data.</p>
+<p>The dataset doesn’t really require any pre-processing, but we could</p>
+<ul class="simple">
+<li><p>get rid of the useless meta-data columns,</p></li>
+<li><p>convert the passenger class feature into a string to ensure that it is not treated as a numerical feature</p></li>
+</ul>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">DFTTitanicDropMetaDataColumns</span><span class="p">(</span><span class="n">sensai</span><span class="o">.</span><span class="n">data_transformation</span><span class="o">.</span><span class="n">DFTColumnFilter</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">COL_NAME</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">COL_CABIN</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">COL_TICKET</span><span class="p">])</span>
+        
+<span class="k">class</span> <span class="nc">DFTTitanicTransformPassengerClass</span><span class="p">(</span><span class="n">sensai</span><span class="o">.</span><span class="n">data_transformation</span><span class="o">.</span><span class="n">DFTModifyColumn</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">COL_PASSENGER_CLASS</span><span class="p">,</span> 
+            <span class="n">column_transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;first&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;second&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;third&quot;</span><span class="p">}[</span><span class="n">n</span><span class="p">])</span>
+
+<span class="n">xgb_model</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">xgboost</span><span class="o">.</span><span class="n">XGBGradientBoostedVectorClassificationModel</span><span class="p">()</span> \
+    <span class="o">.</span><span class="n">with_raw_input_transformers</span><span class="p">(</span>
+        <span class="n">DFTTitanicDropMetaDataColumns</span><span class="p">(),</span>
+        <span class="n">DFTTitanicTransformPassengerClass</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Our model uses two data frame transformers which apply the aforementioned pre-processing tasks.
+We have opted to define classes for each transformation to facilitate reusing the transformations for other models.</p>
+<p>We can apply the transformers using the model’s <code class="docutils literal notranslate"><span class="pre">compute_model_inputs</span></code> method.
+Since neither transformer requires fitting, we can directly apply it.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">xgb_model</span><span class="o">.</span><span class="n">compute_model_inputs</span><span class="p">(</span><span class="n">io_data</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Pclass</th>
+      <th>Sex</th>
+      <th>Age</th>
+      <th>SibSp</th>
+      <th>Parch</th>
+      <th>Fare</th>
+      <th>Embarked</th>
+    </tr>
+    <tr>
+      <th>PassengerId</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>1</th>
+      <td>third</td>
+      <td>male</td>
+      <td>22.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>7.2500</td>
+      <td>S</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>first</td>
+      <td>female</td>
+      <td>38.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>71.2833</td>
+      <td>C</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>third</td>
+      <td>female</td>
+      <td>26.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>7.9250</td>
+      <td>S</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>first</td>
+      <td>female</td>
+      <td>35.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>53.1000</td>
+      <td>S</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>third</td>
+      <td>male</td>
+      <td>35.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>8.0500</td>
+      <td>S</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>The model’s input pipeline now transforms the data as desired.</p>
+</section>
+<section id="feature-generation-and-transformation">
+<h3>Feature Generation and Transformation<a class="headerlink" href="#feature-generation-and-transformation" title="Permalink to this heading">#</a></h3>
+<p>Feature generators serve to define how features can be generated from the input data.
+They additionally hold meta-data on the generated features, which can be leveraged for downstream transformation. Specifically,</p>
+<ul class="simple">
+<li><p>we can define which features are categorical,</p></li>
+<li><p>we can define rules for normalisation or scaling of numerical features.</p></li>
+</ul>
+<section id="simple-feature-pipelines-for-titanic-survival">
+<h4>Simple Feature Pipelines for Titanic Survival<a class="headerlink" href="#simple-feature-pipelines-for-titanic-survival" title="Permalink to this heading">#</a></h4>
+<p>In the Titanic Survival data set, the features are already fully prepared, so we do not need to actually generate anything;
+we can simply take the feature values as they are present in the original data frame and add only the necessary meta-data.
+The base class for this purpose is <code class="docutils literal notranslate"><span class="pre">FeatureGeneratorTakeColumns</span></code>, which allows us to take over columns directly from the input data.
+We could use a single feature generator for all features as follows:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">FeatureGeneratorTitanicAll</span><span class="p">(</span><span class="n">sensai</span><span class="o">.</span><span class="n">featuregen</span><span class="o">.</span><span class="n">FeatureGeneratorTakeColumns</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># take all columns</span>
+            <span class="n">categorical_feature_names</span><span class="o">=</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">COL_SEX</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">COL_PASSENGER_CLASS</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">COL_PORT_EMBARKED</span><span class="p">],</span>
+            <span class="n">normalisation_rule_template</span><span class="o">=</span><span class="n">sensai</span><span class="o">.</span><span class="n">featuregen</span><span class="o">.</span><span class="n">DFTNormalisation</span><span class="o">.</span><span class="n">RuleTemplate</span><span class="p">(</span>
+                <span class="n">transformer_factory</span><span class="o">=</span><span class="n">sensai</span><span class="o">.</span><span class="n">data_transformation</span><span class="o">.</span><span class="n">SkLearnTransformerFactoryFactory</span><span class="o">.</span><span class="n">StandardScaler</span><span class="p">(),</span>
+                <span class="n">independent_columns</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>We have supplied both meta-data regarding</p>
+<ul class="simple">
+<li><p>the subset of feature that are categorical</p></li>
+<li><p>the normalisation rule to be applied to the numerical features (if normalisation is applied with <code class="docutils literal notranslate"><span class="pre">DFTNormalisation</span></code>).</p></li>
+</ul>
+<p>Our XGBoost model does not require normalisation, but we still want to apply a transformation to some of the features:
+Categorical feature shall be one-hot encoded.
+To achieve this, we add the feature generator as well as a DFT that applies the one-hot encoding:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">feature_generator</span> <span class="o">=</span> <span class="n">FeatureGeneratorTitanicAll</span><span class="p">()</span>
+
+<span class="n">xgb_model</span><span class="o">.</span><span class="n">with_feature_generator</span><span class="p">(</span><span class="n">feature_generator</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_feature_transformers</span><span class="p">(</span>
+        <span class="n">sensai</span><span class="o">.</span><span class="n">data_transformation</span><span class="o">.</span><span class="n">DFTOneHotEncoder</span><span class="p">(</span>
+            <span class="n">feature_generator</span><span class="o">.</span><span class="n">get_categorical_feature_name_regex</span><span class="p">(),</span> 
+            <span class="n">ignore_unknown</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span> \
+    <span class="o">.</span><span class="n">pprint</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>XGBGradientBoostedVectorClassificationModel[
+    featureGenerator=FeatureGeneratorTitanicAll[
+        columns=None, 
+        exceptColumns=(), 
+        verifyColumnNames=True, 
+        name=FeatureGeneratorTitanicAll-139706259416304], 
+    rawInputTransformerChain=DataFrameTransformerChain[
+        dataFrameTransformers=[
+            DFTTitanicDropMetaDataColumns[
+                keep=None, 
+                drop=[Name, Cabin, Ticket]], 
+            DFTTitanicTransformPassengerClass[
+                column=Pclass, 
+                columnTransform=&lt;function DFTTitanicTransformPassengerClass.__init__.&lt;locals&gt;.&lt;lambda&gt; at 0x7f0fe5f8e670&gt;]]], 
+    featureTransformerChain=DataFrameTransformerChain[
+        dataFrameTransformers=[
+            DFTOneHotEncoder[
+                oneHotEncoders=None, 
+                inplace=False, 
+                arrayValuedResult=False, 
+                handleUnknown=ignore, 
+                columns=(Sex|Pclass|Embarked)]]], 
+    fitArgs={}, 
+    useBalancedClassWeights=False, 
+    useLabelEncoding=True, 
+    featureGeneratorNames=[FeatureGeneratorTitanicAll-139706259416304], 
+    modelConstructor=XGBClassifier(random_state=42)]
+</pre></div>
+</div>
+</div>
+</div>
+<p>When using more than one feature generator, the feature generators need to be combined into a <code class="docutils literal notranslate"><span class="pre">MultiFeatureGenerator</span></code>.
+To facilitate this and to furthermore simplify the creation of downstream transformers, we can instead use the <code class="docutils literal notranslate"><span class="pre">FeatureCollector</span></code> abstraction.
+The above model can be equivalently defined as follows:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">feature_collector</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">featuregen</span><span class="o">.</span><span class="n">FeatureCollector</span><span class="p">(</span><span class="n">feature_generator</span><span class="p">)</span>  <span class="c1"># can pass more than one feature generator</span>
+
+<span class="n">xgb_model</span><span class="o">.</span><span class="n">with_feature_collector</span><span class="p">(</span><span class="n">feature_collector</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_feature_transformers</span><span class="p">(</span><span class="n">feature_collector</span><span class="o">.</span><span class="n">create_feature_transformer_one_hot_encoder</span><span class="p">(</span><span class="n">ignore_unknown</span><span class="o">=</span><span class="kc">True</span><span class="p">));</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Either way, the model’s feature pipeline is now fully configured.
+The full pipeline now requires fitting (since the feature transformation is learnt from the training data).
+Let’s fit the model and then take another look at the inputs that the XGBoost model now actually receives.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">xgb_model</span><span class="o">.</span><span class="n">fit_input_output_data</span><span class="p">(</span><span class="n">io_data</span><span class="p">)</span>
+<span class="n">xgb_model</span><span class="o">.</span><span class="n">compute_model_inputs</span><span class="p">(</span><span class="n">io_data</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Age</th>
+      <th>SibSp</th>
+      <th>Parch</th>
+      <th>Fare</th>
+      <th>Pclass_0</th>
+      <th>Pclass_1</th>
+      <th>Pclass_2</th>
+      <th>Sex_0</th>
+      <th>Sex_1</th>
+      <th>Embarked_0</th>
+      <th>Embarked_1</th>
+      <th>Embarked_2</th>
+    </tr>
+    <tr>
+      <th>PassengerId</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>1</th>
+      <td>22.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>7.2500</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>38.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>71.2833</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>26.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>7.9250</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>35.0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>53.1000</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>35.0</td>
+      <td>0</td>
+      <td>0</td>
+      <td>8.0500</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+      <td>0.0</td>
+      <td>0.0</td>
+      <td>1.0</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>The pipeline works as expected. We are now ready to evaluate the model:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">titanic_evaluation</span><span class="o">.</span><span class="n">perform_simple_evaluation</span><span class="p">(</span><span class="n">xgb_model</span><span class="p">)</span>
+<span class="n">result</span><span class="o">.</span><span class="n">get_data_frame</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>accuracy</th>
+      <th>balancedAccuracy</th>
+      <th>precision</th>
+      <th>recall</th>
+      <th>F1</th>
+    </tr>
+    <tr>
+      <th>predictedVar</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Survived</th>
+      <td>0.826816</td>
+      <td>0.817746</td>
+      <td>0.75</td>
+      <td>0.784615</td>
+      <td>0.766917</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>In the demonstration above, the model’s full definition was spread out across several cells to incrementally explain the pipeline construction.
+In practice we want to keep the model definition monolithic.
+Let us (re-)define the XGBoost model as well as a second model with a slightly different pipeline that additionally applies normalisation and compare the two models.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">xgb_model</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">xgboost</span><span class="o">.</span><span class="n">XGBGradientBoostedVectorClassificationModel</span><span class="p">()</span> \
+    <span class="o">.</span><span class="n">with_raw_input_transformers</span><span class="p">(</span>
+        <span class="n">DFTTitanicDropMetaDataColumns</span><span class="p">(),</span>
+        <span class="n">DFTTitanicTransformPassengerClass</span><span class="p">())</span> \
+    <span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;XGBoost&quot;</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_feature_collector</span><span class="p">(</span><span class="n">feature_collector</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_feature_transformers</span><span class="p">(</span>
+        <span class="n">feature_collector</span><span class="o">.</span><span class="n">create_feature_transformer_one_hot_encoder</span><span class="p">(</span><span class="n">ignore_unknown</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+<span class="n">torch_mlp_model</span> <span class="o">=</span> <span class="n">sensai</span><span class="o">.</span><span class="n">torch</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">MultiLayerPerceptronVectorClassificationModel</span><span class="p">(</span>
+        <span class="n">hid_activation_function</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">,</span>
+        <span class="n">hidden_dims</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+        <span class="n">cuda</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">p_dropout</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+        <span class="n">nn_optimiser_params</span><span class="o">=</span><span class="n">sensai</span><span class="o">.</span><span class="n">torch</span><span class="o">.</span><span class="n">NNOptimiserParams</span><span class="p">(</span><span class="n">early_stopping_epochs</span><span class="o">=</span><span class="mi">10</span><span class="p">))</span> \
+    <span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">&quot;MLP&quot;</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_raw_input_transformers</span><span class="p">(</span>
+        <span class="n">DFTTitanicDropMetaDataColumns</span><span class="p">(),</span>
+        <span class="n">DFTTitanicTransformPassengerClass</span><span class="p">())</span> \
+    <span class="o">.</span><span class="n">with_feature_collector</span><span class="p">(</span><span class="n">feature_collector</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> \
+    <span class="o">.</span><span class="n">with_feature_transformers</span><span class="p">(</span>
+        <span class="n">sensai</span><span class="o">.</span><span class="n">data_transformation</span><span class="o">.</span><span class="n">DFTColumnFilter</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">COL_PORT_EMBARKED</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">COL_AGE_YEARS</span><span class="p">]),</span>
+        <span class="n">feature_collector</span><span class="o">.</span><span class="n">create_feature_transformer_one_hot_encoder</span><span class="p">(</span><span class="n">ignore_unknown</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">feature_collector</span><span class="o">.</span><span class="n">create_dft_normalisation</span><span class="p">())</span>
+
+<span class="n">titanic_evaluation</span><span class="o">.</span><span class="n">compare_models</span><span class="p">([</span><span class="n">xgb_model</span><span class="p">,</span> <span class="n">torch_mlp_model</span><span class="p">])</span><span class="o">.</span><span class="n">results_df</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stderr highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>/home/runner/work/sensAI/sensAI/.tox/py_latest_dependencies/lib/python3.8/site-packages/sensai/torch/torch_base.py:144: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don&#39;t have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.module = torch.load(model_file)
+Received value in input tensor 0 which is likely to not be correctly normalised: maximum abs. value in tensor is 6.937743
+Received value in input tensor 0 which is likely to not be correctly normalised: maximum abs. value in tensor is 6.937743
+</pre></div>
+</div>
+<div class="output text_html"><div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>accuracy</th>
+      <th>balancedAccuracy</th>
+      <th>precision</th>
+      <th>recall</th>
+      <th>F1</th>
+    </tr>
+    <tr>
+      <th>model_name</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>XGBoost</th>
+      <td>0.826816</td>
+      <td>0.817746</td>
+      <td>0.75</td>
+      <td>0.784615</td>
+      <td>0.766917</td>
+    </tr>
+    <tr>
+      <th>MLP</th>
+      <td>0.821229</td>
+      <td>0.790216</td>
+      <td>0.80</td>
+      <td>0.676923</td>
+      <td>0.733333</td>
+    </tr>
+  </tbody>
+</table>
+</div></div></div>
+</div>
+<p>Notice that the model definitions are purely declarative: We define each model and the respective feature pipeline by injecting appropriate pipeline components.</p>
+<p>For the multi-layer perceptron model, we notably added some additional feature transformers:</p>
+<ul class="simple">
+<li><p>Since this type model cannot cope with missing feature values, we added a component that drops the age and port columns, which are sometimes undefined.</p></li>
+<li><p>Since neural networks work best with normalised feature representations, we added the normalisation component, which uses a standard scaler (as defined in the feature generator).</p></li>
+</ul>
+</section>
+</section>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "binder-examples/jupyter-stacks-datascience",
+            ref: "master",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./1-supervised-learning"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Welcome to sensAI!</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../2-notebooks/0_intro.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Notebook Tutorials</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vectormodel">VectorModel</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-vectormodel-class-hierarchy">The VectorModel Class Hierarchy</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dataframe-based-interfaces">DataFrame-Based Interfaces</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#implementing-custom-models">Implementing Custom Models</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration">Configuration</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#modular-pipelines">Modular Pipelines</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#example-dataset-titanic-survival">Example Dataset: Titanic Survival</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#raw-input-transformers">Raw Input Transformers</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#feature-generation-and-transformation">Feature Generation and Transformation</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-feature-pipelines-for-titanic-survival">Simple Feature Pipelines for Titanic Survival</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By sensAI contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2019-2024 by sensAI contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>
