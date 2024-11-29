@@ -141,10 +141,11 @@ def _at_exit_report_file_logger():
         print(f"A log file was saved to {path}")
 
 
-def add_file_logger(path, register_atexit=True):
+def add_file_logger(path, append=True, register_atexit=True):
     global _isAtExitReportFileLoggerRegistered
     log.info(f"Logging to {path} ...")
-    handler = FileHandler(path)
+    mode = "a" if append else "w"
+    handler = FileHandler(path, mode=mode)
     handler.setFormatter(Formatter(_logFormat))
     Logger.root.addHandler(handler)
     _fileLoggerPaths.append(path)
@@ -325,19 +326,21 @@ class FileLoggerContext:
     """
     A context handler to be used in conjunction with Python's `with` statement which enables file-based logging.
     """
-    def __init__(self, path: str, enabled=True):
+    def __init__(self, path: str, append=True, enabled=True):
         """
         :param path: the path to the log file
+        :param append: whether to append in case the file already exists; if False, always create a new file.
         :param enabled: whether to actually perform any logging.
             This switch allows the with statement to be applied regardless of whether logging shall be enabled.
         """
         self.enabled = enabled
         self.path = path
+        self.append = append
         self._log_handler = None
 
     def __enter__(self):
         if self.enabled:
-            self._log_handler = add_file_logger(self.path, register_atexit=False)
+            self._log_handler = add_file_logger(self.path, append=self.append, register_atexit=False)
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._log_handler is not None:

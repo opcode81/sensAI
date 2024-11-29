@@ -20,6 +20,9 @@ class SkLearnRandomForestVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
         super().__init__(sklearn.ensemble.RandomForestRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel,
         FeatureImportanceProviderSkLearnRegressionMultiDim):
@@ -30,6 +33,9 @@ class SkLearnLinearRegressionVectorRegressionModel(AbstractSkLearnMultiDimVector
         :param model_args: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LinearRegression.html
         """
         super().__init__(sklearn.linear_model.LinearRegression, fit_intercept=fit_intercept, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel,
@@ -47,6 +53,9 @@ class SkLearnLinearRidgeRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         super().__init__(sklearn.linear_model.Ridge, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol,
             solver=solver, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel,
         FeatureImportanceProviderSkLearnRegressionMultiDim):
@@ -61,6 +70,9 @@ class SkLearnLinearLassoRegressionVectorRegressionModel(AbstractSkLearnMultiDimV
         :param model_args: see https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Lasso.html#sklearn.linear_model.Lasso
         """
         super().__init__(sklearn.linear_model.Lasso, alpha=alpha, fit_intercept=fit_intercept, max_iter=max_iter, tol=tol, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
@@ -85,25 +97,40 @@ class SkLearnMultiLayerPerceptronVectorRegressionModel(AbstractSkLearnMultiDimVe
             random_state=random_state, hidden_layer_sizes=hidden_layer_sizes, activation=activation, solver=solver, batch_size=batch_size,
             max_iter=max_iter, early_stopping=early_stopping, n_iter_no_change=n_iter_no_change, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return False
+
 
 class SkLearnSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self, **model_args):
         super().__init__(sklearn.svm.SVR, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnLinearSVRVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self, **model_args):
         super().__init__(sklearn.svm.LinearSVR, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnGradientBoostingVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
     def __init__(self, random_state=42, **model_args):
         super().__init__(sklearn.ensemble.GradientBoostingRegressor, random_state=random_state, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnKNeighborsVectorRegressionModel(AbstractSkLearnMultiDimVectorRegressionModel):
     def __init__(self, **model_args):
         super().__init__(sklearn.neighbors.KNeighborsRegressor, **model_args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return False
 
 
 class SkLearnExtraTreesVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
@@ -111,11 +138,17 @@ class SkLearnExtraTreesVectorRegressionModel(AbstractSkLearnMultipleOneDimVector
         super().__init__(sklearn.ensemble.ExtraTreesRegressor,
             n_estimators=n_estimators, min_samples_leaf=min_samples_leaf, random_state=random_state, **model_args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class SkLearnDummyVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
     def __init__(self, strategy='mean', constant=None, quantile=None):
         super().__init__(sklearn.dummy.DummyRegressor,
             strategy=strategy, constant=constant, quantile=quantile)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True
 
 
 class SkLearnDecisionTreeVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressionModel):
@@ -140,3 +173,5 @@ class SkLearnDecisionTreeVectorRegressionModel(AbstractSkLearnMultipleOneDimVect
             feature_names=self.get_model_input_variable_names(), filled=True)
         graphviz.Source(dot).render(dot_path)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True

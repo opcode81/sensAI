@@ -44,6 +44,9 @@ class CatBoostVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
             self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 # noinspection DuplicatedCode
 class CatBoostVectorClassificationModel(AbstractSkLearnVectorClassificationModel):
@@ -79,3 +82,6 @@ class CatBoostVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             args = {"cat_features": col_indices}
             self.log.info(f"Updating model parameters with {args}")
             self.modelArgs.update(args)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True

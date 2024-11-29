@@ -2,6 +2,7 @@ import copy
 import logging
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Any, Dict, Optional
 
 import numpy as np
@@ -47,6 +48,13 @@ def _apply_sklearn_input_transformer(inputs: pd.DataFrame, sklearn_input_transfo
             raise Exception("sklearnInputTransformer changed the shape of the input, which is unsupported. "
                             "Consider using an a DFTSkLearnTransformer as a feature transformer instead.")
         return pd.DataFrame(input_values, index=inputs.index, columns=inputs.columns)
+
+
+class ActualFitParams:
+    def __init__(self, inputs, outputs, kwargs: Dict[str, Any]):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.kwargs = kwargs
 
 
 class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
@@ -101,21 +109,42 @@ class AbstractSkLearnVectorRegressionModel(VectorRegressionModel, ABC):
     def _update_fit_args(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         """
         Designed to be overridden in order to make input data-specific changes to fitArgs (arguments to be passed to the
-        underlying model's fit method)
+        underlying model's `fit` method)
 
         :param inputs: the training input data
         :param outputs: the training output data
         """
         pass
 
-    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def _compute_actual_fit_params(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series] = None) -> ActualFitParams:
+        """
+        Computes additional arguments to be passed to the model's `fit` method, which are transient and shall not be saved
+        along with the model as metadata, e.g. larger data structures such as validation data or sample weights.
+
+        :param inputs: the training input data
+        :param outputs: the training output data
+        :return: a dictionary of parameters to be passed to `fit`.
+        """
+        fit_params = ActualFitParams(inputs, outputs, dict(self.fitArgs))
+        if weights is not None:
+            self._warn_sample_weights_unsupported(self.is_sample_weight_supported(), weights)
+            if self.is_sample_weight_supported():
+                fit_params.kwargs["sample_weight"] = weights
+        return fit_params
+
+    @abstractmethod
+    def is_sample_weight_supported(self) -> bool:
+        pass
+
+    def _fit(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series] = None):
         inputs = self._transform_input(inputs, fit=True)
         self._update_model_args(inputs, outputs)
         self._update_fit_args(inputs, outputs)
-        self._fit_sklearn(inputs, outputs)
+        actual_fit_params = self._compute_actual_fit_params(inputs, outputs, weights=weights)
+        self._fit_sklearn(actual_fit_params)
 
     @abstractmethod
-    def _fit_sklearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def _fit_sklearn(self, params: ActualFitParams):
         pass
 
     def _predict(self, x: pd.DataFrame):
@@ -147,13 +176,13 @@ class AbstractSkLearnMultipleOneDimVectorRegressionModel(AbstractSkLearnVectorRe
             d["modelConstructor"] = f"{self.modelConstructor.__name__}({dict_string(self.modelArgs)})"
         return d
 
-    def _fit_sklearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        for predictedVarName in outputs.columns:
+    def _fit_sklearn(self, params: ActualFitParams):
+        for predictedVarName in params.outputs.columns:
             log.info(f"Fitting model for output variable '{predictedVarName}'")
             model = create_sklearn_model(self.modelConstructor,
                     self.modelArgs,
                     output_transformer=copy.deepcopy(self.sklearnOutputTransformer))
-            model.fit(inputs, outputs[predictedVarName], **self.fitArgs)
+            model.fit(params.inputs, params.outputs[predictedVarName], **params.kwargs)
             self.models[predictedVarName] = model
 
     def _predict_sklearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
@@ -192,14 +221,14 @@ class AbstractSkLearnMultiDimVectorRegressionModel(AbstractSkLearnVectorRegressi
             d["modelConstructor"] = f"{self.modelConstructor.__name__}({dict_string(self.modelArgs)})"
         return d
 
-    def _fit_sklearn(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
-        if len(outputs.columns) > 1:
-            log.info(f"Fitting a single multi-dimensional model for all {len(outputs.columns)} output dimensions")
+    def _fit_sklearn(self, params: ActualFitParams):
+        if len(params.outputs.columns) > 1:
+            log.info(f"Fitting a single multi-dimensional model for all {len(params.outputs.columns)} output dimensions")
         self.model = create_sklearn_model(self.modelConstructor, self.modelArgs, output_transformer=self.sklearnOutputTransformer)
-        output_values = outputs.values
+        output_values = params.outputs.values
         if output_values.shape[1] == 1:  # for 1D output, shape must be (numSamples,) rather than (numSamples, 1)
             output_values = np.ravel(output_values)
-        self.model.fit(inputs, output_values, **self.fitArgs)
+        self.model.fit(params.inputs, output_values, **params.kwargs)
 
     def _predict_sklearn(self, inputs: pd.DataFrame) -> pd.DataFrame:
         y = self.model.predict(inputs)
@@ -273,19 +302,32 @@ class AbstractSkLearnVectorClassificationModel(VectorClassificationModel, ABC):
         """
         pass
 
-    def _fit_classifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    @abstractmethod
+    def is_sample_weight_supported(self) -> bool:
+        pass
+
+    def _fit_classifier(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[pd.Series] = None):
         inputs = self._transform_input(inputs, fit=True)
         self._update_model_args(inputs, outputs)
         self._update_fit_args(inputs, outputs)
         self.model = create_sklearn_model(self.modelConstructor, self.modelArgs)
         log.info(f"Fitting sklearn classifier of type {self.model.__class__.__name__}")
         kwargs = dict(self.fitArgs)
+
+        if self.useBalancedClassWeights and weights is not None:
+            raise ValueError("Balanced class weights cannot be used in conjunction with user-specified weights")
+
         if self.useBalancedClassWeights:
             class2weight = self._compute_class_weights(outputs)
             classes = outputs.iloc[:, 0]
             weights = np.array([class2weight[cls] for cls in classes])
             weights = weights / np.min(weights)
             kwargs["sample_weight"] = weights
+
+        elif weights is not None:
+            self._warn_sample_weights_unsupported(self.is_sample_weight_supported(), weights)
+            if self.is_sample_weight_supported():
+                kwargs["sample_weight"] = weights
 
         output_values = np.ravel(outputs.values)
         if self.useLabelEncoding:

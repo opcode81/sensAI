@@ -1,8 +1,12 @@
 import logging
+from abc import ABC, abstractmethod
 from copy import copy
+from typing import List
 
 import numpy as np
 import pandas as pd
+
+from sensai.util import mark_used
 
 log = logging.getLogger(__name__)
 
@@ -140,3 +144,134 @@ def remove_duplicate_index_entries(df: pd.DataFrame):
         keep.append(item != prev_item)
         prev_item = item
     return df[keep]
+
+
+def query_data_frame(df: pd.DataFrame, sql: str):
+    """
+    Queries the given data frame with the given condition specified in SQL syntax.
+
+    NOTE: Requires duckdb to be installed.
+
+    :param df: the data frame to query
+    :param sql: an SQL query starting with the WHERE clause (excluding the 'where' keyword itself)
+    :return: the filtered/transformed data frame
+    """
+    import duckdb
+
+    NUM_TYPE_INFERENCE_ROWS = 100
+
+    def is_supported_object_col(col_name: str):
+        supported_type_set = set()
+        contains_unsupported_types = False
+        # check the first N values
+        for value in df[col_name].iloc[:NUM_TYPE_INFERENCE_ROWS]:
+            if isinstance(value, str):
+                supported_type_set.add(str)
+            elif value is None:
+                pass
+            else:
+                contains_unsupported_types = True
+        return not contains_unsupported_types and len(supported_type_set) == 1
+
+    # determine which columns are object columns that are unsupported by duckdb and would raise errors
+    # if they remained in the data frame that is queried
+    added_index_col = "__sensai_resultset_index__"
+    original_columns = df.columns
+    object_columns = list(df.dtypes[df.dtypes == object].index)
+    object_columns = [c for c in object_columns if not is_supported_object_col(c)]
+
+    # add an artificial index which we will use to identify the rows for object column reconstruction
+    df[added_index_col] = np.arange(len(df))
+
+    try:
+        # remove the object columns from the data frame but save them for subsequent reconstruction
+        objects_df = df[object_columns + [added_index_col]]
+        query_df = df.drop(columns=object_columns)
+        mark_used(query_df)
+
+        # apply query with reduced df
+        result_df = duckdb.query(f"select * from query_df where {sql}").to_df()
+
+        # restore object columns in result
+        objects_df.set_index(added_index_col, drop=True, inplace=True)
+        result_df.set_index(added_index_col, drop=True, inplace=True)
+        result_objects_df = objects_df.loc[result_df.index]
+        assert len(result_df) == len(result_objects_df)
+        full_result_df = pd.concat([result_df, result_objects_df], axis=1)
+        full_result_df = full_result_df[original_columns]
+
+    finally:
+        # clean up
+        df.drop(columns=added_index_col, inplace=True)
+
+    return full_result_df
+
+
+class SeriesInterpolation(ABC):
+    def interpolate(self, series: pd.Series, inplace: bool = False) -> pd.Series | None:
+        if not inplace:
+            series = series.copy()
+        self._interpolate_in_place(series)
+        return series if not inplace else None
+
+    @abstractmethod
+    def _interpolate_in_place(self, series: pd.Series) -> None:
+        pass
+
+    def interpolate_all_with_combined_index(self, series_list: List[pd.Series]) -> List[pd.Series]:
+        """
+        Interpolates the given series using the combined index of all series.
+
+        :param series_list: the list of series to interpolate
+        :return: a list of corresponding interpolated series, each having the same index
+        """
+        # determine common index and
+        index_elements = set()
+        for series in series_list:
+            index_elements.update(series.index)
+        common_index = sorted(index_elements)
+
+        # reindex, filling the gaps via interpolation
+        interpolated_series_list = []
+        for series in series_list:
+            series = series.copy()
+            series = series.reindex(common_index, method=None)
+            self.interpolate(series, inplace=True)
+            interpolated_series_list.append(series)
+
+        return interpolated_series_list
+
+
+class SeriesInterpolationLinearIndex(SeriesInterpolation):
+    def __init__(self, ffill: bool = False, bfill: bool = False):
+        """
+        :param ffill: whether to fill any N/A values at the end of the series with the last valid observation
+        :param bfill: whether to fill any N/A values at the start of the series with the first valid observation
+        """
+        self.ffill = ffill
+        self.bfill = bfill
+
+    def _interpolate_in_place(self, series: pd.Series) -> pd.Series | None:
+        series.interpolate(method="index", inplace=True)
+        if self.ffill:
+            series.interpolate(method="ffill", limit_direction="forward")
+        if self.bfill:
+            series.interpolate(method="bfill", limit_direction="backward")
+
+
+class SeriesInterpolationRepeatPreceding(SeriesInterpolation):
+    def __init__(self, bfill: bool = False):
+        """
+        :param bfill: whether to fill any N/A values at the start of the series with the first valid observation
+        """
+        self.bfill = bfill
+
+    def _interpolate_in_place(self, series: pd.Series) -> pd.Series | None:
+        series.interpolate(method="pad", limit_direction="forward", inplace=True)
+        if self.bfill:
+            series.interpolate(method="bfill", limit_direction="backward")
+
+
+def average_series(series_list: List[pd.Series], interpolation: SeriesInterpolation) -> pd.Series:
+    interpolated_series_list = interpolation.interpolate_all_with_combined_index(series_list)
+    return sum(interpolated_series_list) / len(interpolated_series_list)  # type: ignore

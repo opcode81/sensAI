@@ -16,7 +16,7 @@ from .util.deprecation import deprecated
 from .data import InputOutputData
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
-from .util import mark_used
+from .util import mark_used, kwarg_if_not_none
 from .util.cache import PickleLoadSaveMixin
 from .util.logging import StopWatch
 from .util.pickle import setstate, getstate
@@ -70,20 +70,6 @@ class VectorModelBase(ABC, ToStringMixin):
         return self._name
 
 
-class VectorModelFittableBase(VectorModelBase, ABC):
-    """
-    Base class for vector models, which encompasses the fundamental prediction and fitting interfaces.
-    A vector model takes data frames as input, where each row represents a vector of information.
-    """
-    @abstractmethod
-    def fit(self, x: pd.DataFrame, y: pd.DataFrame):
-        pass
-
-    @abstractmethod
-    def is_fitted(self) -> bool:
-        pass
-
-
 class TrainingContext:
     """
     Contains context information for an ongoing training process
@@ -93,7 +79,7 @@ class TrainingContext:
         self.original_output = original_output
 
 
-class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
+class VectorModel(VectorModelBase, PickleLoadSaveMixin, ABC):
     """
     Represents a model which uses data frames as inputs and outputs whose rows define individual data points.
     Every data frame row represents a vector of information (one-dimensional array), hence the name of the model.
@@ -354,15 +340,17 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
         :param fit_preprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
         :param fit_model: whether the model itself shall be fitted
         """
-        self.fit(io_data.inputs, io_data.outputs, fit_preprocessors=fit_preprocessors, fit_model=fit_model)
+        self.fit(io_data.inputs, io_data.outputs, weights=io_data.weights, fit_preprocessors=fit_preprocessors, fit_model=fit_model)
 
-    def fit(self, x: pd.DataFrame, y: Optional[pd.DataFrame], fit_preprocessors=True, fit_model=True):
+    def fit(self, x: pd.DataFrame, y: Optional[pd.DataFrame], weights: Optional[pd.Series] = None, fit_preprocessors=True, fit_model=True):
         """
         Fits the model using the given data
 
         :param x: a data frame containing input data
         :param y: a data frame containing output data; may be None if the underlying model does not actually require
             fitting, e.g. in the case of a rule-based models, but fitting is still necessary for preprocessors
+        :param weights: an optional series (with the same index as `x` and `y`) containing data point weights.
+            Added in v1.2.0.
         :param fit_preprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
         :param fit_model: whether the model itself shall be fitted
         """
@@ -393,7 +381,7 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
                     inputs_with_types = ', '.join([n + '/' + x[n].dtype.name for n in self._modelInputVariableNames])
                     log.debug(f"Fitting with outputs[{len(y.columns)}]={list(y.columns)}, "
                              f"inputs[{len(self._modelInputVariableNames)}]=[{inputs_with_types}]; N={len(x)} data points")
-                    self._fit(x, y)
+                    self._fit(x, y, **kwarg_if_not_none("weights", weights))
                     self._isFitted = True
                 else:
                     log.info("Fitting of underlying model skipped")
@@ -408,8 +396,12 @@ class VectorModel(VectorModelFittableBase, PickleLoadSaveMixin, ABC):
         return self._trainingContext is not None
 
     @abstractmethod
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.DataFrame] = None):
         pass
+
+    def _warn_sample_weights_unsupported(self, is_weighting_supported: bool, weights: Optional[pd.Series]):
+        if weights is not None and not is_weighting_supported:
+            log.warning(f"Data point weighting not supported by {self.__class__.__name__}; ignoring weights")
 
     def get_predicted_variable_names(self):
         """
@@ -633,6 +625,16 @@ class VectorRegressionModel(VectorModel, ABC):
         return self._modelOutputVariableNames
 
 
+def get_predicted_var_name(specified_var_name: Optional[str], predicted_var_names: List[str]):
+    if specified_var_name is not None:
+        return specified_var_name
+    else:
+        if len(predicted_var_names) > 1:
+            raise ValueError("Must explicitly specify the predicted variable name for a model with multiple output variables "
+                f"({predicted_var_names})")
+        return predicted_var_names[0]
+
+
 class VectorClassificationModel(VectorModel, ABC):
     def __init__(self, check_input_columns=True):
         """
@@ -647,17 +649,17 @@ class VectorClassificationModel(VectorModel, ABC):
     def is_regression_model(self) -> bool:
         return False
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
         if len(y.columns) != 1:
             raise ValueError("Classification requires exactly one output column with class labels")
         self._labels = sorted([label for label in y.iloc[:, 0].unique()])
-        self._fit_classifier(x, y)
+        self._fit_classifier(x, y, **kwarg_if_not_none("weights", weights))
 
     def get_class_labels(self) -> List[Any]:
         return self._labels
 
     @abstractmethod
-    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
         pass
 
     def convert_class_probabilities_to_predictions(self, df: pd.DataFrame):
@@ -744,7 +746,7 @@ class RuleBasedVectorRegressionModel(VectorRegressionModel, ABC):
     def _underlying_model_requires_fitting(self):
         return False
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
         pass
 
 
@@ -765,8 +767,8 @@ class RuleBasedVectorClassificationModel(VectorClassificationModel, ABC):
     def _underlying_model_requires_fitting(self):
         return False
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
         pass
 
-    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
         pass

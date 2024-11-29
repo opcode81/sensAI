@@ -63,6 +63,9 @@ class LightGBMVectorRegressionModel(AbstractSkLearnMultipleOneDimVectorRegressio
     def _update_fit_args(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
         _update_fit_args(self.fitArgs, inputs, outputs, self._categoricalFeatureNameRegex)
 
+    def is_sample_weight_supported(self) -> bool:
+        return True
+
 
 class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel, FeatureImportanceProviderSkLearnClassification):
     log = log.getChild(__qualname__)
@@ -112,3 +115,6 @@ class LightGBMVectorClassificationModel(AbstractSkLearnVectorClassificationModel
             return pd.DataFrame(y, columns=self._labels)
         else:
             return super()._predict_class_probabilities(x)
+
+    def is_sample_weight_supported(self) -> bool:
+        return True

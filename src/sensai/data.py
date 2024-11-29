@@ -1,13 +1,15 @@
 import logging
+import math
 import random
 from abc import ABC, abstractmethod
-from typing import Tuple, Sequence, TypeVar, Generic
+from typing import Tuple, Sequence, TypeVar, Generic, Optional, Union
 
 import numpy as np
 import pandas as pd
 import scipy.stats
 from sklearn.model_selection import StratifiedShuffleSplit
 
+from .util.pickle import setstate
 from .util.string import ToStringMixin
 
 log = logging.getLogger(__name__)
@@ -57,8 +59,14 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
     """
     Holds input and output data for learning problems
     """
-    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame):
+    def __init__(self, inputs: pd.DataFrame, outputs: pd.DataFrame, weights: Optional[Union[pd.Series, "DataPointWeighting"]] = None):
         super().__init__(inputs, outputs)
+        if isinstance(weights, DataPointWeighting):
+            weights = weights.compute_weights(inputs, outputs)
+        self.weights = weights
+
+    def __setstate__(self, state):
+        setstate(InputOutputData, self, state, new_optional_properties=["weights"])
 
     def _tostring_object_info(self) -> str:
         return f"N={len(self.inputs)}, numInputColumns={len(self.inputs.columns)}, numOutputColumns={len(self.outputs.columns)}"
@@ -74,15 +82,32 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
         outputs = df[list(output_columns)]
         return cls(inputs, outputs)
 
+    def to_data_frame(self, add_weights: bool = False, weights_col_name: str = "weights") -> pd.DataFrame:
+        """
+        :param add_weights: whether to add the weights as a column (provided that weights are present)
+        :param weights_col_name: the column name to use for weights if `add_weights` is True
+        :return: a data frame containing both the inputs and outputs (and optionally the weights)
+        """
+        df = pd.concat([self.inputs, self.outputs], axis=1)
+        if add_weights and self.weights is not None:
+            df[weights_col_name] = self.weights
+        return df
+
     def filter_indices(self, indices: Sequence[int]) -> __qualname__:
         inputs = self.inputs.iloc[indices]
         outputs = self.outputs.iloc[indices]
-        return InputOutputData(inputs, outputs)
+        weights = None
+        if self.weights is not None:
+            weights = self.weights.iloc[indices]
+        return InputOutputData(inputs, outputs, weights)
 
     def filter_index(self, index_elements: Sequence[any]) -> __qualname__:
         inputs = self.inputs.loc[index_elements]
         outputs = self.outputs.loc[index_elements]
-        return InputOutputData(inputs, outputs)
+        weights = None
+        if self.weights is not None:
+            weights = self.weights
+        return InputOutputData(inputs, outputs, weights)
 
     @property
     def input_dim(self):
@@ -102,6 +127,9 @@ class InputOutputData(BaseInputOutputData[pd.DataFrame], ToStringMixin):
                 pcc, pvalue = scipy.stats.pearsonr(input_series, output_series)
                 correlations[outputCol][inputCol] = pcc
         return correlations
+
+    def apply_weighting(self, weighting: "DataPointWeighting"):
+        self.weights = weighting.compute_weights(self.inputs, self.outputs)
 
 
 TInputOutputData = TypeVar("TInputOutputData", bound=BaseInputOutputData)
@@ -265,3 +293,77 @@ class DataFrameSplitterColumnEquivalenceClass(DataFrameSplitter):
             else:
                 second_set_indices.append(i)
         return first_set_indices, second_set_indices
+
+
+class DataPointWeighting(ABC):
+    @abstractmethod
+    def compute_weights(self, x: pd.DataFrame, y: pd.DataFrame) -> pd.Series:
+        pass
+
+
+class DataPointWeightingRegressionTargetIntervalTotalWeight(DataPointWeighting):
+    """
+    Based on relative weights specified for intervals of the regression target,
+    will weight individual data point weights such that the sum of weights of data points within each interval
+    satisfies the user-specified relative weight, while ensuring that the total weight of all data points
+    is still equal to the number of data points.
+
+    For example, if one specifies `interval_weights` as [(0.5, 1), (inf, 2)], then the data points with target values
+    up to 0.5 will get 1/3 of the weight and the remaining data points will get 2/3 of the weight.
+    So if there are 100 data points and 50 of them are in the first interval (up to 0.5), then these 50 data points
+    will each get weight 1/3*100/50=2/3 and the remaining 50 data points will each get weight 2/3*100/50=4/3.
+    The sum of all weights is the number of data points, i.e. 100.
+
+    Example:
+
+    >>> targets = [0.1, 0.2, 0.5, 0.7, 0.8, 0.6]
+    >>> x = pd.DataFrame({"foo": np.zeros(len(targets))})
+    >>> y = pd.DataFrame({"target": targets})
+    >>> weighting = DataPointWeightingRegressionTargetIntervalTotalWeight([(0.5, 1), (1.0, 2)])
+    >>> weights = weighting.compute_weights(x, y)
+    >>> assert(np.isclose(weights.sum(), len(y)))
+    >>> weights.tolist()
+    [0.6666666666666666,
+     0.6666666666666666,
+     0.6666666666666666,
+     1.3333333333333333,
+     1.3333333333333333,
+     1.3333333333333333]
+    """
+    def __init__(self, intervals_weights: Sequence[Tuple[float, float]]):
+        """
+        :param intervals_weights: a sequence of tuples (upper_bound, rel_total_weight) where upper_bound is the upper bound
+            of the interval, `(lower_bound, upper_bound]`; `lower_bound` is the upper bound of the preceding interval
+            or -inf for the first interval. `rel_total_weight` specifies the relative weight of all data points within
+            the interval.
+        """
+        a = -math.inf
+        sum_rel_weights = sum(t[1] for t in intervals_weights)
+        self.intervals = []
+        for b, rel_weight in intervals_weights:
+            self.intervals.append(self.Interval(a, b, rel_weight / sum_rel_weights))
+            a = b
+
+    class Interval:
+        def __init__(self, a: float, b: float, weight_fraction: float):
+            self.a = a
+            self.b = b
+            self.weight_fraction = weight_fraction
+
+        def contains(self, x: float):
+            return self.a < x <= self.b
+
+    def compute_weights(self, x: pd.DataFrame, y: pd.DataFrame) -> pd.Series:
+        assert len(y.columns) == 1, f"Only a single regression target is supported {self.__class__.__name__}"
+        targets = y.iloc[:, 0]
+        n = len(x)
+        weights = np.zeros(n)
+        num_weighted = 0
+        for interval in self.intervals:
+            mask = np.array([interval.contains(x) for x in targets])
+            subset_size = mask.sum()
+            num_weighted += subset_size
+            weights[mask] = interval.weight_fraction * n / subset_size
+        if num_weighted != n:
+            raise Exception("Not all data points were weighted. Most likely, the intervals do not cover the entire range of targets")
+        return pd.Series(weights, index=x.index)

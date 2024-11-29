@@ -2,7 +2,7 @@
 This module contains various helper functions.
 """
 import math
-from typing import Any, Sequence, Union, TypeVar, List
+from typing import Any, Sequence, Union, TypeVar, List, Optional, Dict, Container, Iterable
 
 T = TypeVar("T")
 
@@ -58,6 +58,13 @@ def check_not_nan_dict(d: dict):
         raise ValueError(f"Got one or more NaN values: {invalid_keys}")
 
 
+def contains_any(container: Union[Container, Iterable], items: Sequence) -> bool:
+    for item in items:
+        if item in container:
+            return True
+    return False
+
+
 # noinspection PyUnusedLocal
 def mark_used(*args):
     """
@@ -84,3 +91,22 @@ def flatten_arguments(args: Sequence[Union[T, Sequence[T]]]) -> List[T]:
         else:
             result.append(arg)
     return result
+
+
+def kwarg_if_not_none(arg_name: str, arg_value: Any) -> Dict[str, Any]:
+    """
+    Supports the optional passing of a kwarg, returning a non-empty dictionary with the kwarg only
+    if the value is not None.
+
+    This can be helpful to improve backward compatibility for cases where a kwarg was added later
+    but old implementations weren't updated to have it, such that an exception will be raised only
+    if the kwarg is actually used.
+
+    :param arg_name: the argument name
+    :param arg_value: the value
+    :return: a dictionary containing the kwarg or, if the value is None, an empty dictionary
+    """
+    if arg_value is None:
+        return {}
+    else:
+        return {arg_name: arg_value}

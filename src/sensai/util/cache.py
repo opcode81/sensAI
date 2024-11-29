@@ -9,9 +9,10 @@ import sqlite3
 import threading
 import time
 from abc import abstractmethod, ABC
+from collections import OrderedDict
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Iterator, List, Optional, TypeVar, Generic, Union
+from typing import Any, Callable, Iterator, List, Optional, TypeVar, Generic, Union, Hashable
 
 from .hash import pickle_hash
 from .pickle import load_pickle, dump_pickle, setstate
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 TKey = TypeVar("TKey")
+THashableKey = TypeVar("THashableKey", bound=Hashable)
 TValue = TypeVar("TValue")
 TData = TypeVar("TData")
 
@@ -788,3 +790,28 @@ class PickleLoadSaveMixin(LoadSaveInterface):
         if not isinstance(result, cls):
             raise Exception(f"Excepted instance of {cls}, instead got: {result.__class__.__name__}")
         return result
+
+
+class LRUCache(KeyValueCache[THashableKey, TValue], Generic[THashableKey, TValue]):
+    def __init__(self, capacity: int) -> None:
+        self._cache = OrderedDict()
+        self._capacity = capacity
+
+    def get(self, key: THashableKey) -> TValue:
+        if key not in self._cache:
+            return None
+        self._cache.move_to_end(key)
+        return self._cache[key]
+
+    def set(self, key: THashableKey, value: TValue):
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        self._cache[key] = value
+        if len(self._cache) > self._capacity:
+            self._cache.popitem(last=False)
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+    def clear(self) -> None:
+        self._cache.clear()

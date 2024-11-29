@@ -135,7 +135,8 @@ class TensorToScalarRegressionModel(VectorRegressionModel, TensorModel, ABC):
         TensorModel.__init__(self)
         self.check_input_shape = check_input_shape
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         self._fit_tensor_model(x, y)
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -165,7 +166,8 @@ class TensorToScalarClassificationModel(VectorClassificationModel, TensorModel, 
     def _predict_class_probabilities(self, x: pd.DataFrame) -> pd.DataFrame:
         return self._predict_df_through_array(x, self.get_class_labels())
 
-    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit_classifier(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         self._fit_tensor_model(x, y)
 
     def predict(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -215,7 +217,8 @@ class TensorToTensorRegressionModel(VectorRegressionModel, TensorModel, ABC):
         self.checkInputShape = check_input_shape
         self.checkOutputShape = check_output_shape
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         self._fit_tensor_model(x, y)
 
     def _predict(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -254,7 +257,8 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
         self.check_output_shape = check_output_shape
         self._numPredictedClasses: Optional[int] = None
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
         self._fit_tensor_model(x, y)
 
     def is_regression_model(self) -> bool:
@@ -263,12 +267,13 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
     def get_num_predicted_classes(self):
         return self._numPredictedClasses
 
-    def fit(self, x: pd.DataFrame, y: pd.DataFrame, fit_preprocessors=True, fit_model=True):
+    def fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None, fit_preprocessors=True, fit_model=True):
         """
 
         :param x: data frame containing input tensors on which to train
         :param y: ground truth has to be an array containing only zeroes and ones (one-hot-encoded labels) of the shape
             `(*prediction_shape, numLabels)`
+        :param weights: data point weights (must be None; not supported by this model!)
 
         :param fit_preprocessors: whether the model's preprocessors (feature generators and data frame transformers) shall be fitted
         :param fit_model: whether the model itself shall be fitted
@@ -291,7 +296,7 @@ class TensorToTensorClassificationModel(VectorModel, TensorModel, ABC):
                                     f"prediction_shape. If the predictions are scalars, a TensorToScalarClassificationModel "
                                     f"should be used instead of {self.__class__.__name__}")
         self._numPredictedClasses = df_y_to_check.shape[-1]
-        super().fit(x, y, fit_preprocessors=fit_preprocessors, fit_model=True)
+        super().fit(x, y, weights=weights, fit_preprocessors=fit_preprocessors, fit_model=True)
 
     def get_model_output_shape(self):
         # The ground truth contains one-hot-encoded labels in the last dimension

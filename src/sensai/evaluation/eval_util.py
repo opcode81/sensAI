@@ -185,7 +185,7 @@ class EvalStatsPlotCollector(Generic[TEvalStats, TEvalStatsPlot]):
         if len(unknown_disabled_plots) > 0:
             log.warning(f"Plots were disabled which are not registered: {unknown_disabled_plots}; known plots: {known_plots}")
         for name, plot in self.plots.items():
-            if name not in self.disabled_plots:
+            if name not in self.disabled_plots and plot.is_applicable(eval_stats):
                 fig = plot.create_figure(eval_stats, subtitle)
                 if fig is not None:
                     result_collector.add_figure(name, fig)
@@ -195,7 +195,8 @@ class RegressionEvalStatsPlotCollector(EvalStatsPlotCollector[RegressionEvalStat
     def __init__(self):
         super().__init__()
         self.add_plot("error-dist", RegressionEvalStatsPlotErrorDistribution())
-        self.add_plot("heatmap-gt-pred", RegressionEvalStatsPlotHeatmapGroundTruthPredictions())
+        self.add_plot("heatmap-gt-pred", RegressionEvalStatsPlotHeatmapGroundTruthPredictions(weighted=False))
+        self.add_plot("heatmap-gt-pred-weighted", RegressionEvalStatsPlotHeatmapGroundTruthPredictions(weighted=True))
         self.add_plot("scatter-gt-pred", RegressionEvalStatsPlotScatterGroundTruthPredictions())
 
 

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from concurrent.futures.process import ProcessPoolExecutor
-from typing import Sequence, List
+from typing import Sequence, List, Optional
 from inspect import currentframe, getframeinfo
 
 import pandas as pd
@@ -20,7 +20,9 @@ class EnsembleVectorModel(VectorModel, ABC):
         self.models = list(models)
         super().__init__(check_input_columns=False)
 
-    def _fit(self, x: pd.DataFrame, y: pd.DataFrame):
+    def _fit(self, x: pd.DataFrame, y: pd.DataFrame, weights: Optional[pd.Series] = None):
+        self._warn_sample_weights_unsupported(False, weights)
+
         if self.num_processes == 1 or len(self.models) == 1:
             for model in self.models:
                 model.fit(x, y)
