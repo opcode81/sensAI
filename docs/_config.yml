@@ -111,7 +111,7 @@ sphinx:
      - torch
      - pytorch_lightning
      - torchtext
-     - tensorflow
+     - tensorboard
      - lightgbm
      - sklearn
      - seaborn
