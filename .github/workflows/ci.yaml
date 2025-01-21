@@ -12,7 +12,8 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                env_name: [py, py_latest_dependencies, py_backwardscompat]
+                # py_backwardscompat is not included because there is also an issue with numpy compatibility on Python 3.10
+                env_name: [py_pinned_dependencies, py_latest_dependencies]  # removed py_backwardscompat
         steps:
             - name: Checkout Code
               uses: actions/checkout@v3
