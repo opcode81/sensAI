@@ -39,10 +39,10 @@ Docs are automatically created during the GitHub build via tox.
 
 All .rst files are auto-generated (by `build_scripts/update_docs.py`), with the exception of the root index file  `index.rst`.
 
-### Declaring Optional Dependencies
+### Declaring Mock Imports for Dependencies
 
-**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox 
-environment) are added to `docs/_config.yml` under `autodoc_mock_imports`. Otherwise the docs build will fail.
+**Attention**: Make sure that any sensAI dependencies are added to `docs/_config.yml` under `autodoc_mock_imports`. 
+Otherwise, the docs build will fail.
 
 ### Notebooks
 
