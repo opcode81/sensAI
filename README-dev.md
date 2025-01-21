@@ -41,7 +41,8 @@ All .rst files are auto-generated (by `build_scripts/update_docs.py`), with the 
 
 ### Declaring Optional Dependencies
 
-**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox environment) are added to `docs/conf.py` under `autodoc_mock_imports`. Otherwise the tox build will fail.
+**Attention**: Make sure that any optional sensAI dependencies (which are not included in the `docs` tox 
+environment) are added to `docs/_config.yml` under `autodoc_mock_imports`. Otherwise the docs build will fail.
 
 ### Notebooks
 
