@@ -1,7 +1,14 @@
 # Changelog
 
+## 1.3.1 (unreleased)
 
-## Unreleased
+### Improvements/Changes
+
+* `evaluation`: For cases where the model projects the input data to a subset of rows,
+  the evaluator now projects the ground truth data accordingly.
+* `util.deprecation`: Annotations of class init functions now report the respective class as being deprecated
+
+## v1.3.0 (2024-11-29)
 
 ### Improvements/Changes
 
