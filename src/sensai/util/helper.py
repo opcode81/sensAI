@@ -2,7 +2,7 @@
 This module contains various helper functions.
 """
 import math
-from typing import Any, Sequence, Union, TypeVar, List, Optional, Dict, Container, Iterable
+from typing import Any, Sequence, Union, TypeVar, List, Optional, Dict, Container, Iterable, Tuple
 
 T = TypeVar("T")
 
@@ -110,3 +110,24 @@ def kwarg_if_not_none(arg_name: str, arg_value: Any) -> Dict[str, Any]:
         return {}
     else:
         return {arg_name: arg_value}
+
+
+def flatten_dict(d: Dict[str, Any], sep: str = '.') -> Dict[str, Any]:
+    """
+    Flatten a nested dictionary by concatenating nested keys with a separator.
+
+    :param d: the dictionary to flatten
+    :param sep: the separator to use in order to join the keys of nested dictionaries
+    :return: a flattened dictionary
+    """
+    def _flatten(d: Dict[str, Any], parent_key: str = '') -> List[Tuple[str, Any]]:
+        items: List[Tuple[str, Any]] = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(_flatten(v, new_key))
+            else:
+                items.append((new_key, v))
+        return items
+
+    return dict(_flatten(d))

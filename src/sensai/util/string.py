@@ -84,6 +84,8 @@ def to_string(x, converter: StringConverter = None, apply_converter_to_non_compl
             return list_string(x, brackets="()", converter=converter)
         elif type(x) == dict:
             return dict_string(x, brackets="{}", converter=converter)
+        elif type(x) == str:
+            return repr(x)
         elif type(x) == types.MethodType:
             # could be bound method of a ToStringMixin instance (which would print the repr of the instance, which can potentially cause
             # an infinite recursion)
@@ -426,7 +428,7 @@ def pretty_string_repr(s: Any, initial_indentation_level=0, indentation_string="
     def find_matching(j):
         start = j
         op = s[j]
-        cl = {"[": "]", "(": ")", "'": "'"}[s[j]]
+        cl = {"[": "]", "(": ")", "'": "'", "{": "}"}[s[j]]
         is_bracket = cl != s[j]
         stack = 0
         while j < len(s):
@@ -439,7 +441,7 @@ def pretty_string_repr(s: Any, initial_indentation_level=0, indentation_string="
             j += 1
         return None
 
-    brackets = "[("
+    brackets = "[({"
     quotes = "'"
     while i < len(s):
         is_bracket = s[i] in brackets
@@ -457,7 +459,7 @@ def pretty_string_repr(s: Any, initial_indentation_level=0, indentation_string="
                 take(1)
                 indent += 1
                 nl()
-        elif s[i] in "])":
+        elif s[i] in "])}":
             take(1)
             indent -= 1
         elif s[i:i+2] == ", ":

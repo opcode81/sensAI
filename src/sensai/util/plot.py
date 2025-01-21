@@ -181,6 +181,9 @@ class Plot:
         log.info(f"Saving figure in {path}")
         self.fig.savefig(path)
 
+    def show(self):
+        self.fig.show()
+
     def xtick(self: TPlot, major=None, minor=None) -> TPlot:
         """
         Sets a tick on every integer multiple of the given base values.
