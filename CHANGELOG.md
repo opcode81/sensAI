@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+* Dropped support for Python versions below 3.9
+* Dropped support for TensorFlow (removing `sensai.tensorflow`)
+
 ## 1.4.0 (2025-01-21)
 
 ### Improvements/Changes

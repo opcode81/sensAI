@@ -19,7 +19,6 @@ from .vector_model import VectorModelBase, VectorModel, VectorRegressionModel, V
 __version__ = "1.4.0"
 
 # The following submodules are not imported by default to avoid necessarily requiring their dependencies:
-# tensorflow
 # torch
 # lightgbm
 # catboost
