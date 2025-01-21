@@ -4,7 +4,7 @@
 
 ### Breaking Changes
 
-* Dropped support for Python versions below 3.9
+* Dropped support for Python versions below 3.10
 * Dropped support for TensorFlow (removing `sensai.tensorflow`)
 
 ### Fixes
