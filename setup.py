@@ -13,8 +13,6 @@ DEPS_VERSION_LOWER_BOUND = [
     "pandas", "scipy", "numpy", "scikit-learn", "seaborn", "typing-extensions",
     # extra "torch"
     "torch", "torchtext",
-    # extra "tensorflow"
-    "tensorflow",
     # extra "lightgbm"
     "lightgbm",
     # extra "geoanalytics"
