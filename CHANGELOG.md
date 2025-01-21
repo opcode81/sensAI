@@ -7,6 +7,10 @@
 * Dropped support for Python versions below 3.9
 * Dropped support for TensorFlow (removing `sensai.tensorflow`)
 
+### Fixes
+
+* `util.tensorboard`: Fix type annotations requiring Python 3.10+ (now Python 3.9+)
+
 ## 1.4.0 (2025-01-21)
 
 ### Improvements/Changes
