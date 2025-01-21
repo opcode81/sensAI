@@ -26,7 +26,7 @@ jobs:
               run: |
                   python -m pip install --upgrade pip
                   if [[ "${{ matrix.env_name }}" == "py" ]]; then
-                    pip install -r requirements.txt -r requirements_torch.txt -r requirements_lightgbm.txt -r requirements_geoanalytics.txt -r requirements_xgboost.txt pytest pytest-cov pytest-xdist pytorch-lightning~=1.1.0;
+                    pip install -v -r  requirements.txt -r requirements_torch.txt -r requirements_lightgbm.txt -r requirements_geoanalytics.txt -r requirements_xgboost.txt pytest pytest-cov pytest-xdist pytorch-lightning~=1.1.0;
                   elif [[ "${{ matrix.env_name }}" == "py_latest_dependencies" ]]; then
                     pip install pytest jupyter==1.0.0 nbconvert==6.5.0 clearml==0.17.1 pytorch-lightning>=1.1 ".[full]";
                   elif [[ "${{ matrix.env_name }}" == "py_backwardscompat" ]]; then
