@@ -7,6 +7,17 @@
 * Dropped support for Python versions below 3.10
 * Dropped support for TensorFlow (removing `sensai.tensorflow`)
 
+### Improvements/Changes
+
+* `util`:
+  * `util.cache`:
+    * `cache_mysql.MySQLPersistentKeyValueCache`:
+      * Switch from MySQLdb to pymsql
+      * Add support for additional connection arguments
+      * Use autocommit and remove option of using deferred commits as it's the only way to guarantee
+        that no stale data is read due to transactions going on too long
+      * Handle duplicate key upon insertion due to race condition by providing a more informative Exception
+
 
 ## 1.4.0 (2025-01-21)
 
