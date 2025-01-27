@@ -73,7 +73,7 @@ setup(
     dependency_links=["https://download.pytorch.org/whl/torch_stable.html"],
     setup_requires=["wheel"],
     extras_require=extras_require,
-    author='appliedAI Institute gGmbh & jambit GmbH',
+    author='Dominik Jain et al.',
     classifiers=[
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
