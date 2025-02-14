@@ -15,6 +15,7 @@ from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..data_transformation import DataFrameTransformer
 from ..tracking import TrackingMixin, TrackedExperiment
 from ..util.deprecation import deprecated
+from ..util.pickle import setstate
 from ..util.string import ToStringMixin
 from ..util.typing import PandasNamedTuple
 from ..vector_model import VectorClassificationModel, VectorModel, VectorModelBase, VectorRegressionModel
@@ -63,6 +64,12 @@ class MetricsDictProviderFromFunction(MetricsDictProvider):
 
 
 class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
+    """
+    Holds evaluation data for a particular model and dataset.
+
+    The representation contains the dataset and the model, so when persisting this only for the metrics (`eval stats`),
+    call the respective remove methods first.
+    """
     def __init__(self, stats_dict: Dict[str, TEvalStats], io_data: InputOutputData, model: VectorModelBase):
         """
         :param stats_dict: a dictionary mapping from output variable name to the evaluation statistics object
@@ -73,14 +80,25 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         self.eval_stats_by_var_name = stats_dict
         self.predicted_var_names = list(self.eval_stats_by_var_name.keys())
         self.model = model
+        self.model_name = self.model.get_name()  # make sure we have this even if model is later removed
 
-    @property
-    def model_name(self):
-        return self.model.get_name()
+    def __setstate__(self, state):
+        if "model_name" not in state:
+            state["model_name"] = state["model"].get_name()
+        setstate(VectorModelEvaluationData, self, state)
 
     @property
     def input_data(self):  # for backward compatibility
+        if self.io_data is None:
+            raise ValueError("Object contains no i/o data")
         return self.io_data.inputs
+
+    def remove_model_and_data(self) -> None:
+        """
+        Removes the model and data (e.g. to persist a minimal object that can still provide the eval stats, however)
+        """
+        self.io_data = None
+        self.model = None
 
     def get_eval_stats(self, predicted_var_name=None) -> TEvalStats:
         if predicted_var_name is None:
@@ -111,6 +129,8 @@ class VectorModelEvaluationData(ABC, Generic[TEvalStats]):
         return df
 
     def iter_input_output_ground_truth_tuples(self, predicted_var_name=None) -> Generator[Tuple[PandasNamedTuple, Any, Any], None, None]:
+        if self.io_data is None:
+            raise ValueError("Object contains no i/o data")
         eval_stats = self.get_eval_stats(predicted_var_name)
         for i, named_tuple in enumerate(self.input_data.itertuples()):
             yield named_tuple, eval_stats.y_predicted[i], eval_stats.y_true[i]
@@ -355,16 +375,19 @@ class VectorRegressionModelEvaluatorParams(RegressionEvaluatorParams):
 
 
 class VectorRegressionModelEvaluator(VectorModelEvaluator[VectorRegressionModelEvaluationData]):
-    def __init__(self, data: InputOutputData, test_data: InputOutputData = None,
-            params: RegressionEvaluatorParams = None):
+    def __init__(self, data: InputOutputData | None = None, test_data: InputOutputData | None = None,
+            params: RegressionEvaluatorParams | None = None):
         """
         Constructs an evaluator with test and training data.
 
-        :param data: the full data set, or, if testData is given, the training data
+        :param data: the full data set, or, if testData is given, the training data; may be None if no training
+            shall be performed
         :param test_data: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
-        :param params: the parameters
+        :param params: the parameters; if None, use default parameters
         """
         super().__init__(data=data, test_data=test_data, params=params)
+        if params is None:
+            params = RegressionEvaluatorParams()
         self.params = params
 
     def _eval_model(self, model: VectorRegressionModel, data: InputOutputData) -> VectorRegressionModelEvaluationData:
@@ -478,17 +501,19 @@ class VectorClassificationModelEvaluatorParams(ClassificationEvaluatorParams):
 
 class VectorClassificationModelEvaluator(VectorModelEvaluator[VectorClassificationModelEvaluationData]):
     def __init__(self,
-            data: InputOutputData,
-            test_data: InputOutputData = None,
-            params: ClassificationEvaluatorParams = None):
+            data: InputOutputData | None = None,
+            test_data: InputOutputData | None = None,
+            params: ClassificationEvaluatorParams | None = None):
         """
         Constructs an evaluator with test and training data.
 
         :param data: the full data set, or, if `test_data` is given, the training data
         :param test_data: the data to use for testing/evaluation; if None, must specify appropriate parameters to define splitting
-        :param params: the parameters
+        :param params: the parameters; if None, use default parameters
         """
         super().__init__(data=data, test_data=test_data, params=params)
+        if params is None:
+            params = ClassificationEvaluatorParams()
         self.params = params
 
     def _eval_model(self, model: VectorClassificationModel, data: InputOutputData) -> VectorClassificationModelEvaluationData:

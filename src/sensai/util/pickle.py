@@ -1,18 +1,46 @@
 import logging
 import os
 import pickle
+from contextlib import contextmanager
 from copy import copy
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, Literal, Optional
 
 from .io import S3Object, is_s3_path
 
 log = logging.getLogger(__name__)
 
 
-def load_pickle(path: Union[str, Path], backend="pickle"):
+def load_pickle(path: Union[str, Path],
+        backend: Literal["pickle", "cloudpickle", "joblib"] = "pickle",
+        use_bz2: Optional[bool] = None):
+    """
+    :param path: the path from which to load the pickle; may be an S3 path starting with "s3://"
+    :param backend: the backend to use
+    :param use_bz2: whether to use bzip2 to decompress the file prior to loading it; if None, infer from filename
+        (enabled if it ends with ".bz2")
+    :return:
+    """
     if isinstance(path, Path):
         path = str(path)
+
+    if use_bz2 is None:
+        use_bz2 = path.endswith(".bz2")
+
+    @contextmanager
+    def open_file():
+        if is_s3_path(path):
+            if use_bz2:
+                raise ValueError("Flag use_bz2 not supported for S3 paths")
+            yield S3Object(path).open_file("rb")
+        else:
+            if use_bz2:
+                import bz2
+                with bz2.BZ2File(path, 'rb') as _file:
+                    yield _file
+            else:
+                with open(path, "rb") as _file:
+                    yield _file
 
     def read_file(f):
         def _load_with_error_log(loader: Callable):
@@ -33,21 +61,43 @@ def load_pickle(path: Union[str, Path], backend="pickle"):
         else:
             raise ValueError(f"Unknown backend '{backend}'. Supported backends are 'pickle', 'joblib' and 'cloudpickle'")
 
-    if is_s3_path(path):
-        return read_file(S3Object(path).open_file("rb"))
-    with open(path, "rb") as f:
+    with open_file() as f:
         return read_file(f)
 
 
-def dump_pickle(obj, pickle_path: Union[str, Path], backend="pickle", protocol=pickle.HIGHEST_PROTOCOL):
+def dump_pickle(obj,
+        pickle_path: Union[str, Path],
+        backend: Literal["pickle", "cloudpickle", "joblib"] = "pickle",
+        protocol=pickle.HIGHEST_PROTOCOL,
+        use_bz2: Optional[bool] = None) -> None:
+    """
+    :param obj: the object to pickle
+    :param pickle_path: either a path to a local file or an S3 path (starting with "s3://")
+    :param backend: the backend to use
+    :param protocol: the protocol version to use for backend "pickle"
+    :param use_bz2: whether to use bzip2 to compress the pickle file; not supported for S3 paths;
+        if None, infer from filename (enabled if it ends with ".bz2")
+    """
     if isinstance(pickle_path, Path):
         pickle_path = str(pickle_path)
 
+    if use_bz2 is None:
+        use_bz2 = pickle_path.endswith(".bz2")
+
+    @contextmanager
     def open_file():
         if is_s3_path(pickle_path):
-            return S3Object(pickle_path).open_file("wb")
+            if use_bz2:
+                raise ValueError("Flag use_bz2 not supported for S3 paths")
+            yield S3Object(pickle_path).open_file("wb")
         else:
-            return open(pickle_path, "wb")
+            if use_bz2:
+                import bz2
+                with bz2.BZ2File(pickle_path, 'wb') as _file:
+                    yield _file
+            else:
+                with open(pickle_path, "wb") as _file:
+                    yield _file
 
     dir_name = os.path.dirname(pickle_path)
     if dir_name != "":
@@ -180,12 +230,12 @@ def setstate(
     removed_properties: List[str] = None,
 ) -> None:
     """
-    Helper function for safe implementations of __setstate__ in classes, which appropriately handles the cases where
+    Helper function for safe implementations of `__setstate__` in classes, which appropriately handles the cases where
     a parent class already implements __setstate__ and where it does not. Call this function whenever you would actually
     like to call the super-class' implementation.
-    Unfortunately, __setstate__ is not implemented in object, rendering super().__setstate__(state) invalid in the general case.
+    Unfortunately, `__setstate__` is not implemented in object, rendering `super().__setstate__(state)` invalid in the general case.
 
-    :param cls: the class in which you are implementing __setstate__
+    :param cls: the class in which you are implementing __setstate__. Don't use `self.__class__` but the actual class here!
     :param obj: the instance of cls
     :param state: the state dictionary
     :param renamed_properties: can be used for renaming as well as for assigning new values.

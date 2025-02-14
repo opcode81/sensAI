@@ -443,7 +443,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
         INTEGER = ("LONG", )
 
     def __init__(self, path, table_name="cache", deferred_commit_delay_secs=1.0, key_type: KeyType = KeyType.STRING,
-            max_key_length=255):
+            max_key_length=255, max_entries_for_commit: int = 500):
         """
         :param path: the path to the file that is to hold the SQLite database
         :param table_name: the name of the table to create in the database
@@ -451,6 +451,7 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
         :param key_type: the type to use for keys; for complex keys (i.e. tuples), use STRING (conversions to string are automatic)
         :param max_key_length: the maximum key length for the case where the key_type can be parametrised (e.g. STRING)
         """
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         self.path = path
         self.conn = SqliteConnectionManager.open_connection(path)
         self.table_name = table_name
@@ -458,7 +459,9 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
         self.key_type = key_type
         self._update_hook = DelayedUpdateHook(self._commit, deferred_commit_delay_secs)
         self._num_entries_to_be_committed = 0
+        self._num_entries_total_changed = 0
         self._conn_mutex = threading.Lock()
+        self._max_entries_for_commit = max_entries_for_commit
 
         cursor = self.conn.cursor()
         cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table';")
@@ -484,9 +487,10 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
     def _commit(self):
         self._conn_mutex.acquire()
         try:
-            log.info(f"Committing {self._num_entries_to_be_committed} cache entries to the SQLite database {self.path}")
-            self.conn.commit()
-            self._num_entries_to_be_committed = 0
+            if self._num_entries_to_be_committed > 0:
+                log.info(f"Committing {self._num_entries_to_be_committed} cache entries ({self._num_entries_total_changed} total in session) to the SQLite database {self.path}")
+                self.conn.commit()
+                self._num_entries_to_be_committed = 0
         finally:
             self._conn_mutex.release()
 
@@ -502,11 +506,15 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
             else:
                 cursor.execute(f"UPDATE {self.table_name} SET cache_value=? WHERE cache_key=?", (pickle.dumps(value), key))
             self._num_entries_to_be_committed += 1
+            self._num_entries_total_changed += 1
             cursor.close()
         finally:
             self._conn_mutex.release()
 
-        self._update_hook.handle_update()
+        if self._num_entries_to_be_committed >= self._max_entries_for_commit:
+            self._commit()
+        else:
+            self._update_hook.handle_update()
 
     def _execute(self, cursor, *query):
         try:
@@ -552,6 +560,12 @@ class SqlitePersistentKeyValueCache(PersistentKeyValueCache[TKey, TValue]):
             cursor.close()
         finally:
             self._conn_mutex.release()
+
+    def finalise(self):
+        """
+        Commits any not yet commited entries to the database
+        """
+        self._commit()
 
 
 class SqlitePersistentList(PersistentList):

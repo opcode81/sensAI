@@ -1,4 +1,4 @@
-from typing import Optional, List, TYPE_CHECKING, Callable
+from typing import Optional, List, Self, TYPE_CHECKING, Callable
 
 import pandas as pd
 
@@ -22,16 +22,16 @@ class ResultSet:
     def __init__(self, df: pd.DataFrame):
         self.df = df
 
-    def _create_result_set(self, df: pd.DataFrame, parent: "ResultSet"):
+    def _create_result_set(self, df: pd.DataFrame) -> Self:
         """
         Creates a new result set for the given data frame
 
         :param df: the data frame
         :return: the result set
         """
-        return ResultSet(df)
+        return self.__class__(df)
 
-    def query(self, sql: str) -> "ResultSet":
+    def query(self, sql: str) -> Self:
         """
         Queries the result set with the given condition specified in SQL syntax.
 
@@ -41,7 +41,7 @@ class ResultSet:
         :return: the result set corresponding to the query
         """
         result_df = query_data_frame(self.df, sql)
-        return self._create_result_set(result_df, self)
+        return self._create_result_set(result_df)
 
     def show(self, first: Optional[int] = None, sample: Optional[int] = None) -> None:
         """
@@ -85,8 +85,8 @@ class RegressionResultSet(ResultSet):
 
         return regression_result_set_factory(df, predicted_var_names)
 
-    def _create_result_set(self, df: pd.DataFrame, parent: "RegressionResultSet"):
-        return self.__class__(df, parent.predicted_var_names)
+    def _create_result_set(self, df: pd.DataFrame):
+        return self.__class__(df, self.predicted_var_names)
 
     @staticmethod
     def col_name_predicted(predicted_var_name: str):

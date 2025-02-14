@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from io import StringIO
 from logging import *
-from typing import List, Callable, Optional, TypeVar, TYPE_CHECKING, Generic
+from typing import List, Callable, Optional, TypeVar, TYPE_CHECKING, Generic, Dict
 
 from .time import format_duration
 
@@ -331,7 +331,10 @@ class LogTime:
             self.logger.info(f"{self.name} completed in {self.stopwatch.get_elapsed_time_string()}")
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.stop()
+        if exc_type is None:
+            self.stop()
+        elif self.stopwatch is not None and self.enabled:
+            self.logger.error(f"{self.name} failed after {self.stopwatch.get_elapsed_time_string()}")
 
     def __enter__(self):
         self.start()
@@ -431,3 +434,58 @@ class FallbackHandler(Handler):
         root_handlers = getLogger().handlers
         if len(root_handlers) == 0 or (len(root_handlers) == 1 and root_handlers[0] == self):
             self._handler.emit(record)
+
+
+class SuspendedLoggersContext:
+    """A context manager that provides an isolated logging environment.
+
+    Temporarily removes all existing loggers upon entry, providing a clean slate
+    for defining new loggers within the context. Upon exit, restores the original
+    logging configuration. This is useful when you need to temporarily configure
+    a completely isolated logging setup without interference from existing loggers.
+
+    The context manager:
+        - Removes all existing loggers on entry
+        - Allows defining new temporary loggers within the context
+        - Restores the original logging configuration on exit
+        - Preserves root logger settings for restoration
+
+    Example:
+        >>> with SuspendedLoggersContext():
+        ...     # No loggers are active here (configure your own)
+        ...     pass
+        >>> # All original loggers are restored here
+    """
+
+    def __init__(self):
+        self.saved_loggers: Dict[str, lg.Logger] = {}
+        self.saved_root_handlers: list = []
+        self.saved_root_level: Optional[int] = None
+
+    def __enter__(self) -> 'SuspendedLoggersContext':
+        # Save root logger state
+        root_logger = lg.getLogger()
+        self.saved_root_handlers = root_logger.handlers.copy()
+        self.saved_root_level = root_logger.level
+
+        # Save all existing loggers
+        self.saved_loggers = {
+            name: lg.getLogger(name)
+            for name in lg.root.manager.loggerDict
+        }
+
+        # Clear all loggers
+        lg.root.manager.loggerDict.clear()
+        root_logger.handlers.clear()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        # Restore root logger state
+        root_logger = lg.getLogger()
+        root_logger.handlers = self.saved_root_handlers
+        if self.saved_root_level is not None:
+            root_logger.setLevel(self.saved_root_level)
+
+        # Restore all saved loggers
+        lg.root.manager.loggerDict.update(self.saved_loggers)

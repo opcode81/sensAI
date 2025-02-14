@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, TYPE_CHECKING, Hashable, Union
+from typing import Callable, Dict, TYPE_CHECKING, Hashable, Union, List
 
 import pandas as pd
 
@@ -50,7 +50,7 @@ class FeatureGeneratorRegistry:
             raise ValueError(f"Generator for name '{name}' already registered")
         self._feature_generator_factories[name] = factory
 
-    def get_feature_generator(self, name: str) -> FeatureGenerator:
+    def get_feature_generator(self, name: Hashable) -> FeatureGenerator:
         """
         Creates a feature generator from a name, which must have been previously registered.
         The name of the returned feature generator (as returned by getName()) is set to name.
@@ -78,6 +78,15 @@ class FeatureGeneratorRegistry:
         """
         return FeatureCollector(*feature_generators_or_names, registry=self)
 
+    def get_feature_generators(self, *feature_generators_or_names: Union[Hashable, FeatureGenerator]) -> List[FeatureGenerator]:
+        feature_generators = []
+        for f in feature_generators_or_names:
+            if isinstance(f, FeatureGenerator):
+                feature_generators.append(f)
+            else:
+                feature_generators.append(self.get_feature_generator(f))
+        return feature_generators
+
 
 class FeatureCollector(object):
     """
@@ -92,9 +101,13 @@ class FeatureCollector(object):
         :param feature_generators_or_names: generator names/keys (known to the registry) or generator instances
         :param registry: the feature generator registry for the case where names/keys are passed
         """
-        self._feature_generators_or_names = feature_generators_or_names
+        self._feature_generators_or_names = list(feature_generators_or_names)
         self._registry = registry
-        self._multi_feature_generator = self.create_multi_feature_generator()
+        self._multi_feature_generator: MultiFeatureGenerator | None = None
+
+    def add_features(self, *features: Union[Hashable, FeatureGenerator]):
+        self._feature_generators_or_names.extend(features)
+        self._multi_feature_generator = None
 
     def get_multi_feature_generator(self) -> MultiFeatureGenerator:
         """
@@ -104,6 +117,8 @@ class FeatureCollector(object):
 
         :return: the multi-feature generator that was created for this instance
         """
+        if self._multi_feature_generator is None:
+            self._multi_feature_generator = self.create_multi_feature_generator()
         return self._multi_feature_generator
 
     def get_normalisation_rules(self, include_generated_categorical_rules=True):

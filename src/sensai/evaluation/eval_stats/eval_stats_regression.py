@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-from . import BinaryClassificationMetric
+from . import BinaryClassificationMetric, ClassificationMetric
 from .eval_stats_base import PredictionEvalStats, Metric, EvalStatsCollection, PredictionArray, EvalStatsPlot, Array
 from ...util import kwarg_if_not_none
 from ...util.plot import HistogramPlot
@@ -154,10 +154,10 @@ class RegressionMetricFromBinaryClassificationMetric(RegressionMetric):
         def get_metric_qualifier(self) -> str:
             return f">={self.min_value_for_positive}"
 
-    def __init__(self, classification_metric: BinaryClassificationMetric,
+    def __init__(self, classification_metric: ClassificationMetric,
             class_generator: ClassGenerator):
         """
-        :param classification_metric: the classification metric (which shall consider `True` as the positive label)
+        :param classification_metric: the classification metric (which shall consider the Boolean value `True` as the positive label)
         :param class_generator: the class generator, which generates `True` and `False` labels from regression values
         """
         super().__init__(name=classification_metric.name + f"[{class_generator.get_metric_qualifier()}]",

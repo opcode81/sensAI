@@ -149,10 +149,10 @@ class Plot:
         :param ax: the axes to draw to
         """
         if ax is not None:
-            fig = None
+            fig = ax.figure
         else:
             fig, ax = plt.subplots(num=name)
-        self.fig: plt.Figure = fig
+        self.fig: plt.Figure | None = fig
         self.ax: plt.Axes = ax
         if draw is not None:
             draw(ax)
@@ -414,5 +414,66 @@ class AverageSeriesLinePlot(Plot):
                 palette=palette,
                 ax=ax,
             )
+
+        super().__init__(draw, ax=ax)
+
+
+class MetricComparisonBarPlot(Plot):
+    """
+    Shows metric bar plots for a data frame of metrics for several entities.
+    The bar plots are shown horizontally, grouped by metric, with a different colour for each entity.
+
+    Usage example:
+
+    ```python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    data = {
+        'accuracy': [0.85, 0.78, 0.92],
+        'precision': [0.80, 0.75, 0.88],
+        'recall': [0.83, 0.77, 0.90],
+        'f1_score': [0.81, 0.76, 0.89]
+    }
+
+    df = pd.DataFrame(data, index=['Model A', 'Model B', 'Model C'])
+    MetricComparisonBarPlot(df)
+    ```
+    """
+    def __init__(self, df: pd.DataFrame, ax: plt.Axes | None = None, metric_label="metric", value_label="value", entity_label="model"):
+        """
+        :param df: a data frame with metrics values, where the index specifies the names of compared entities (e.g. model names)
+            and the columns are different metrics
+        :param ax: the axis to plot to; if None, create it, with the height being automatically adjusted
+        """
+
+        def draw(ax: plt.Axes | None):
+            index_name = df.index.name or "index"
+            df_melted = df.reset_index().melt(id_vars=index_name, var_name=metric_label, value_name=value_label)
+            df_melted.rename(columns={index_name: entity_label}, inplace=True)
+            df_melted['Metric'] = pd.Categorical(df_melted[metric_label], categories=df.columns, ordered=True)
+
+            sns.barplot(data=df_melted,
+                y=metric_label,
+                x=value_label,
+                hue=entity_label,
+                orient='h',
+                ax=ax)
+
+            ax.set_ylabel(metric_label)
+            ax.set_yticks(range(len(df.columns)))
+            ax.set_yticklabels(df.columns)
+            ax.set_xlabel(value_label)
+
+            ax.figure.tight_layout()
+
+        if ax is None:
+            n_metrics = len(df.columns)
+            n_models = len(df.index)
+            height_per_metric = 0.5
+            height_per_model = 0.4
+            min_height = 6
+            total_height = max(min_height, n_metrics * (height_per_metric + (n_models * height_per_model)))
+            fig, ax = plt.subplots(figsize=(10, total_height))
 
         super().__init__(draw, ax=ax)
