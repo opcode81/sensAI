@@ -1,9 +1,11 @@
 import functools
 import logging
+import pprint
 import re
 import sys
 import types
 from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass
 from typing import Union, List, Dict, Any, Sequence, Iterable, Optional, Mapping, Callable
 
 reCommaWhitespacePotentiallyBreaks = re.compile(r",\s+")
@@ -555,3 +557,35 @@ class TextBuilder:
         for i in range(n):
             self._components.append("")
         return self
+
+@dataclass
+class DataclassPPrintMixin:
+    """
+    This mixin provides methods for pretty-printing a dataclass as a dictionary,
+    allowing the exclusion of specified fields when the print command is called. Useful for
+    logging and debugging purposes where only certain fields of a dataclass should be displayed.
+    It follows a different approach to the :class:`ToStringMixin` (which is not specialized for dataclasses),
+    where the string representation is fixed and determined by the implementation.
+    """
+    def pprint_asdict(self, exclude_fields: Optional[Sequence[str]] = None, indent: int = 4) -> None:
+        """Pretty-print the object as a dict, excluding specified fields.
+
+        :param exclude_fields: A sequence of field names to exclude from the output.
+            If None, no fields are excluded.
+        :param indent: The indentation to use when pretty-printing.
+        """
+        print(self.pprints_asdict(exclude_fields=exclude_fields, indent=indent))
+
+    def pprints_asdict(self, exclude_fields: Optional[Sequence[str]] = None, indent: int = 4) -> str:
+        """String corresponding to pretty-print of the object as a dict, excluding specified fields.
+
+        :param exclude_fields: A sequence of field names to exclude from the output.
+            If None, no fields are excluded.
+        :param indent: The indentation to use when pretty-printing.
+        """
+        prefix = f"{self.__class__.__name__}\n----------------------------------------\n"
+        print_dict = asdict(self)
+        exclude_fields = exclude_fields or []
+        for field in exclude_fields:
+            print_dict.pop(field, None)
+        return prefix + pprint.pformat(print_dict, indent=indent)
