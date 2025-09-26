@@ -353,14 +353,19 @@ class LoggerContext(Generic[THandler], ABC):
 
     def __init__(self, enabled=True):
         """
-        :param enabled: whether to actually perform any logging.
-            This switch allows the with statement to be applied regardless of whether logging shall be enabled.
+        :param enabled: whether to actually enable the context, applying the new log handler.
+            This switch allows the with statement to be applied regardless of whether the context shall be enabled.
         """
         self.enabled = enabled
         self._log_handler = None
 
     @abstractmethod
     def _create_log_handler(self) -> THandler:
+        """
+        Creates and registers/enables the log handler to be used within the context.
+
+        :return: the handler
+        """
         pass
 
     def __enter__(self) -> Optional[THandler]:
@@ -369,7 +374,9 @@ class LoggerContext(Generic[THandler], ABC):
         return self._log_handler
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self._log_handler is not None:
+        if self.enabled:
+            if exc_type is not None:
+                log.error(f"Exception within {self.__class__.__name__}", exc_info=exc_value)
             remove_log_handler(self._log_handler)
 
 
