@@ -2,12 +2,12 @@ from typing import Optional, List, TYPE_CHECKING, Callable
 
 import pandas as pd
 
-from sensai.evaluation.eval_stats import RegressionEvalStats
+from sensai.evaluation.eval_stats import RegressionEvalStats, ClassificationEvalStats
 from sensai.util.pandas import query_data_frame
 from sensai.vector_model import get_predicted_var_name
 
 if TYPE_CHECKING:
-    from sensai.evaluation import VectorRegressionModelEvaluationData
+    from sensai.evaluation import VectorRegressionModelEvaluationData, VectorClassificationModelEvaluationData
 
 
 class ResultSet:
@@ -116,3 +116,34 @@ class RegressionResultSet(ResultSet):
         predicted_var_name = get_predicted_var_name(predicted_var_name, self.predicted_var_names)
         return RegressionEvalStats(y_predicted=self.df[self.col_name_predicted(predicted_var_name)],
             y_true=self.df[self.col_name_ground_truth(predicted_var_name)])
+
+
+class ClassificationResultSet(ResultSet):
+    def __init__(self, df: pd.DataFrame, predicted_var_name: str):
+        super().__init__(df)
+        self.predicted_var_name = predicted_var_name
+
+    @classmethod
+    def from_classification_eval_data(cls, eval_data: "VectorClassificationModelEvaluationData", modify_input_df: bool = False,
+            output_col_name_override: Optional[str] = None) \
+            -> "ClassificationResultSet":
+        df = eval_data.to_data_frame(modify_input_df=modify_input_df, output_col_name_override=output_col_name_override)
+        if output_col_name_override:
+            predicted_var_names = [output_col_name_override]
+        else:
+            predicted_var_names = eval_data.predicted_var_names
+
+        return ClassificationResultSet(df, predicted_var_names[0])
+
+    def _create_result_set(self, df: pd.DataFrame):
+        return self.__class__(df, self.predicted_var_name)
+
+    def eval_stats(self):
+        """
+        Creates the evaluation stats object for this result object, which can be used to compute metrics
+        or to create plots.
+
+        :return: the evaluation stats object
+        """
+        return ClassificationEvalStats(y_predicted=self.df[self.col_name_predicted(self.predicted_var_name)],
+            y_true=self.df[self.col_name_ground_truth(self.predicted_var_name)])

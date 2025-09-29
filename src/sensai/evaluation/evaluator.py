@@ -10,7 +10,7 @@ from .eval_stats import GUESS
 from .eval_stats.eval_stats_base import EvalStats, EvalStatsCollection
 from .eval_stats.eval_stats_classification import ClassificationEvalStats, ClassificationMetric
 from .eval_stats.eval_stats_regression import RegressionEvalStats, RegressionEvalStatsCollection, RegressionMetric
-from .result_set import RegressionResultSet, ResultSet
+from .result_set import RegressionResultSet, ResultSet, ClassificationResultSet
 from ..data import DataSplitter, DataSplitterFractional, InputOutputData
 from ..data_transformation import DataFrameTransformer
 from ..tracking import TrackingMixin, TrackedExperiment
@@ -482,6 +482,26 @@ class VectorClassificationModelEvaluationData(VectorModelEvaluationData[Classifi
             df[ResultSet.col_name_predicted(predicted_var_name)] = y_predicted
             df[ResultSet.col_name_ground_truth(predicted_var_name)] = y_true
         return df
+
+    def create_result_set(self, modify_input_df: bool = False, output_col_name_override: Optional[str] = None) -> ClassificationResultSet:
+        """
+        Creates a queryable result set from the prediction results which can be used, in particular, for interactive analyses.
+
+        The result set will contain a data frame, and predicted variable "y",
+        there will be columns "y_predicted", "y_true", "y_error" and "y_abs_error" in this data frame.
+        If there is only a single predicted variable, the variable can be renamed for convenience.
+
+        :param modify_input_df: whether to modify the input data frame in-place to generate the data frame
+            (instead of copying it). This can be reasonable in cases where the data is very large.
+        :param output_col_name_override: overrides the output column name. For example, if this is set to "y",
+            then the columns named in the description above will be present in the data frame.
+        :return: a data frame containing all inputs, outputs and prediction errors
+
+        :return: the result set
+        """
+        return ClassificationResultSet.from_classification_eval_data(self, modify_input_df=modify_input_df,
+            output_col_name_override=output_col_name_override)
+
 
 class ClassificationEvaluatorParams(EvaluatorParams):
     def __init__(self, data_splitter: DataSplitter = None, fractional_split_test_fraction: float = None, fractional_split_random_seed=42,
