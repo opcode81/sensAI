@@ -10,6 +10,10 @@
 * `util.logging`:
   * `LoggerContext` (and subclasses): Make sure any exceptions occurring within the context are logged 
   * `FileLoggerContext`, `add_file_handler`: Add option `encoding` (which defaults to 'utf-8' on all platforms)
+  * `run_main`, `run_cli`: 
+    * Add options `log_file` and `append` to support file logging directly
+    * Add option `stream` to allow the output stream for console logging to be configured
+  * `add_file_logger`: Auto-create parent directories of the log file if necessary
 
 ### Fixes
 

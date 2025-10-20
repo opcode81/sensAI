@@ -99,7 +99,12 @@ def configure(format=LOG_DEFAULT_FORMAT, level=lg.DEBUG, stream=sys.stdout):
 
 
 # noinspection PyShadowingBuiltins
-def run_main(main_fn: Callable[..., T], format=LOG_DEFAULT_FORMAT, level=lg.DEBUG) -> T:
+def run_main(main_fn: Callable[..., T],
+        format=LOG_DEFAULT_FORMAT,
+        level=lg.DEBUG,
+        logfile: Optional[str] = None,
+        append: bool = True,
+        stream=sys.stdout) -> T:
     """
     Configures logging with the given parameters, ensuring that any exceptions that occur during
     the execution of the given function are logged.
@@ -108,9 +113,15 @@ def run_main(main_fn: Callable[..., T], format=LOG_DEFAULT_FORMAT, level=lg.DEBU
     :param main_fn: the function to be executed
     :param format: the log message format
     :param level: the minimum log level
+    :param logfile: the path of a file to write logs to (in addition to console outputs);
+        directories will be created as needed
+    :param append: whether to append to the log file if it already exists
+    :param stream: the output stream for console log messages
     :return: the result of `main_fn`
     """
-    configure(format=format, level=level)
+    configure(format=format, level=level, stream=stream)
+    if logfile is not None:
+        add_file_logger(logfile, append=append)
     log.info("Starting")
     try:
         result = main_fn()
@@ -121,7 +132,12 @@ def run_main(main_fn: Callable[..., T], format=LOG_DEFAULT_FORMAT, level=lg.DEBU
 
 
 # noinspection PyShadowingBuiltins
-def run_cli(main_fn: Callable[..., T], format: str = LOG_DEFAULT_FORMAT, level: int = lg.DEBUG) -> Optional[T]:
+def run_cli(main_fn: Callable[..., T],
+        format: str = LOG_DEFAULT_FORMAT,
+        level: int = lg.DEBUG,
+        logfile: Optional[str] = None,
+        append: bool = True,
+        stream = sys.stdout) -> Optional[T]:
     """
     Configures logging with the given parameters and runs the given main function as a
     CLI using `jsonargparse` (which is configured to also parse attribute docstrings, such
@@ -133,12 +149,14 @@ def run_cli(main_fn: Callable[..., T], format: str = LOG_DEFAULT_FORMAT, level: 
     :param main_fn: the function to be executed
     :param format: the log message format
     :param level: the minimum log level
+    :param logfile: path of a file to write logs to (in addition to console outputs);
+        directories will be created as needed
     :return: the result of `main_fn`
     """
     from jsonargparse import set_docstring_parse_options, CLI
 
     set_docstring_parse_options(attribute_docstrings=True)
-    return run_main(lambda: CLI(main_fn), format=format, level=level)
+    return run_main(lambda: CLI(main_fn), format=format, level=level, logfile=logfile, append=append, stream=stream)
 
 
 def datetime_tag() -> str:
@@ -161,7 +179,7 @@ def add_file_logger(path, append=True, register_atexit=True, encoding=LOG_FILE_D
     """
     Adds a file logger which logs to the given path.
 
-    :param path: the path to the log file
+    :param path: the path to the log file; directories will be created as needed
     :param append: whether to append in case the file already exists
     :param register_atexit: whether to register an atexit handler which reports the path to the log file upon program termination
     :param encoding: the encoding to use for the log file
@@ -169,6 +187,9 @@ def add_file_logger(path, append=True, register_atexit=True, encoding=LOG_FILE_D
     """
     global _isAtExitReportFileLoggerRegistered
     log.info(f"Logging to {path} ...")
+    dirname = os.path.dirname(path)
+    if dirname and not os.path.exists(dirname):
+        os.makedirs(dirname)
     mode = "a" if append else "w"
     handler = FileHandler(path, mode=mode, encoding=encoding)
     handler.setFormatter(Formatter(_logFormat))
@@ -397,7 +418,7 @@ class FileLoggerContext(LoggerContext[FileHandler]):
 
     def __init__(self, path: str, append=True, enabled=True, encoding=LOG_FILE_DEFAULT_ENCODING):
         """
-        :param path: the path to the log file
+        :param path: the path to the log file; directories will be created as needed
         :param append: whether to append in case the file already exists; if False, always create a new file.
         :param enabled: whether to actually perform any logging.
             This switch allows the with statement to be applied regardless of whether logging shall be enabled.
