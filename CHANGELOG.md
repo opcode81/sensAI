@@ -5,9 +5,11 @@
 ### Improvements/Changes
 
 * `evaluation`:
+  * Add `ClassificationResultSet` 
   * `ClassificationEvalStats`, `ClassificationEvaluatorParams`: Improve type annotation of `binary_positive_label` (Hashable instead of str)
 * `util.logging`:
-  * `FileLoggerContext`, `add_file_handler`: Add option `encoding` (which defaults to 'utf-8' on all platforms) 
+  * `LoggerContext` (and subclasses): Make sure any exceptions occurring within the context are logged 
+  * `FileLoggerContext`, `add_file_handler`: Add option `encoding` (which defaults to 'utf-8' on all platforms)
 
 ### Fixes
 
