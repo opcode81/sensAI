@@ -9,6 +9,11 @@
 * `util.logging`:
   * `FileLoggerContext`, `add_file_handler`: Add option `encoding` (which defaults to 'utf-8' on all platforms) 
 
+### Fixes
+
+* `evaluation`:
+  * `VectorRegressionModelEvaluationData.create_result_set`: Fix parameter `regression_result_set_factory` not being applied
+
 ## v1.5.0 (2025-07-17)
 
 ### Breaking Changes

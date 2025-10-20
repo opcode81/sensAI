@@ -191,8 +191,10 @@ class VectorRegressionModelEvaluationData(VectorModelEvaluationData[RegressionEv
 
         :return: the result set
         """
-        return RegressionResultSet.from_regression_eval_data(self, modify_input_df=modify_input_df,
-            output_col_name_override=output_col_name_override)
+        return RegressionResultSet.from_regression_eval_data(self,
+            modify_input_df=modify_input_df,
+            output_col_name_override=output_col_name_override,
+            regression_result_set_factory=regression_result_set_factory)
 
 
 TEvalData = TypeVar("TEvalData", bound=VectorModelEvaluationData)
