@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Sequence, Optional, Dict, Any, Tuple
+from typing import List, Sequence, Optional, Dict, Any, Tuple, Hashable
 
 import matplotlib.ticker as plticker
 import numpy as np
@@ -342,7 +342,7 @@ class ClassificationEvalStats(PredictionEvalStats["ClassificationMetric"]):
             labels: Optional[PredictionArray] = None,
             metrics: Optional[Sequence["ClassificationMetric"]] = None,
             additional_metrics: Optional[Sequence["ClassificationMetric"]] = None,
-            binary_positive_label=GUESS):
+            binary_positive_label: Optional[Hashable] =GUESS):
         """
         :param y_predicted: the predicted class labels
         :param y_true: the true class labels
