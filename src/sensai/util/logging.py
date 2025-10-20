@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 log = getLogger(__name__)
 
 LOG_DEFAULT_FORMAT = '%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s'
+LOG_FILE_DEFAULT_ENCODING = "utf-8"
 T = TypeVar("T")
 THandler = TypeVar("THandler", bound=Handler)
 
@@ -156,11 +157,20 @@ def _at_exit_report_file_logger():
         print(f"A log file was saved to {path}")
 
 
-def add_file_logger(path, append=True, register_atexit=True) -> FileHandler:
+def add_file_logger(path, append=True, register_atexit=True, encoding=LOG_FILE_DEFAULT_ENCODING) -> FileHandler:
+    """
+    Adds a file logger which logs to the given path.
+
+    :param path: the path to the log file
+    :param append: whether to append in case the file already exists
+    :param register_atexit: whether to register an atexit handler which reports the path to the log file upon program termination
+    :param encoding: the encoding to use for the log file
+    :return: the created file handler
+    """
     global _isAtExitReportFileLoggerRegistered
     log.info(f"Logging to {path} ...")
     mode = "a" if append else "w"
-    handler = FileHandler(path, mode=mode)
+    handler = FileHandler(path, mode=mode, encoding=encoding)
     handler.setFormatter(Formatter(_logFormat))
     Logger.root.addHandler(handler)
     _fileLoggerPaths.append(path)
@@ -385,19 +395,21 @@ class FileLoggerContext(LoggerContext[FileHandler]):
     A context handler to be used in conjunction with Python's `with` statement which enables file-based logging.
     """
 
-    def __init__(self, path: str, append=True, enabled=True):
+    def __init__(self, path: str, append=True, enabled=True, encoding=LOG_FILE_DEFAULT_ENCODING):
         """
         :param path: the path to the log file
         :param append: whether to append in case the file already exists; if False, always create a new file.
         :param enabled: whether to actually perform any logging.
             This switch allows the with statement to be applied regardless of whether logging shall be enabled.
+        :param encoding: the encoding to use for the log file
         """
         self.path = path
         self.append = append
+        self.encoding = encoding
         super().__init__(enabled=enabled)
 
     def _create_log_handler(self) -> FileHandler:
-        return add_file_logger(self.path, append=self.append, register_atexit=False)
+        return add_file_logger(self.path, append=self.append, register_atexit=False, encoding=self.encoding)
 
 
 class MemoryLoggerContext(LoggerContext[MemoryStreamHandler]):

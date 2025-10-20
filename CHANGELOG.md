@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Changes
+
+### Improvements/Changes
+
+* `util.logging`:
+  * `FileLoggerContext`, `add_file_handler`: Add option `encoding` (which defaults to 'utf-8' on all platforms) 
+
 ## v1.5.0 (2025-07-17)
 
 ### Breaking Changes
