@@ -484,56 +484,40 @@ class FallbackHandler(Handler):
 class SuspendedLoggersContext:
     """A context manager that provides an isolated logging environment.
 
-    Temporarily removes all existing loggers upon entry, providing a clean slate
-    for defining new loggers within the context. Upon exit, restores the original
-    logging configuration. This is useful when you need to temporarily configure
-    a completely isolated logging setup without interference from existing loggers.
+    Temporarily removes all root log handlers upon entry, providing a clean slate
+    for defining new log handlers within the context. Upon exit, restores the original
+    configuration (root log handlers and log level).
+    This is useful when you need to temporarily configure an isolated logging setup
+    with well-defined log handlers.
 
     The context manager:
-        - Removes all existing loggers on entry
-        - Allows defining new temporary loggers within the context
-        - Restores the original logging configuration on exit
-        - Preserves root logger settings for restoration
+        - Removes all existing (root) log handlers on entry
+        - Allows defining new temporary handlers within the context
+        - Restores the original configuration (handlers and root log level) on exit
 
     Example:
         >>> with SuspendedLoggersContext():
-        ...     # No loggers are active here (configure your own)
+        ...     # No handlers are active here (configure your own and set desired log level)
         ...     pass
-        >>> # All original loggers are restored here
+        >>> # Original log handlers are restored here
     """
 
     def __init__(self):
-        self.saved_loggers: Dict[str, lg.Logger] = {}
         self.saved_root_handlers: list = []
         self.saved_root_level: Optional[int] = None
 
     def __enter__(self) -> 'SuspendedLoggersContext':
-        # Save root logger state
         root_logger = lg.getLogger()
         self.saved_root_handlers = root_logger.handlers.copy()
         self.saved_root_level = root_logger.level
-
-        # Save all existing loggers
-        self.saved_loggers = {
-            name: lg.getLogger(name)
-            for name in lg.root.manager.loggerDict
-        }
-
-        # Clear all loggers
-        lg.root.manager.loggerDict.clear()
         root_logger.handlers.clear()
-
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        # Restore root logger state
         root_logger = lg.getLogger()
         root_logger.handlers = self.saved_root_handlers
         if self.saved_root_level is not None:
             root_logger.setLevel(self.saved_root_level)
-
-        # Restore all saved loggers
-        lg.root.manager.loggerDict.update(self.saved_loggers)
 
 
 class LogLevelsChangedContext:

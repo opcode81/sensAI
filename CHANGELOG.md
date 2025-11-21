@@ -2,6 +2,14 @@
 
 ## Unreleased Changes
 
+### Fixes
+
+* `util.logging`:
+  * `SuspendedLoggersContext`: No longer modify `loggerDict` as this destroyed logger hierarchy integrity;
+    only modify the root logger handlers (which is sufficient to suspend logging)
+
+## v1.6.0 (2025-10-20)
+
 ### Improvements/Changes
 
 * `evaluation`:
