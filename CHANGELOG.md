@@ -1,12 +1,20 @@
 # Changelog
 
-## Unreleased Changes
+## Unreleased
+
+### Improvements/Changes
+
+* `util.version`: Increase flexibility of `Version` class, 
+  * allowing it to be applied not only to packages but also to version strings
+  * adding support for versions that include suffixes (e.g. "1.2.3rc1"), which are ignored for comparison purposes
 
 ### Fixes
 
 * `util.logging`:
   * `SuspendedLoggersContext`: No longer modify `loggerDict` as this destroyed logger hierarchy integrity;
     only modify the root logger handlers (which is sufficient to suspend logging)
+* `util.version`:
+  * `Version`: Fix `is_equal` not applying integer conversion to parts before comparison
 
 ## v1.6.0 (2025-10-20)
 
