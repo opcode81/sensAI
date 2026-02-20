@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from matplotlib import pyplot as plt
+from matplotlib.ticker import LogLocator, LogFormatter
 from torch import cuda as torchcuda
 
 from .torch_data import TensorScaler, DataUtil, TorchDataSet, TorchDataSetProviderFromDataUtil, TorchDataSetProvider, \
@@ -946,12 +947,21 @@ class TrainingInfo:
         series.index += 1
         return series
 
-    def plot_all(self) -> matplotlib.figure.Figure:
+    def plot_all(self, log_scale: bool = False) -> matplotlib.figure.Figure:
         """
-        Plots both the sequence of training loss values and the sequence of validation metric values
+        Plots both the sequence of training loss values and the sequence of validation metric values.
+
+        :param log_scale: If True, uses a logarithmic y-axis on both axes (requires strictly positive values)
+        :return: A matplotlib Figure object containing the plot
         """
         ts = self.get_training_loss_series()
         vs = self.get_validation_metric_series()
+
+        if log_scale:
+            if np.any(np.asarray(ts) <= 0):
+                raise ValueError("log_scale=True requires all training loss values to be > 0.")
+            if np.any(np.asarray(vs) <= 0):
+                raise ValueError("log_scale=True requires all validation metric values to be > 0.")
 
         fig, primary_ax = plt.subplots(1, 1)
         secondary_ax = primary_ax.twinx()
@@ -960,9 +970,16 @@ class TrainingInfo:
         validation_line = secondary_ax.plot(vs, color='orange')
         best_epoc_line = primary_ax.axvline(self.best_epoch, color='black', linestyle='dashed')
 
+        if log_scale:
+            for ax in (primary_ax, secondary_ax):
+                ax.set_yscale("log", base=10)
+                ax.yaxis.set_major_locator(LogLocator(base=10))
+                ax.yaxis.set_major_formatter(LogFormatter(base=10))
+                ax.yaxis.set_minor_locator(LogLocator(base=10, subs=np.arange(2, 10) * 0.1))
+
         primary_ax.set_xlabel("epoch")
-        primary_ax.set_ylabel(ts.name)
-        secondary_ax.set_ylabel(vs.name)
+        primary_ax.set_ylabel(ts.name + (" (log)" if log_scale else ""))
+        secondary_ax.set_ylabel(vs.name + (" (log)" if log_scale else ""))
 
         primary_ax.legend(training_line + validation_line + [best_epoc_line], [ts.name, vs.name, "best epoch"])
         plt.tight_layout()
