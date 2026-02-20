@@ -198,7 +198,7 @@ class TrackingMixin(ABC):
         Furthermore, tracking can be disabled by passing `track=False` even if a tracked experiment is present.
 
         :param model: the model for which to begin tracking
-        :paraqm track: whether tracking shall be enabled; if False, force use of a dummy context which performs no actual tracking even
+        :param track: whether tracking shall be enabled; if False, force use of a dummy context which performs no actual tracking even
             if a tracked experiment is present
         :return: a context manager that can be used to track results for the given model
         """
