@@ -7,6 +7,8 @@
 * `util.version`: Increase flexibility of `Version` class, 
   * allowing it to be applied not only to packages but also to version strings
   * adding support for versions that include suffixes (e.g. "1.2.3rc1"), which are ignored for comparison purposes
+* `torch`:
+  * `TrainingInfo.plot_all`: Add parameter `log_scale` 
 
 ### Fixes
 
