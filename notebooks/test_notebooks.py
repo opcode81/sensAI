@@ -13,7 +13,6 @@ ROOT_DIR = pathlib.Path(__file__).parent.parent.absolute()
 DOCS_DIR = ROOT_DIR / "docs"
 NOTEBOOKS_DIR = ROOT_DIR / "notebooks"
 NOTEBOOKS_NOT_TESTED = [  # filenames of notebooks that are skipped in testing
-    "intro_old.ipynb",
     "tracking_experiments.ipynb",
     "clustering_evaluation.ipynb",
     "coordinate_clustering.ipynb",
