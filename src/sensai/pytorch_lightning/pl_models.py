@@ -10,8 +10,8 @@ def _fit_model_with_trainer(model: LightningModule, trainer: Trainer, io_data,
         batch_size: int, splitter: DataSplitterFractional = None):
     if splitter is not None:
         train_io_data, validation_io_data = splitter.split(io_data)
-        train_data_loader = train_io_data.toTorchDataLoader(batchSize=batch_size)
-        val_data_loader = validation_io_data.toTorchDataLoader(batchSize=batch_size)
+        train_data_loader = train_io_data.to_torch_data_loader(batch_size=batch_size)
+        val_data_loader = validation_io_data.to_torch_data_loader(batch_size=batch_size)
     else:
         train_data_loader = io_data.to_torch_data_loader(batch_size=batch_size)
         val_data_loader = None

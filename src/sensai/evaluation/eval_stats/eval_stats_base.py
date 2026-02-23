@@ -55,7 +55,7 @@ class EvalStats(Generic[TMetric], ToStringMixin):
         return d
 
     def get_all(self) -> Dict[str, float]:
-        """Alias for metricsDict; may be deprecated in the future"""
+        """Alias for metrics_dict; may be deprecated in the future"""
         return self.metrics_dict()
 
     def _tostring_object_info(self) -> str:
@@ -304,7 +304,7 @@ class PredictionEvalStats(EvalStats[TMetric], ABC):
                     self.y_true.extend(y_true)
                     self.y_predicted.extend(y_predicted)
         elif isinstance(y_predicted, pd.DataFrame) and isinstance(y_true, pd.DataFrame):
-            # keep track of multidimensional data (to be used later in getEvalStatsCollection)
+            # keep track of multidimensional data (to be used later in get_eval_stats_collection)
             y_predicted_multidim = y_predicted.values
             y_true_multidim = y_true.values
             dim = y_predicted_multidim.shape[1]

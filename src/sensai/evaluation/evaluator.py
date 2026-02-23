@@ -267,7 +267,7 @@ class VectorModelEvaluator(MetricsDictProvider, Generic[TEvalData], ABC):
     def set_tracked_experiment(self, tracked_experiment: TrackedExperiment):
         """
         Sets a tracked experiment which will result in metrics being saved whenever computeMetrics is called
-        or evalModel is called with track=True.
+        or eval_model is called with track=True.
 
         :param tracked_experiment: the experiment in which to track evaluation metrics.
         """

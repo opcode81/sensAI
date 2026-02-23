@@ -63,7 +63,7 @@ class RegressionTestCase:
 
         #stats.plotScatterGroundTruthPredictions()
         #from matplotlib import pyplot as plt; plt.show()
-        #resultDataTrain = ev.evalModel(model, onTrainingData=True); log.info(f"on train: {resultDataTrain.getEvalStats()}")
+        #resultDataTrain = ev.eval_model(model, onTrainingData=True); log.info(f"on train: {resultDataTrain.get_eval_stats()}")
 
         log.info(f"Results for {model.get_name()}: {stats}")
         assert stats.compute_r2() >= minR2
