@@ -557,7 +557,7 @@ class FeatureGeneratorFromColumnGenerator(RuleBasedFeatureGenerator):
             This should only be provided if is_categorical is False
         """
         if is_categorical and normalisation_rule_template is not None:
-            raise ValueError(f"normalisationRuleTemplate should be None when the generated column is categorical")
+            raise ValueError(f"normalisation_rule_template should be None when the generated column is categorical")
 
         categorical_feature_names = (column_gen.generatedColumnName,) if is_categorical else ()
         super().__init__(categorical_feature_names=categorical_feature_names, normalisation_rule_template=normalisation_rule_template)

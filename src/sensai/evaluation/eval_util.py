@@ -53,7 +53,7 @@ TCrossValData = TypeVar("TCrossValData", bound=VectorModelCrossValidationData)
 
 def _is_regression(model: Optional[VectorModel], is_regression: Optional[bool]) -> bool:
     if model is None and is_regression is None or (model is not None and is_regression is not None):
-        raise ValueError("One of the two parameters have to be passed: model or isRegression")
+        raise ValueError("Exactly one of the two parameters must be passed: model or is_regression")
 
     if is_regression is None:
         model: VectorModel
