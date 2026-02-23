@@ -37,7 +37,7 @@ The tests and docs build are executed in several environments:
 
 ## Automated Tests
 
-The tests can be locally via
+The tests can be run locally via
 
     sh run_pytest_tests.sh
 
