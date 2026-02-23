@@ -172,8 +172,9 @@ class TrackedExperiment(Generic[TContext], ABC):
 
     def __del__(self):
         # make sure all contexts that are still running are eventually closed
-        for c in reversed(self._contexts):
-            c.end()
+        if hasattr(self, '_contexts'):
+            for c in reversed(self._contexts):
+                c.end()
 
 
 class TrackingMixin(ABC):
