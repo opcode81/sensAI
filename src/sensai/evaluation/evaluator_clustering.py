@@ -17,7 +17,7 @@ class ClusteringModelEvaluator(MetricsDictProvider, Generic[TClusteringEvalStats
         Evaluate the model and return the results as dict
 
         :param model:
-        :param kwargs: will be passed to evalModel
+        :param kwargs: will be passed to eval_model
         :return:
         """
         eval_stats = self.eval_model(model, **kwargs)

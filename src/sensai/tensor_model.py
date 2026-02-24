@@ -35,7 +35,7 @@ class InvalidShapeError(Exception):
 
 def _get_datapoint_shape(df: pd.DataFrame):
     first_row_df = df.iloc[:1]
-    # Note that the empty first dimension with N_Datapoints=1 is stripped by extractArray
+    # Note that the empty first dimension with N_Datapoints=1 is stripped by extract_array
     return extract_array(first_row_df).shape
 
 

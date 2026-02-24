@@ -63,7 +63,7 @@ class FeatureGeneratorRegistry:
         if generator is None:
             factory = self._feature_generator_factories.get(name)
             if factory is None:
-                raise ValueError(f"No factory registered for name '{name}': known names: {list_string(self._feature_generator_factories.keys())}. Use registerFeatureGeneratorFactory to register a new feature generator factory.")
+                raise ValueError(f"No factory registered for name '{name}': known names: {list_string(self._feature_generator_factories.keys())}. Use register_factory to register a new feature generator factory.")
             generator = factory()
             generator.set_name(name)
             if self._use_singletons:

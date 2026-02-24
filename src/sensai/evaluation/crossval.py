@@ -136,7 +136,7 @@ class VectorModelCrossValidatorParams:
         :param splitter: the splitter to use in order to generate the folds; if None, use default split (using parameters for random seed
             and shuffling below)
         :param return_trained_models: whether to create a copy of the model for each fold and return each of the models
-            (requires that models can be deep-copied); if False, the model that is passed to evalModel is fitted several times
+            (requires that models can be deep-copied); if False, the model that is passed to eval_model is fitted several times
         :param evaluator_params: the model evaluator parameters
         :param default_splitter_random_seed: [if splitter is None] the random seed to use for splits
         :param default_splitter_shuffle: [if splitter is None] whether to shuffle the data (using randomSeed) before creating the folds
