@@ -14,7 +14,7 @@ Some of sensAI's key benefits are:
 * **A unifying interface to a wide variety of model classes across frameworks**
 
   Apply the same principles to a wide variety of models, whether they are
-  neural networks, tree ensembles or non-parametric models &ndash; without
+  neural networks, tree ensembles or non-parametric models — without
   losing the ability of exploiting each model's particular strengths.
 
   sensAI supports models based on PyTorch, scikit-learn, XGBoost and

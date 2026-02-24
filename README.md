@@ -25,7 +25,7 @@ Some of sensAI's key benefits are:
   * **A unifying interface to a wide variety of model classes across frameworks**
 
     Apply the same principles to a wide variety of models, whether they are 
-    neural networks, tree ensembles or non-parametric models &ndash; without 
+    neural networks, tree ensembles or non-parametric models — without 
     losing the ability of exploiting each model's particular strengths.
 
     sensAI supports models based on PyTorch, scikit-learn, XGBoost and 
@@ -36,7 +36,7 @@ Some of sensAI's key benefits are:
     
     Modularise data pre-processing steps and features generation, representing
     the properties of features explicitly.
-      * For each model, select a suitable subset of features, composing the
+      * For each model, select a suitable subset of features, composing
         the desired feature generators in order to obtain an initial 
         input pipeline.
       * Transform the features into representations that are optimised for
@@ -220,7 +220,7 @@ features_df = feature_collector.get_multi_feature_generator().generate(df)
 
 Depending on the type of model, the representation of the input data may need to
 be adapted. For instance,
-some models can directly process arbitarily represented categorical data, others
+some models can directly process arbitrarily represented categorical data, others
 require an encoding. Some models can deal with arbitrary scales of numerical 
 data, others work best with normalised data.
 
@@ -350,7 +350,7 @@ tensor-based representations). See our tutorial on neural network models.
 ### Evaluation
 
 Evaluating the performance of models can be a chore. 
-sensAI's high-level evaluation classes severely cut down on the boiler plate, 
+sensAI's high-level evaluation classes severely cut down on the boilerplate, 
 allowing you to focus on what matters.
 
 ```
@@ -438,7 +438,7 @@ be overlooked.
 
 sensAI supports combinatorial optimisation via
 
- * **stochastic local search**, provding implementations of
+ * **stochastic local search**, providing implementations of
      * simulated annealing
      * parallel tempering.
 
