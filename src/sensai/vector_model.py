@@ -16,7 +16,7 @@ from .util.deprecation import deprecated
 from .data import InputOutputData
 from .data_transformation import DataFrameTransformer, DataFrameTransformerChain, InvertibleDataFrameTransformer
 from .featuregen import FeatureGenerator, FeatureCollector
-from .util import mark_used, kwarg_if_not_none
+from .util import flatten_arguments, mark_used, kwarg_if_not_none
 from .util.cache import PickleLoadSaveMixin
 from .util.logging import StopWatch
 from .util.pickle import setstate, getstate
@@ -166,7 +166,7 @@ class VectorModel(VectorModelBase, PickleLoadSaveMixin, ABC):
         if not add:
             self._featureTransformerChain = DataFrameTransformerChain(*transformers)
         else:
-            for t in transformers:
+            for t in flatten_arguments(transformers):
                 self._featureTransformerChain.append(t)
         return self
 
